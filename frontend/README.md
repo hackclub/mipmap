@@ -37,6 +37,6 @@ To create a production version of your app:
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+You can preview the production build with `npm run preview`. The landing page is prerendered into `build/` for the Actix server.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Set `VITE_SITE_URL` to the public site origin when building so the generated page includes canonical and Open Graph URLs, for example `VITE_SITE_URL=https://example.com npm run build`.

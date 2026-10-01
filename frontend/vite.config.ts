@@ -11,12 +11,14 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			adapter: adapter({ fallback: 'index.html' })
+			adapter: adapter()
 		})
 	],
 	server: {
 		proxy: {
-			'/api': 'http://127.0.0.1:8080'
+			'/api': 'http://127.0.0.1:8080',
+			'/login': 'http://127.0.0.1:8080',
+			'/callback': 'http://127.0.0.1:8080'
 		}
 	}
 });
