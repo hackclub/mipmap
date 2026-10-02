@@ -16,17 +16,15 @@
         home,
         min_scale = 0.1,
         max_scale = 2,
-        min_home_scale = 0.3,
-        align = "top",
         limits,
+        keep,
     }: {
         children: Snippet;
         home: Bounds;
         min_scale?: number;
         max_scale?: number;
-        min_home_scale?: number;
-        align?: "top" | "bottom";
         limits?: Bounds;
+        keep?: Bounds;
     } = $props();
 
     const drag_threshold = 6;
@@ -103,24 +101,29 @@
         clearTimeout(animation_timer);
     }
 
+    const nudge = (start: number, size: number, view: number, pad: number) =>
+        start < pad
+            ? pad - start
+            : start + size > view - pad
+              ? view - pad - start - size
+              : 0;
+
     export function show(
         bounds: Bounds,
         {
             edge = "top",
             smooth = true,
             ms = 300,
-            floor = min_home_scale,
             padding = fit_padding,
             cap = 1,
-            factor = 1,
+            within,
         }: {
             edge?: "top" | "bottom";
             smooth?: boolean;
             ms?: number;
-            floor?: number;
             padding?: number;
             cap?: number;
-            factor?: number;
+            within?: Bounds;
         } = {},
     ) {
         if (!view_width || !view_height) return;
@@ -129,7 +132,7 @@
             (view_height - 2 * padding) / bounds.height,
             cap,
         );
-        scale = clamp(Math.max(fit, floor) * factor, min_scale, max_scale);
+        scale = clamp(fit, min_scale, max_scale);
         x = view_width / 2 - (bounds.left + bounds.width / 2) * scale;
         y =
             bounds.height * scale <= view_height - 2 * padding
@@ -139,12 +142,16 @@
                   : view_height -
                     padding -
                     (bounds.top + bounds.height) * scale;
+        if (within) {
+            x += nudge(x + within.left * scale, within.width * scale, view_width, padding);
+            y += nudge(y + within.top * scale, within.height * scale, view_height, padding);
+        }
         constrain();
         if (smooth) animate(ms);
     }
 
     export function recenter(smooth = true) {
-        show(home, { edge: align, smooth, factor: 0.85 });
+        show(home, { smooth, within: keep });
     }
 
     export function zoom(factor: number) {

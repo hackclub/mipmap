@@ -7,7 +7,9 @@ use std::{
     time::Duration,
 };
 
+mod airtable_sync;
 mod dashboard;
+mod database;
 mod layout;
 mod login;
 mod profile;
@@ -15,6 +17,7 @@ mod progress;
 mod projects;
 mod referral;
 mod snapshots;
+mod tokens;
 mod tree;
 
 const FRONTEND_DIR: &str = "frontend/build";
@@ -51,7 +54,18 @@ async fn hello() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenvy::dotenv().ok();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let database_url = std::env::var("DATABASE_URL").map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "DATABASE_URL must be set")
+    })?;
+    let database_pool = database::init(&database_url)
+        .await
+        .map_err(std::io::Error::other)?;
+    log::info!("PostgreSQL ready");
+    airtable_sync::spawn(database_pool.clone()).map_err(std::io::Error::other)?;
+    let database_pool = web::Data::new(database_pool);
 
     log::info!("listening on http://0.0.0.0:8080");
 
@@ -75,6 +89,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .app_data(database_pool.clone())
             .service(
                 web::scope("/api")
                     .wrap(Governor::new(&rate_limit))

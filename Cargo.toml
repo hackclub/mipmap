@@ -12,3 +12,8 @@ serde_json = "1"
 hc_helper = { git = "https://github.com/breynard0/hc_helper" }
 log = "0.4"
 env_logger = "0.11"
+dotenvy = "0.15"
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring-webpki", "macros", "migrate"] }
+anyhow = "1.0.104"
+aes-gcm = "0.11.1"
+hex = "0.4.3"

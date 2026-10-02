@@ -8,6 +8,7 @@ fn main() {
         "frontend/package-lock.json",
         "frontend/tsconfig.json",
         "frontend/vite.config.ts",
+        "migrations",
     ] {
         println!("cargo:rerun-if-changed={path}");
     }

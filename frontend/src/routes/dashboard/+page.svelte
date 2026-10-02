@@ -46,8 +46,20 @@
     const tree = $derived(structure.data?.[0]);
     const layout = $derived(structure.data?.[1]);
     const sections = $derived(layout && arrange(layout));
+    const origin = $derived.by(() => {
+        const id = tree?.nodes.find((node) => node.kind === "origin")?.id;
+        const placed = layout?.nodes.find((node) => node.id === id);
+        if (!placed || !layout || !sections) return;
+        const size = layout.shapes.origin.cog;
+        return {
+            left: sections.tree.left + placed.x - size / 2,
+            top: sections.tree.top + placed.y - size / 2,
+            width: size,
+            height: size,
+        };
+    });
     const go = (bounds: Bounds) =>
-        panzoom?.show(bounds, { ms: 700, floor: 0, padding: 24, cap: Infinity });
+        panzoom?.show(bounds, { ms: 700, padding: 24, cap: Infinity });
 
     const nodes = $derived(new Map(tree?.nodes.map((node) => [node.id, node])));
     const selected_node = $derived(
@@ -88,8 +100,7 @@
         bind:this={panzoom}
         home={sections.tree}
         limits={sections.all}
-        align="bottom"
-        min_home_scale={0.6}
+        keep={origin}
     >
         <ProjectsPanel bounds={sections.projects} />
         {#if unlocked}
