@@ -4,8 +4,7 @@
     let { items }: { items: { label: string; onselect: () => void }[] } =
         $props();
 
-    const open_distance = 96;
-    const close_distance = 192;
+    const reach = () => Math.min(innerWidth, innerHeight) * 0.1;
 
     let menu: HTMLElement;
     let toggle: HTMLButtonElement;
@@ -42,8 +41,8 @@
     onpointermove={(e) => {
         if (e.pointerType !== "mouse") return;
         const d = distance(e);
-        if (!open && d < open_distance) open = true;
-        else if (open && d > close_distance) close();
+        if (!open && d < reach()) open = true;
+        else if (open && d > 2 * reach()) close();
     }}
     onpointerdown={(e) => {
         if (
@@ -54,6 +53,7 @@
             close();
     }}
     onkeydown={(e) => e.key === "Escape" && close()}
+    onblur={close}
 />
 
 <nav class="menu" bind:this={menu} aria-label="Sections">

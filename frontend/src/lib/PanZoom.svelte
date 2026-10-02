@@ -44,6 +44,7 @@
     let dragging = $state(false);
     let duration = $state(300);
     let animation_timer = 0;
+    let leave_timer = 0;
 
     const pointers = new Map<number, { x: number; y: number }>();
     let dragged = false;
@@ -109,35 +110,41 @@
             smooth = true,
             ms = 300,
             floor = min_home_scale,
+            padding = fit_padding,
+            cap = 1,
+            factor = 1,
         }: {
             edge?: "top" | "bottom";
             smooth?: boolean;
             ms?: number;
             floor?: number;
+            padding?: number;
+            cap?: number;
+            factor?: number;
         } = {},
     ) {
         if (!view_width || !view_height) return;
         const fit = Math.min(
-            (view_width - 2 * fit_padding) / bounds.width,
-            (view_height - 2 * fit_padding) / bounds.height,
-            1,
+            (view_width - 2 * padding) / bounds.width,
+            (view_height - 2 * padding) / bounds.height,
+            cap,
         );
-        scale = clamp(Math.max(fit, floor), min_scale, max_scale);
+        scale = clamp(Math.max(fit, floor) * factor, min_scale, max_scale);
         x = view_width / 2 - (bounds.left + bounds.width / 2) * scale;
         y =
-            bounds.height * scale <= view_height - 2 * fit_padding
+            bounds.height * scale <= view_height - 2 * padding
                 ? view_height / 2 - (bounds.top + bounds.height / 2) * scale
                 : edge === "top"
-                  ? fit_padding - bounds.top * scale
+                  ? padding - bounds.top * scale
                   : view_height -
-                    fit_padding -
+                    padding -
                     (bounds.top + bounds.height) * scale;
         constrain();
         if (smooth) animate(ms);
     }
 
     export function recenter(smooth = true) {
-        show(home, { edge: align, smooth });
+        show(home, { edge: align, smooth, factor: 0.85 });
     }
 
     export function zoom(factor: number) {
@@ -229,24 +236,48 @@
         start_gesture();
     }
 
+    function end_drag() {
+        clearTimeout(leave_timer);
+        leave_timer = 0;
+        for (const id of pointers.keys())
+            if (viewport.hasPointerCapture(id))
+                viewport.releasePointerCapture(id);
+        pointers.clear();
+        gesture_start = null;
+        dragging = false;
+        setTimeout(() => (dragged = false));
+    }
+
     function onpointermove(e: PointerEvent) {
         if (!pointers.has(e.pointerId) || !gesture_start) return;
+        const mouse = e.pointerType === "mouse";
+        if (mouse && !(e.buttons & 1)) return end_drag();
+        if (
+            e.clientX >= 0 &&
+            e.clientY >= 0 &&
+            e.clientX <= innerWidth &&
+            e.clientY <= innerHeight
+        ) {
+            clearTimeout(leave_timer);
+            leave_timer = 0;
+        } else if (!leave_timer) {
+            leave_timer = window.setTimeout(end_drag, 500);
+        }
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const points = [...pointers.values()];
         const mid_x = points.reduce((sum, p) => sum + p.x, 0) / points.length;
         const mid_y = points.reduce((sum, p) => sum + p.y, 0) / points.length;
-        if (
-            !dragged &&
-            Math.hypot(mid_x - gesture_start.x, mid_y - gesture_start.y) <
-                drag_threshold &&
-            points.length < 2
-        ) {
-            return;
-        }
-        if (!dragged) {
-            dragged = true;
+        const moved =
+            points.length > 1 ||
+            Math.hypot(mid_x - gesture_start.x, mid_y - gesture_start.y) >=
+                drag_threshold;
+        if (!dragged && !moved && !mouse) return;
+        if (!dragging) {
             dragging = true;
             getSelection()?.removeAllRanges();
+        }
+        if (moved && !dragged) {
+            dragged = true;
             for (const id of pointers.keys()) viewport.setPointerCapture(id);
         }
         x += mid_x - gesture_start.mid_x;
@@ -272,9 +303,7 @@
     function onpointerup(e: PointerEvent) {
         if (!pointers.delete(e.pointerId)) return;
         if (pointers.size > 0) return start_gesture();
-        gesture_start = null;
-        dragging = false;
-        setTimeout(() => (dragged = false));
+        end_drag();
     }
 
     function onclickcapture(e: MouseEvent) {

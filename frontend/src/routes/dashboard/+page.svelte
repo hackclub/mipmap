@@ -46,13 +46,8 @@
     const tree = $derived(structure.data?.[0]);
     const layout = $derived(structure.data?.[1]);
     const sections = $derived(layout && arrange(layout));
-    const go = (bounds: Bounds) => panzoom?.show(bounds, { ms: 700, floor: 0 });
-    const frame = (bounds: Bounds, size: Bounds): Bounds => ({
-        left: bounds.left + (bounds.width - size.width) / 2,
-        top: bounds.top + (bounds.height - size.height) / 2,
-        width: size.width,
-        height: size.height,
-    });
+    const go = (bounds: Bounds) =>
+        panzoom?.show(bounds, { ms: 700, floor: 0, padding: 24, cap: Infinity });
 
     const nodes = $derived(new Map(tree?.nodes.map((node) => [node.id, node])));
     const selected_node = $derived(
@@ -127,15 +122,15 @@
             {
                 label: "Fulfillment Rounds",
                 onselect: () =>
-                    go(frame(sections.fulfillment, sections.projects)),
+                    go(sections.fulfillment),
             },
             {
                 label: "Referrals",
-                onselect: () => go(frame(sections.referral, sections.projects)),
+                onselect: () => go(sections.referral),
             },
             {
                 label: "Profile",
-                onselect: () => go(frame(sections.profile, sections.projects)),
+                onselect: () => go(sections.profile),
             },
         ]}
     />
