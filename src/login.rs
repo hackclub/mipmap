@@ -19,6 +19,7 @@ fn scopes() -> Scopes {
         verification_status: true,
         basic_info: true,
         addresses: true,
+        phone_number: true,
     }
 }
 
@@ -33,7 +34,7 @@ pub async fn callback(req: HttpRequest, query: Query<CallbackArgs>) -> HttpRespo
         &req,
         query,
         callback_redirect_url(&req),
-        "/".to_string(),
+        "/dashboard".to_string(),
         None,
     )
     .await

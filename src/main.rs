@@ -7,7 +7,15 @@ use std::{
     time::Duration,
 };
 
+mod dashboard;
+mod layout;
 mod login;
+mod profile;
+mod progress;
+mod projects;
+mod referral;
+mod snapshots;
+mod tree;
 
 const FRONTEND_DIR: &str = "frontend/build";
 
@@ -45,7 +53,7 @@ async fn hello() -> impl Responder {
 async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    log::info!("listening on http://127.0.0.1:8080");
+    log::info!("listening on http://0.0.0.0:8080");
 
     let rate_limit = GovernorConfigBuilder::default()
         .key_extractor(ClientIpKeyExtractor)
@@ -70,7 +78,20 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::scope("/api")
                     .wrap(Governor::new(&rate_limit))
-                    .route("/hello", web::get().to(hello)),
+                    .route("/hello", web::get().to(hello))
+                    .service(progress::get_progress)
+                    .service(progress::unlock_item)
+                    .service(progress::purchase_item)
+                    .service(projects::list_projects)
+                    .service(projects::create_project)
+                    .service(projects::upload_screenshot)
+                    .service(projects::update_project)
+                    .service(snapshots::my_snapshots)
+                    .service(snapshots::status)
+                    .service(snapshots::list_snapshots)
+                    .service(snapshots::create_snapshot)
+                    .service(referral::get_referral)
+                    .service(profile::get_profile),
             )
             .service(
                 web::scope("")
@@ -81,9 +102,14 @@ async fn main() -> std::io::Result<()> {
                     .service(login::start)
                     .service(login::callback),
             )
+            .service(dashboard::page)
+            .service(dashboard::tree)
+            .service(dashboard::layout)
+            .service(dashboard::fulfillment_rounds)
+            .service(dashboard::hackatime_projects)
             .service(Files::new("/", FRONTEND_DIR).index_file("index.html"))
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }

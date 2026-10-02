@@ -114,10 +114,7 @@
     });
     const faq_y = $derived(description_y + description_box_height + 96);
     const page_height = $derived(
-        Math.max(
-            3 * viewport_height,
-            faq_y + faq_height + 160,
-        ),
+        Math.max(3 * viewport_height, faq_y + faq_height + 160),
     );
     const cog_field_height = $derived(page_height + footer_height + 48);
     const footer_blocked = $derived({
@@ -129,12 +126,18 @@
 
     const cogs = $derived(
         footer_width > 0 && footer_height > 0
-            ? grow_field(viewport_width, cog_field_height, [logo_blocked, footer_blocked])
+            ? grow_field(viewport_width, cog_field_height, [
+                  logo_blocked,
+                  footer_blocked,
+              ])
             : [],
     );
 
     function handle_login_click() {
-        if (countdown_active) {
+        const is_local = ["localhost", "127.0.0.1", "[::1]"].includes(
+            window.location.hostname,
+        );
+        if (countdown_active && !is_local) {
             window.alert("Mipmap hasn't started yet!");
             return;
         }
@@ -179,108 +182,118 @@
 </div>
 
 <div style:visibility={ready ? "visible" : "hidden"}>
-<TextBlock
-    x={container_x}
-    y={container_y}
-    width={container_width}
-    {cogs}
-    obstacles={[left_box, right_box, description_box]}
-    bind:box_height={first_container_height}
->
-    <h1>Make a game without an engine, progress your tech tree!</h1>
-</TextBlock>
+    <TextBlock
+        x={container_x}
+        y={container_y}
+        width={container_width}
+        {cogs}
+        obstacles={[left_box, right_box, description_box]}
+        bind:box_height={first_container_height}
+    >
+        <h1>Make a game without an engine, progress your tech tree!</h1>
+    </TextBlock>
 
-<TextBlock
-    x={container_x}
-    y={pair_y}
-    width={pair_width}
-    {cogs}
-    min_height={pair_height}
-    obstacles={[first_box, right_box, description_box]}
-    bind:box_height={left_box_height}
-    bind:content_height={left_content_height}
->
-    <h2>Don't know where to start?</h2>
-    <div class="actions">
-        <MipmapButton
-            type="button"
-            onclick={() =>
-                window.alert(
-                    "Whoops, this should bring you somewhere. Bug me in #mipmap!",
-                )}
-        >
-            Learn here!
-        </MipmapButton>
-    </div>
-</TextBlock>
+    <TextBlock
+        x={container_x}
+        y={pair_y}
+        width={pair_width}
+        {cogs}
+        min_height={pair_height}
+        obstacles={[first_box, right_box, description_box]}
+        bind:box_height={left_box_height}
+        bind:content_height={left_content_height}
+    >
+        <h2>Don't know where to start?</h2>
+        <div class="actions">
+            <MipmapButton
+                type="button"
+                onclick={() =>
+                    window.alert(
+                        "Whoops, this should bring you somewhere. Bug me in #mipmap!",
+                    )}
+            >
+                Learn here!
+            </MipmapButton>
+        </div>
+    </TextBlock>
 
-<TextBlock
-    x={container_x + pair_width + pair_gap}
-    y={pair_y}
-    width={pair_width}
-    {cogs}
-    min_height={pair_height}
-    obstacles={[first_box, left_box, description_box]}
-    bind:box_height={right_box_height}
-    bind:content_height={right_content_height}
->
-    <h2>Wanna get started?</h2>
-    <div class="actions">
-        <MipmapButton type="button" onclick={handle_login_click}>
-            Log in!
-        </MipmapButton>
-    </div>
-</TextBlock>
+    <TextBlock
+        x={container_x + pair_width + pair_gap}
+        y={pair_y}
+        width={pair_width}
+        {cogs}
+        min_height={pair_height}
+        obstacles={[first_box, left_box, description_box]}
+        bind:box_height={right_box_height}
+        bind:content_height={right_content_height}
+    >
+        <h2>Wanna get started?</h2>
+        <div class="actions">
+            <MipmapButton type="button" onclick={handle_login_click}>
+                Log in!
+            </MipmapButton>
+        </div>
+    </TextBlock>
 
-<TextBlock
-    x={container_x}
-    y={description_y}
-    width={container_width}
-    {cogs}
-    variant="body"
-    min_height={240}
-    obstacles={[first_box, left_box, right_box]}
-    bind:box_height={description_box_height}
->
-    <p>
-        Ever wondered how video games work under the hood? Here's your chance to
-        find out! Hack Club Mipmap is a program for teenagers (13–18 inclusive)
-        by the nonprofit <a href="https://hackclub.com">Hack Club</a> where you can
-        ship a game made without an engine to progress your tech tree and unlock free
-        prizes!
-    </p>
-    <p>&ThickSpace;</p>
-    <p>
-        Got no idea how to even get started? That's totally fine! Mipmap's got a
-        series of videos designed to get you up to speed with the basics in one
-        bingeable session. After that, you know exactly what to look for when you're
-        going through guides for the specific graphics library you're using.
-        Just click the "Learn here!" button above!
-    </p>
-</TextBlock>
+    <TextBlock
+        x={container_x}
+        y={description_y}
+        width={container_width}
+        {cogs}
+        variant="body"
+        min_height={240}
+        obstacles={[first_box, left_box, right_box]}
+        bind:box_height={description_box_height}
+    >
+        <p>
+            Ever wondered how video games work under the hood? Here's your
+            chance to find out! Hack Club Mipmap is a program for teenagers
+            (13–18 inclusive) by the nonprofit <a href="https://hackclub.com"
+                >Hack Club</a
+            > where you can ship a game made without an engine to progress your tech
+            tree and unlock free prizes!
+        </p>
+        <p>&ThickSpace;</p>
+        <p>
+            Got no idea how to even get started? That's totally fine! Mipmap's
+            got a series of videos designed to get you up to speed with the
+            basics in one bingeable session. After that, you know exactly what
+            to look for when you're going through guides for the specific
+            graphics library you're using. Just click the "Learn here!" button
+            above!
+        </p>
+    </TextBlock>
 
-<FaqSection
-    top={faq_y}
-    {viewport_width}
-    {pair_width}
-    {cogs}
-    obstacles={[first_box, left_box, right_box, description_box]}
-    bind:height={faq_height}
-/>
+    <FaqSection
+        top={faq_y}
+        {viewport_width}
+        {pair_width}
+        {cogs}
+        obstacles={[first_box, left_box, right_box, description_box]}
+        bind:height={faq_height}
+    />
 </div>
 
 <div class="content" style:height="{page_height}px"></div>
 
-<footer class="site-footer" bind:clientWidth={footer_width} bind:clientHeight={footer_height}>
+<footer
+    class="site-footer"
+    bind:clientWidth={footer_width}
+    bind:clientHeight={footer_height}
+>
     <div class="footer-links">
         <a href="https://hackclub.com/">Hack Club</a>
-        <a href="https://hackclub.com/privacy-and-terms">Terms &amp; Privacy Policy</a>
+        <a href="https://hackclub.com/privacy-and-terms"
+            >Terms &amp; Privacy Policy</a
+        >
         <a href="https://forms.hackclub.com/bounty">Fulfillment Bounty</a>
         <a href="https://security.hackclub.com/">Security</a>
     </div>
     <p class="made-with">
         Made with <span class="heart" aria-label="love">&hearts;</span> by
-        <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR">Brendan</a>
+        <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR"
+            >Brendan</a
+        >
         @ <a href="https://hackclub.com/">Hack Club</a>
     </p>
 </footer>

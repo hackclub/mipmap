@@ -1,0 +1,1246 @@
+{
+  "categories": [
+    {
+      "color": "#30d158",
+      "name": "Games"
+    },
+    {
+      "color": "#5e5ce6",
+      "name": "Displays"
+    },
+    {
+      "color": "#ff9f0a",
+      "name": "Equipment"
+    },
+    {
+      "color": "#ff453a",
+      "name": "Knickknacks"
+    },
+    {
+      "color": "#40c8e0",
+      "name": "VFX"
+    },
+    {
+      "color": "#bf5af2",
+      "name": "Books"
+    }
+  ],
+  "currency": "Fragments",
+  "edges": [
+    {
+      "from": 5,
+      "to": 16
+    },
+    {
+      "from": 5,
+      "to": 20
+    },
+    {
+      "from": 16,
+      "to": 18
+    },
+    {
+      "from": 13,
+      "to": 10
+    },
+    {
+      "from": 11,
+      "to": 19
+    },
+    {
+      "from": 21,
+      "to": 19
+    },
+    {
+      "from": 20,
+      "to": 13
+    },
+    {
+      "from": 16,
+      "to": 13
+    },
+    {
+      "from": 19,
+      "to": 17
+    },
+    {
+      "from": 9,
+      "to": 17
+    },
+    {
+      "from": 17,
+      "to": 12
+    },
+    {
+      "from": 12,
+      "to": 7
+    },
+    {
+      "from": 7,
+      "to": 8
+    },
+    {
+      "from": 19,
+      "to": 15
+    },
+    {
+      "from": 7,
+      "to": 23
+    },
+    {
+      "from": 8,
+      "to": 22
+    },
+    {
+      "from": 10,
+      "to": 24
+    },
+    {
+      "from": 19,
+      "to": 26
+    },
+    {
+      "from": 24,
+      "to": 27
+    },
+    {
+      "from": 28,
+      "to": 31
+    },
+    {
+      "from": 28,
+      "to": 30
+    },
+    {
+      "from": 28,
+      "to": 29
+    },
+    {
+      "from": 29,
+      "to": 32
+    },
+    {
+      "from": 30,
+      "to": 32
+    },
+    {
+      "from": 31,
+      "to": 32
+    },
+    {
+      "from": 26,
+      "to": 33
+    },
+    {
+      "from": 23,
+      "to": 35
+    },
+    {
+      "from": 22,
+      "to": 36
+    },
+    {
+      "from": 35,
+      "to": 36
+    },
+    {
+      "from": 36,
+      "to": 38
+    },
+    {
+      "from": 37,
+      "to": 38
+    },
+    {
+      "from": 34,
+      "to": 43
+    },
+    {
+      "from": 24,
+      "to": 44
+    },
+    {
+      "from": 33,
+      "to": 47
+    },
+    {
+      "from": 35,
+      "to": 49
+    },
+    {
+      "from": 16,
+      "to": 14
+    },
+    {
+      "from": 14,
+      "to": 6
+    },
+    {
+      "from": 18,
+      "to": 6
+    },
+    {
+      "from": 6,
+      "to": 24
+    },
+    {
+      "from": 6,
+      "to": 51
+    },
+    {
+      "from": 52,
+      "to": 5
+    },
+    {
+      "from": 52,
+      "to": 9
+    },
+    {
+      "from": 52,
+      "to": 21
+    },
+    {
+      "from": 52,
+      "to": 11
+    },
+    {
+      "from": 13,
+      "to": 28
+    },
+    {
+      "from": 33,
+      "to": 39
+    },
+    {
+      "from": 28,
+      "to": 40
+    },
+    {
+      "from": 20,
+      "to": 45
+    },
+    {
+      "from": 19,
+      "to": 41
+    },
+    {
+      "from": 9,
+      "to": 48
+    },
+    {
+      "from": 25,
+      "to": 43
+    },
+    {
+      "from": 15,
+      "to": 43
+    },
+    {
+      "from": 19,
+      "to": 34
+    },
+    {
+      "from": 19,
+      "to": 25
+    },
+    {
+      "from": 43,
+      "to": 37
+    },
+    {
+      "from": 7,
+      "to": 46
+    }
+  ],
+  "nodes": [
+    {
+      "beeline_path": [5, 20, 45],
+      "beeline_fragments": 50,
+      "category": "Games",
+      "id": 5,
+      "kind": "item",
+      "name": "TIS100",
+      "price": 5,
+      "requires": [52],
+      "with_token_fragments": {
+        "40": 965,
+        "41": 80,
+        "43": 400,
+        "44": 445,
+        "45": 50,
+        "46": 340,
+        "47": 1900,
+        "48": 255,
+        "49": 1260,
+        "51": 315
+      }
+    },
+    {
+      "beeline_path": [5, 6, 14, 16, 20, 45],
+      "beeline_fragments": 210,
+      "category": "Games",
+      "id": 6,
+      "kind": "item",
+      "name": "Kerbal Space Program",
+      "price": 100,
+      "requires": [14, 18],
+      "with_token_fragments": {
+        "40": 1115,
+        "41": 240,
+        "43": 560,
+        "44": 445,
+        "45": 210,
+        "46": 500,
+        "47": 2060,
+        "48": 415,
+        "49": 1420,
+        "51": 315
+      }
+    },
+    {
+      "beeline_path": [7, 11, 12, 17, 19, 41],
+      "beeline_fragments": 315,
+      "category": "Equipment",
+      "id": 7,
+      "kind": "item",
+      "name": "Handheld Oscilloscope",
+      "price": 100,
+      "requires": [12],
+      "with_token_fragments": {
+        "40": 1250,
+        "41": 315,
+        "43": 635,
+        "44": 730,
+        "45": 335,
+        "46": 335,
+        "47": 2135,
+        "48": 490,
+        "49": 1255,
+        "51": 600
+      }
+    },
+    {
+      "beeline_path": [7, 8, 11, 12, 17, 19, 41],
+      "beeline_fragments": 475,
+      "category": "Equipment",
+      "id": 8,
+      "kind": "item",
+      "name": "UGREEN 7-in-1 USB-C Hub",
+      "price": 160,
+      "requires": [7],
+      "with_token_fragments": {
+        "40": 1410,
+        "41": 475,
+        "43": 795,
+        "44": 890,
+        "45": 495,
+        "46": 495,
+        "47": 2295,
+        "48": 650,
+        "49": 1415,
+        "51": 760
+      }
+    },
+    {
+      "beeline_path": [5, 9, 20, 45],
+      "beeline_fragments": 200,
+      "category": "Knickknacks",
+      "id": 9,
+      "kind": "item",
+      "name": "Blahaj",
+      "price": 150,
+      "requires": [52],
+      "with_token_fragments": {
+        "40": 1115,
+        "41": 225,
+        "43": 545,
+        "44": 595,
+        "45": 200,
+        "46": 440,
+        "47": 2045,
+        "48": 250,
+        "49": 1360,
+        "51": 465
+      }
+    },
+    {
+      "beeline_path": [5, 10, 13, 20, 45],
+      "beeline_fragments": 270,
+      "category": "Games",
+      "id": 10,
+      "kind": "item",
+      "name": "Cities Skylines",
+      "price": 120,
+      "requires": [13],
+      "with_token_fragments": {
+        "40": 1085,
+        "41": 310,
+        "43": 630,
+        "44": 515,
+        "45": 270,
+        "46": 570,
+        "47": 2130,
+        "48": 485,
+        "49": 1490,
+        "51": 535
+      }
+    },
+    {
+      "beeline_path": [5, 11, 20, 45],
+      "beeline_fragments": 55,
+      "category": "Displays",
+      "id": 11,
+      "kind": "item",
+      "name": "Dot Matrix Module",
+      "price": 5,
+      "requires": [52],
+      "with_token_fragments": {
+        "40": 970,
+        "41": 75,
+        "43": 395,
+        "44": 450,
+        "45": 55,
+        "46": 335,
+        "47": 1895,
+        "48": 255,
+        "49": 1255,
+        "51": 320
+      }
+    },
+    {
+      "beeline_path": [11, 12, 17, 19, 41],
+      "beeline_fragments": 215,
+      "category": "Equipment",
+      "id": 12,
+      "kind": "item",
+      "name": "Classic Swiss Army Knife",
+      "price": 80,
+      "requires": [17],
+      "with_token_fragments": {
+        "40": 1150,
+        "41": 215,
+        "43": 535,
+        "44": 630,
+        "45": 235,
+        "46": 335,
+        "47": 2035,
+        "48": 390,
+        "49": 1255,
+        "51": 500
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 45],
+      "beeline_fragments": 150,
+      "category": "Games",
+      "id": 13,
+      "kind": "item",
+      "name": "Minecraft",
+      "price": 100,
+      "requires": [20, 16],
+      "with_token_fragments": {
+        "40": 965,
+        "41": 190,
+        "43": 510,
+        "44": 515,
+        "45": 150,
+        "46": 450,
+        "47": 2010,
+        "48": 365,
+        "49": 1370,
+        "51": 415
+      }
+    },
+    {
+      "beeline_path": [5, 14, 16, 20, 45],
+      "beeline_fragments": 110,
+      "category": "Games",
+      "id": 14,
+      "kind": "item",
+      "name": "Grey Hack",
+      "price": 40,
+      "requires": [16],
+      "with_token_fragments": {
+        "40": 1015,
+        "41": 140,
+        "43": 460,
+        "44": 445,
+        "45": 110,
+        "46": 400,
+        "47": 1960,
+        "48": 315,
+        "49": 1320,
+        "51": 315
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 41],
+      "beeline_fragments": 325,
+      "category": "Books",
+      "id": 15,
+      "kind": "item",
+      "name": "Master Graphics Programming With Vulkan",
+      "price": 250,
+      "requires": [19],
+      "with_token_fragments": {
+        "40": 1260,
+        "41": 325,
+        "43": 395,
+        "44": 740,
+        "45": 345,
+        "46": 585,
+        "47": 2145,
+        "48": 545,
+        "49": 1505,
+        "51": 610
+      }
+    },
+    {
+      "beeline_path": [5, 16, 20, 45],
+      "beeline_fragments": 70,
+      "category": "Games",
+      "id": 16,
+      "kind": "item",
+      "name": "Replicube",
+      "price": 20,
+      "requires": [5],
+      "with_token_fragments": {
+        "40": 975,
+        "41": 100,
+        "43": 420,
+        "44": 445,
+        "45": 70,
+        "46": 360,
+        "47": 1920,
+        "48": 275,
+        "49": 1280,
+        "51": 315
+      }
+    },
+    {
+      "beeline_path": [11, 17, 19, 41],
+      "beeline_fragments": 135,
+      "category": "Equipment",
+      "id": 17,
+      "kind": "item",
+      "name": "Carson Handheld Microscope",
+      "price": 60,
+      "requires": [19, 9],
+      "with_token_fragments": {
+        "40": 1070,
+        "41": 135,
+        "43": 455,
+        "44": 550,
+        "45": 155,
+        "46": 335,
+        "47": 1955,
+        "48": 310,
+        "49": 1255,
+        "51": 420
+      }
+    },
+    {
+      "beeline_path": [5, 16, 18, 20, 45],
+      "beeline_fragments": 110,
+      "category": "Games",
+      "id": 18,
+      "kind": "item",
+      "name": "Duskers",
+      "price": 40,
+      "requires": [16],
+      "with_token_fragments": {
+        "40": 1015,
+        "41": 140,
+        "43": 460,
+        "44": 445,
+        "45": 110,
+        "46": 400,
+        "47": 1960,
+        "48": 315,
+        "49": 1320,
+        "51": 315
+      }
+    },
+    {
+      "beeline_path": [11, 19, 41],
+      "beeline_fragments": 75,
+      "category": "Displays",
+      "id": 19,
+      "kind": "item",
+      "name": "240x320 Colour 2.4\" LCD Module",
+      "price": 40,
+      "requires": [11, 21],
+      "with_token_fragments": {
+        "40": 1010,
+        "41": 75,
+        "43": 395,
+        "44": 490,
+        "45": 95,
+        "46": 335,
+        "47": 1895,
+        "48": 295,
+        "49": 1255,
+        "51": 360
+      }
+    },
+    {
+      "beeline_path": [5, 20, 45],
+      "beeline_fragments": 50,
+      "category": "Games",
+      "id": 20,
+      "kind": "item",
+      "name": "You Are The Code",
+      "price": 10,
+      "requires": [5],
+      "with_token_fragments": {
+        "40": 965,
+        "41": 90,
+        "43": 410,
+        "44": 455,
+        "45": 50,
+        "46": 350,
+        "47": 1910,
+        "48": 265,
+        "49": 1270,
+        "51": 325
+      }
+    },
+    {
+      "beeline_path": [5, 20, 21, 45],
+      "beeline_fragments": 55,
+      "category": "Displays",
+      "id": 21,
+      "kind": "item",
+      "name": "16x2 LCD",
+      "price": 5,
+      "requires": [52],
+      "with_token_fragments": {
+        "40": 970,
+        "41": 75,
+        "43": 395,
+        "44": 450,
+        "45": 55,
+        "46": 335,
+        "47": 1895,
+        "48": 255,
+        "49": 1255,
+        "51": 320
+      }
+    },
+    {
+      "beeline_path": [7, 8, 11, 12, 17, 19, 22, 41],
+      "beeline_fragments": 675,
+      "category": "Equipment",
+      "id": 22,
+      "kind": "item",
+      "name": "IR Thermometer",
+      "price": 200,
+      "requires": [8],
+      "with_token_fragments": {
+        "40": 1610,
+        "41": 675,
+        "43": 995,
+        "44": 1090,
+        "45": 695,
+        "46": 695,
+        "47": 2495,
+        "48": 850,
+        "49": 1615,
+        "51": 960
+      }
+    },
+    {
+      "beeline_path": [7, 11, 12, 17, 19, 23, 41],
+      "beeline_fragments": 435,
+      "category": "Equipment",
+      "id": 23,
+      "kind": "item",
+      "name": "Fancy Handheld Oscilloscope",
+      "price": 120,
+      "requires": [7],
+      "with_token_fragments": {
+        "40": 1370,
+        "41": 435,
+        "43": 755,
+        "44": 850,
+        "45": 455,
+        "46": 455,
+        "47": 2255,
+        "48": 610,
+        "49": 1255,
+        "51": 720
+      }
+    },
+    {
+      "beeline_path": [5, 6, 14, 16, 20, 24, 45],
+      "beeline_fragments": 390,
+      "category": "Games",
+      "id": 24,
+      "kind": "item",
+      "name": "No Man's Sky",
+      "price": 180,
+      "requires": [10, 6],
+      "with_token_fragments": {
+        "40": 1265,
+        "41": 420,
+        "43": 740,
+        "44": 445,
+        "45": 390,
+        "46": 680,
+        "47": 2240,
+        "48": 595,
+        "49": 1600,
+        "51": 495
+      }
+    },
+    {
+      "beeline_path": [11, 19, 25, 41],
+      "beeline_fragments": 425,
+      "category": "Books",
+      "id": 25,
+      "kind": "item",
+      "name": "Ray Tracing Gems II",
+      "price": 350,
+      "requires": [19],
+      "with_token_fragments": {
+        "40": 1360,
+        "41": 425,
+        "43": 495,
+        "44": 840,
+        "45": 445,
+        "46": 685,
+        "47": 2245,
+        "48": 645,
+        "49": 1605,
+        "51": 710
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 41],
+      "beeline_fragments": 575,
+      "category": "Displays",
+      "id": 26,
+      "kind": "item",
+      "name": "10.1 Inch Capacitive Touchscreen",
+      "price": 500,
+      "requires": [19],
+      "with_token_fragments": {
+        "40": 1510,
+        "41": 575,
+        "43": 895,
+        "44": 990,
+        "45": 595,
+        "46": 835,
+        "47": 1895,
+        "48": 795,
+        "49": 1755,
+        "51": 860
+      }
+    },
+    {
+      "beeline_path": [5, 6, 14, 16, 20, 24, 27, 45],
+      "beeline_fragments": 690,
+      "category": "Games",
+      "id": 27,
+      "kind": "item",
+      "name": "Steam Publishing Grant",
+      "price": 300,
+      "requires": [24],
+      "with_token_fragments": {
+        "40": 1565,
+        "41": 720,
+        "43": 1040,
+        "44": 745,
+        "45": 690,
+        "46": 980,
+        "47": 2540,
+        "48": 895,
+        "49": 1900,
+        "51": 795
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 45],
+      "beeline_fragments": 750,
+      "category": "VFX",
+      "id": 28,
+      "kind": "item",
+      "name": "Blendkit Subscription Grant",
+      "price": 600,
+      "requires": [13],
+      "with_token_fragments": {
+        "40": 965,
+        "41": 790,
+        "43": 1110,
+        "44": 1115,
+        "45": 750,
+        "46": 1050,
+        "47": 2610,
+        "48": 965,
+        "49": 1970,
+        "51": 1015
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 29, 45],
+      "beeline_fragments": 1950,
+      "category": "VFX",
+      "id": 29,
+      "kind": "item",
+      "name": "JangaFX Embergen",
+      "price": 1200,
+      "requires": [28],
+      "with_token_fragments": {
+        "40": 2165,
+        "41": 1990,
+        "43": 2310,
+        "44": 2315,
+        "45": 1950,
+        "46": 2250,
+        "47": 3810,
+        "48": 2165,
+        "49": 3170,
+        "51": 2215
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 30, 45],
+      "beeline_fragments": 1950,
+      "category": "VFX",
+      "id": 30,
+      "kind": "item",
+      "name": "JangaFX Liquigen",
+      "price": 1200,
+      "requires": [28],
+      "with_token_fragments": {
+        "40": 2165,
+        "41": 1990,
+        "43": 2310,
+        "44": 2315,
+        "45": 1950,
+        "46": 2250,
+        "47": 3810,
+        "48": 2165,
+        "49": 3170,
+        "51": 2215
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 31, 45],
+      "beeline_fragments": 1950,
+      "category": "VFX",
+      "id": 31,
+      "kind": "item",
+      "name": "JangaFX Illugen",
+      "price": 1200,
+      "requires": [28],
+      "with_token_fragments": {
+        "40": 2165,
+        "41": 1990,
+        "43": 2310,
+        "44": 2315,
+        "45": 1950,
+        "46": 2250,
+        "47": 3810,
+        "48": 2165,
+        "49": 3170,
+        "51": 2215
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 29, 32, 45],
+      "beeline_fragments": 2550,
+      "category": "VFX",
+      "id": 32,
+      "kind": "item",
+      "name": "JangaFX Elemental Suite",
+      "price": 600,
+      "requires": [29, 30, 31],
+      "with_token_fragments": {
+        "40": 2765,
+        "41": 2590,
+        "43": 2910,
+        "44": 2915,
+        "45": 2550,
+        "46": 2850,
+        "47": 4410,
+        "48": 2765,
+        "49": 3770,
+        "51": 2815
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 33, 41],
+      "beeline_fragments": 1675,
+      "category": "Displays",
+      "id": 33,
+      "kind": "item",
+      "name": "UPERFECT BE133BU Portable Monitor",
+      "price": 1100,
+      "requires": [26],
+      "with_token_fragments": {
+        "40": 2610,
+        "41": 1675,
+        "43": 1995,
+        "44": 2090,
+        "45": 1695,
+        "46": 1935,
+        "47": 1895,
+        "48": 1895,
+        "49": 2855,
+        "51": 1960
+      }
+    },
+    {
+      "beeline_path": [11, 19, 34, 41],
+      "beeline_fragments": 725,
+      "category": "Books",
+      "id": 34,
+      "kind": "item",
+      "name": "Real-Time Rendering Hardcover",
+      "price": 650,
+      "requires": [19],
+      "with_token_fragments": {
+        "40": 1660,
+        "41": 725,
+        "43": 795,
+        "44": 1140,
+        "45": 745,
+        "46": 985,
+        "47": 2545,
+        "48": 945,
+        "49": 1905,
+        "51": 1010
+      }
+    },
+    {
+      "beeline_path": [7, 11, 12, 17, 19, 23, 35, 41],
+      "beeline_fragments": 1185,
+      "category": "Equipment",
+      "id": 35,
+      "kind": "item",
+      "name": "Flipper Zero",
+      "price": 750,
+      "requires": [23],
+      "with_token_fragments": {
+        "40": 2120,
+        "41": 1185,
+        "43": 1505,
+        "44": 1600,
+        "45": 1205,
+        "46": 1205,
+        "47": 3005,
+        "48": 1360,
+        "49": 1255,
+        "51": 1470
+      }
+    },
+    {
+      "beeline_path": [7, 8, 11, 12, 17, 19, 22, 36, 41],
+      "beeline_fragments": 1475,
+      "category": "Equipment",
+      "id": 36,
+      "kind": "item",
+      "name": "Digilent Basys 3 FPGA Board",
+      "price": 800,
+      "requires": [22, 35],
+      "with_token_fragments": {
+        "40": 2410,
+        "41": 1475,
+        "43": 1795,
+        "44": 1890,
+        "45": 1495,
+        "46": 1495,
+        "47": 3295,
+        "48": 1650,
+        "49": 2055,
+        "51": 1760
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 37, 43],
+      "beeline_fragments": 1395,
+      "category": "Knickknacks",
+      "id": 37,
+      "kind": "item",
+      "name": "Pantone Formula Guide Set Swatches",
+      "price": 1000,
+      "requires": [43],
+      "with_token_fragments": {
+        "40": 2360,
+        "41": 1425,
+        "43": 1395,
+        "44": 1840,
+        "45": 1445,
+        "46": 1685,
+        "47": 3245,
+        "48": 1645,
+        "49": 2605,
+        "51": 1710
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 37, 38, 43],
+      "beeline_fragments": 2595,
+      "category": "Equipment",
+      "id": 38,
+      "kind": "item",
+      "name": "reMarkable Paper Pure",
+      "price": 1200,
+      "requires": [36, 37],
+      "with_token_fragments": {
+        "40": 3560,
+        "41": 2625,
+        "43": 2595,
+        "44": 3040,
+        "45": 2645,
+        "46": 2695,
+        "47": 4445,
+        "48": 2845,
+        "49": 3255,
+        "51": 2910
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 33, 39, 41],
+      "beeline_fragments": 3275,
+      "category": "Displays",
+      "id": 39,
+      "kind": "item",
+      "name": "Benq RD280U Monitor",
+      "price": 1600,
+      "requires": [33],
+      "with_token_fragments": {
+        "40": 4210,
+        "41": 3275,
+        "43": 3595,
+        "44": 3690,
+        "45": 3295,
+        "46": 3535,
+        "47": 3495,
+        "48": 3495,
+        "49": 4455,
+        "51": 3560
+      }
+    },
+    {
+      "beeline_path": [5, 13, 20, 28, 40],
+      "beeline_fragments": 965,
+      "category": null,
+      "id": 40,
+      "kind": "token",
+      "name": "Token",
+      "price": 250,
+      "requires": [28],
+      "with_token_fragments": {
+        "41": 1040,
+        "43": 1360,
+        "44": 1365,
+        "45": 1000,
+        "46": 1300,
+        "47": 2860,
+        "48": 1215,
+        "49": 2220,
+        "51": 1265
+      }
+    },
+    {
+      "beeline_path": [11, 19, 41],
+      "beeline_fragments": 75,
+      "category": null,
+      "id": 41,
+      "kind": "token",
+      "name": "Token",
+      "price": 30,
+      "requires": [19],
+      "with_token_fragments": {
+        "40": 1040,
+        "43": 425,
+        "44": 520,
+        "45": 125,
+        "46": 365,
+        "47": 1925,
+        "48": 325,
+        "49": 1285,
+        "51": 390
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 43],
+      "beeline_fragments": 395,
+      "category": null,
+      "id": 43,
+      "kind": "token",
+      "name": "Token",
+      "price": 100,
+      "requires": [34, 25, 15],
+      "with_token_fragments": {
+        "40": 1360,
+        "41": 425,
+        "44": 840,
+        "45": 445,
+        "46": 685,
+        "47": 2245,
+        "48": 645,
+        "49": 1605,
+        "51": 710
+      }
+    },
+    {
+      "beeline_path": [5, 6, 14, 16, 24, 44],
+      "beeline_fragments": 445,
+      "category": null,
+      "id": 44,
+      "kind": "token",
+      "name": "Token",
+      "price": 100,
+      "requires": [24],
+      "with_token_fragments": {
+        "40": 1365,
+        "41": 520,
+        "43": 840,
+        "45": 490,
+        "46": 780,
+        "47": 2340,
+        "48": 695,
+        "49": 1700,
+        "51": 595
+      }
+    },
+    {
+      "beeline_path": [5, 20, 45],
+      "beeline_fragments": 50,
+      "category": null,
+      "id": 45,
+      "kind": "token",
+      "name": "Token",
+      "price": 35,
+      "requires": [20],
+      "with_token_fragments": {
+        "40": 1000,
+        "41": 125,
+        "43": 445,
+        "44": 490,
+        "46": 385,
+        "47": 1945,
+        "48": 300,
+        "49": 1305,
+        "51": 360
+      }
+    },
+    {
+      "beeline_path": [7, 11, 12, 17, 19, 46],
+      "beeline_fragments": 335,
+      "category": null,
+      "id": 46,
+      "kind": "token",
+      "name": "Token",
+      "price": 50,
+      "requires": [7],
+      "with_token_fragments": {
+        "40": 1300,
+        "41": 365,
+        "43": 685,
+        "44": 780,
+        "45": 385,
+        "47": 2185,
+        "48": 540,
+        "49": 1305,
+        "51": 650
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 33, 47],
+      "beeline_fragments": 1895,
+      "category": null,
+      "id": 47,
+      "kind": "token",
+      "name": "Token",
+      "price": 250,
+      "requires": [33],
+      "with_token_fragments": {
+        "40": 2860,
+        "41": 1925,
+        "43": 2245,
+        "44": 2340,
+        "45": 1945,
+        "46": 2185,
+        "48": 2145,
+        "49": 3105,
+        "51": 2210
+      }
+    },
+    {
+      "beeline_path": [9, 48],
+      "beeline_fragments": 250,
+      "category": null,
+      "id": 48,
+      "kind": "token",
+      "name": "Token",
+      "price": 100,
+      "requires": [9],
+      "with_token_fragments": {
+        "40": 1215,
+        "41": 325,
+        "43": 645,
+        "44": 695,
+        "45": 300,
+        "46": 540,
+        "47": 2145,
+        "49": 1460,
+        "51": 565
+      }
+    },
+    {
+      "beeline_path": [7, 11, 12, 17, 19, 23, 35, 49],
+      "beeline_fragments": 1255,
+      "category": null,
+      "id": 49,
+      "kind": "token",
+      "name": "Token",
+      "price": 100,
+      "requires": [35],
+      "with_token_fragments": {
+        "40": 2220,
+        "41": 1285,
+        "43": 1605,
+        "44": 1700,
+        "45": 1305,
+        "46": 1305,
+        "47": 3105,
+        "48": 1460,
+        "51": 1570
+      }
+    },
+    {
+      "beeline_path": [5, 6, 14, 16, 51],
+      "beeline_fragments": 315,
+      "category": null,
+      "id": 51,
+      "kind": "token",
+      "name": "Token",
+      "price": 150,
+      "requires": [6],
+      "with_token_fragments": {
+        "40": 1265,
+        "41": 390,
+        "43": 710,
+        "44": 595,
+        "45": 360,
+        "46": 650,
+        "47": 2210,
+        "48": 565,
+        "49": 1570
+      }
+    },
+    {
+      "category": null,
+      "id": 52,
+      "kind": "origin",
+      "name": "Origin",
+      "requires": []
+    }
+  ],
+  "tree": "Mipmap Tree",
+  "unlock_rule": "any"
+}
