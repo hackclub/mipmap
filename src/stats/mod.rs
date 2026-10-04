@@ -108,7 +108,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
              (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL) AS orders_placed",
     )
     .bind(review::APPROVED)
-    .bind(review::REFERRAL_MIPS)
+    .bind(review::REFERRER_MIPS + review::REFEREE_MIPS)
     .fetch_one(pool)
     .await?;
     let funnel = sqlx::query_as(

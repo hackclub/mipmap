@@ -36,7 +36,8 @@
 <Section title="Referral" {bounds} zoom={3} padded>
     <p>
         Here's your referral link. If someone signs up with it and
-        gets a project approved, you get 50 Mips!
+        gets a project approved, you get 100 Mips and they get 20 to start out
+        with!
     </p>
     <div class="row" bind:this={row}>
         <Field

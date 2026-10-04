@@ -179,6 +179,7 @@ pub async fn submit(
     hca_token: &str,
     hackatime: Hackatime,
 ) -> Result<(), ApiError> {
+    let mips_per_hour = review::mips_per_hour(project.tier.as_deref())?;
     let code_url = repo.url();
     let record_id = create_unified_with_token(
         hca_token,
@@ -206,7 +207,7 @@ pub async fn submit(
     )
     .bind(project.id)
     .bind(record_id)
-    .bind(review::mips_per_hour(project.tier.as_deref()))
+    .bind(mips_per_hour)
     .bind(code_url)
     .execute(pool)
     .await?;

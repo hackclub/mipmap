@@ -9,7 +9,8 @@ use sqlx::{PgConnection, PgPool};
 use std::collections::BTreeSet;
 
 pub const APPROVED: &str = "2–Submitted";
-pub const REFERRAL_MIPS: i32 = 50;
+pub const REFERRER_MIPS: i32 = 100;
+pub const REFEREE_MIPS: i32 = 20;
 
 #[derive(Serialize)]
 pub struct Extras {
@@ -62,13 +63,17 @@ pub fn table() -> Option<AirtableTable> {
     })
 }
 
-pub fn mips_per_hour(tier: Option<&str>) -> f64 {
-    match tier {
-        Some("quebec") => 15.0,
-        Some("romeo") => 20.0,
-        Some("sierra") => 22.0,
-        _ => 0.0,
-    }
+pub fn mips_per_hour(tier: Option<&str>) -> anyhow::Result<f64> {
+    let key = match tier {
+        Some("quebec") => "MIPS_PER_HOUR_QUEBEC",
+        Some("romeo") => "MIPS_PER_HOUR_ROMEO",
+        Some("sierra") => "MIPS_PER_HOUR_SIERRA",
+        _ => anyhow::bail!("project has no tier"),
+    };
+    env::var(key)
+        .and_then(|rate| rate.parse().ok())
+        .filter(|rate: &f64| rate.is_finite() && *rate >= 0.0)
+        .ok_or_else(|| anyhow::anyhow!("{key} is not set to a valid number"))
 }
 
 pub fn spawn(pool: PgPool) {
@@ -258,9 +263,11 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
     .fetch_optional(&mut *conn)
     .await?;
     if let Some(referrer) = referrer {
-        sqlx::query("UPDATE \"user\" SET mips = mips + $2 WHERE id = $1")
+        sqlx::query("UPDATE \"user\" SET mips = mips + CASE WHEN id = $1 THEN $3::int ELSE $4::int END WHERE id IN ($1, $2)")
             .bind(referrer)
-            .bind(REFERRAL_MIPS)
+            .bind(user_id)
+            .bind(REFERRER_MIPS)
+            .bind(REFEREE_MIPS)
             .execute(&mut *conn)
             .await?;
     }
