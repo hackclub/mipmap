@@ -37,7 +37,7 @@ pub async fn store(
         .encrypt(&nonce, token.as_bytes())
         .map_err(|_| anyhow!("token encryption failed"))?;
     sqlx::query(
-        "INSERT INTO auth_tokens (user_id, provider, ciphertext, nonce) VALUES ($1, $2, $3, $4)
+        "INSERT INTO auth_token (user_id, provider, ciphertext, nonce) VALUES ($1, $2, $3, $4)
          ON CONFLICT (user_id, provider) DO UPDATE SET ciphertext = $3, nonce = $4",
     )
     .bind(user_id)
@@ -55,7 +55,7 @@ pub async fn load(
     provider: Provider,
 ) -> anyhow::Result<Option<String>> {
     let Some((ciphertext, nonce)) = sqlx::query_as::<_, (Vec<u8>, Vec<u8>)>(
-        "SELECT ciphertext, nonce FROM auth_tokens WHERE user_id = $1 AND provider = $2",
+        "SELECT ciphertext, nonce FROM auth_token WHERE user_id = $1 AND provider = $2",
     )
     .bind(user_id)
     .bind(provider.name())

@@ -15,7 +15,7 @@ struct NodeRequest {
 
 pub async fn unlocked(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar(
-        "SELECT node_id FROM unlocks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY node_id",
+        "SELECT node_id FROM unlock WHERE user_id = $1 AND deleted_at IS NULL ORDER BY node_id",
     )
     .bind(user_id)
     .fetch_all(db)
@@ -24,7 +24,7 @@ pub async fn unlocked(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<Vec
 
 async fn lock_user(conn: &mut PgConnection, user_id: i32) -> Result<i32, ApiError> {
     let (mips, status, eligible): (i32, Option<String>, bool) = sqlx::query_as(
-        "SELECT mips, verification_status, ysws_eligible FROM users WHERE id = $1 FOR UPDATE",
+        "SELECT mips, verification_status, ysws_eligible FROM \"user\" WHERE id = $1 FOR UPDATE",
     )
     .bind(user_id)
     .fetch_one(conn)
@@ -61,13 +61,13 @@ pub async fn unlock_item(
     if mips < node.price {
         return Err(reject(format!("Not enough {}", TREE.currency)));
     }
-    sqlx::query("UPDATE users SET mips = mips - $2 WHERE id = $1")
+    sqlx::query("UPDATE \"user\" SET mips = mips - $2 WHERE id = $1")
         .bind(user_id)
         .bind(node.price)
         .execute(&mut *tx)
         .await?;
     sqlx::query(
-        "INSERT INTO unlocks (user_id, node_id) VALUES ($1, $2)
+        "INSERT INTO unlock (user_id, node_id) VALUES ($1, $2)
          ON CONFLICT (user_id, node_id) DO UPDATE SET deleted_at = NULL, unlocked_at = now()",
     )
     .bind(user_id)
@@ -95,7 +95,7 @@ pub async fn purchase_item(
         return Err(reject("item not unlocked"));
     }
     let ordered: Vec<i32> =
-        sqlx::query_scalar("SELECT node_id FROM orders WHERE user_id = $1 AND deleted_at IS NULL")
+        sqlx::query_scalar("SELECT node_id FROM \"order\" WHERE user_id = $1 AND deleted_at IS NULL")
             .bind(user_id)
             .fetch_all(&mut *tx)
             .await?;
@@ -110,7 +110,7 @@ pub async fn purchase_item(
         return Err(reject("no tokens available"));
     }
     let inserted = sqlx::query(
-        "INSERT INTO orders (
+        "INSERT INTO \"order\" (
              user_id, node_id, item_name, cost,
              address_first_name, address_last_name, address_line_1, address_line_2, address_city,
              address_state, address_postal_code, address_country, address_phone_number
@@ -118,7 +118,7 @@ pub async fn purchase_item(
          SELECT id, $2, $3, 1,
              address_first_name, address_last_name, address_line_1, address_line_2, address_city,
              address_state, address_postal_code, address_country, address_phone_number
-         FROM users
+         FROM \"user\"
          WHERE id = $1 AND address_line_1 IS NOT NULL AND address_city IS NOT NULL
          AND address_country IS NOT NULL",
     )

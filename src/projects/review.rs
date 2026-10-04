@@ -109,7 +109,7 @@ pub fn spawn(pool: PgPool) {
 }
 
 async fn sync(pool: &PgPool, table: &AirtableTable) -> anyhow::Result<()> {
-    let ids: Vec<String> = sqlx::query_scalar("SELECT record_id FROM submissions")
+    let ids: Vec<String> = sqlx::query_scalar("SELECT record_id FROM submission")
         .fetch_all(pool)
         .await?;
     if ids.is_empty() {
@@ -142,7 +142,7 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
 
     let mut tx = pool.begin().await?;
     let mut changed: BTreeSet<i32> = sqlx::query_scalar(
-        "UPDATE submissions s
+        "UPDATE submission s
          SET review_status = r.status, hours = r.hours, code_url = r.code_url, rejected = r.rejected,
              deleted_at = NULL
          FROM UNNEST($1::text[], $2::text[], $3::float8[], $4::text[], $5::bool[])
@@ -163,7 +163,7 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     .collect();
     changed.extend(
         sqlx::query_scalar::<_, i32>(
-            "UPDATE submissions SET deleted_at = now()
+            "UPDATE submission SET deleted_at = now()
              WHERE record_id = ANY($1) AND NOT record_id = ANY($2) AND deleted_at IS NULL
              RETURNING project_id",
         )
@@ -180,20 +180,20 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
 }
 
 async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<()> {
-    let user_id: i32 = sqlx::query_scalar("SELECT user_id FROM projects WHERE id = $1")
+    let user_id: i32 = sqlx::query_scalar("SELECT user_id FROM project WHERE id = $1")
         .bind(project_id)
         .fetch_one(&mut *conn)
         .await?;
     let submissions: Vec<Submission> = sqlx::query_as(
         "SELECT id, record_id, mips_per_hour, review_status, rejected, hours, multiplier, mips,
              deleted_at IS NOT NULL AS deleted
-         FROM submissions WHERE project_id = $1 ORDER BY created_at, id FOR UPDATE",
+         FROM submission WHERE project_id = $1 ORDER BY created_at, id FOR UPDATE",
     )
     .bind(project_id)
     .fetch_all(&mut *conn)
     .await?;
     let shared: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM snapshots WHERE user_id = $1 AND deleted_at IS NULL",
+        "SELECT count(*) FROM snapshot WHERE user_id = $1 AND deleted_at IS NULL",
     )
     .bind(user_id)
     .fetch_one(&mut *conn)
@@ -227,7 +227,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
             (false, _) => (0, submission.multiplier),
         };
         if mips != submission.mips || multiplier != submission.multiplier {
-            sqlx::query("UPDATE submissions SET mips = $2, multiplier = $3 WHERE id = $1")
+            sqlx::query("UPDATE submission SET mips = $2, multiplier = $3 WHERE id = $1")
                 .bind(submission.id)
                 .bind(mips)
                 .bind(multiplier)
@@ -237,7 +237,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
         }
     }
     if delta != 0 {
-        sqlx::query("UPDATE users SET mips = mips + $2 WHERE id = $1")
+        sqlx::query("UPDATE \"user\" SET mips = mips + $2 WHERE id = $1")
             .bind(user_id)
             .bind(delta)
             .execute(&mut *conn)
@@ -245,11 +245,11 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
         log::info!("Project {project_id}'s Mips changed by {delta} to match the review table");
     }
     let referrer: Option<i32> = sqlx::query_scalar(
-        "UPDATE users SET referral_paid = true
+        "UPDATE \"user\" SET referral_paid = true
          WHERE id = $1 AND referred_by IS NOT NULL AND NOT referral_paid AND EXISTS (
-             SELECT 1 FROM submissions JOIN projects ON projects.id = submissions.project_id
-             WHERE projects.user_id = $1 AND submissions.deleted_at IS NULL
-             AND NOT submissions.rejected AND submissions.review_status = $2
+             SELECT 1 FROM submission JOIN project ON project.id = submission.project_id
+             WHERE project.user_id = $1 AND submission.deleted_at IS NULL
+             AND NOT submission.rejected AND submission.review_status = $2
          )
          RETURNING referred_by",
     )
@@ -258,7 +258,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
     .fetch_optional(&mut *conn)
     .await?;
     if let Some(referrer) = referrer {
-        sqlx::query("UPDATE users SET mips = mips + $2 WHERE id = $1")
+        sqlx::query("UPDATE \"user\" SET mips = mips + $2 WHERE id = $1")
             .bind(referrer)
             .bind(REFERRAL_MIPS)
             .execute(&mut *conn)

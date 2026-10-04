@@ -104,12 +104,12 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
                   WHEN latest.review_status = $2 THEN 'approved'
                   ELSE 'shipped' END AS status,
              latest.created_at AS shipped_at,
-             (SELECT COALESCE(sum(mips), 0)::int FROM submissions WHERE project_id = p.id)
+             (SELECT COALESCE(sum(mips), 0)::int FROM submission WHERE project_id = p.id)
                  AS mips_awarded,
              p.total_seconds, p.last_logged_at
-         FROM projects p
+         FROM project p
          LEFT JOIN LATERAL (
-             SELECT review_status, rejected, created_at FROM submissions
+             SELECT review_status, rejected, created_at FROM submission
              WHERE project_id = p.id AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1
          ) latest ON true
@@ -128,7 +128,7 @@ async fn ensure_hackatime_free(
     names: &[String],
 ) -> Result<(), ApiError> {
     let taken: Option<String> = sqlx::query_scalar(
-        "SELECT linked.name FROM projects p, unnest(p.hackatime_projects) AS linked (name)
+        "SELECT linked.name FROM project p, unnest(p.hackatime_projects) AS linked (name)
          WHERE p.user_id = $1 AND p.id <> $2 AND p.deleted_at IS NULL AND linked.name = ANY($3)
          LIMIT 1",
     )
@@ -166,13 +166,13 @@ pub async fn record_time(
         }
         sqlx::query(
             "WITH updated AS (
-                 UPDATE projects SET total_seconds = $2, last_logged_at = $3 WHERE id = $1
+                 UPDATE project SET total_seconds = $2, last_logged_at = $3 WHERE id = $1
                  RETURNING user_id
              )
-             INSERT INTO active_days (user_id, day)
-             SELECT users.id, ($3 AT TIME ZONE 'UTC')::date FROM updated
-             JOIN users ON users.id = updated.user_id
-             WHERE ($3 AT TIME ZONE 'UTC')::date >= (users.signup_at AT TIME ZONE 'UTC')::date
+             INSERT INTO active_day (user_id, day)
+             SELECT \"user\".id, ($3 AT TIME ZONE 'UTC')::date FROM updated
+             JOIN \"user\" ON \"user\".id = updated.user_id
+             WHERE ($3 AT TIME ZONE 'UTC')::date >= (\"user\".signup_at AT TIME ZONE 'UTC')::date
              ON CONFLICT DO NOTHING",
         )
         .bind(project.id)
@@ -192,9 +192,9 @@ async fn create_project(
 ) -> Result<HttpResponse, ApiError> {
     let name = required_name(&body.name)?;
     let inserted = sqlx::query(
-        "INSERT INTO projects (user_id, name)
+        "INSERT INTO project (user_id, name)
          SELECT $1, $2
-         WHERE (SELECT count(*) FROM projects WHERE user_id = $1 AND deleted_at IS NULL) < $3",
+         WHERE (SELECT count(*) FROM project WHERE user_id = $1 AND deleted_at IS NULL) < $3",
     )
     .bind(user_id)
     .bind(name)
@@ -232,9 +232,9 @@ async fn update_project(
     }
     ensure_hackatime_free(&pool, user_id, *id, &hackatime).await?;
     let shipped: Vec<String> = sqlx::query_scalar(
-        "SELECT unnest(p.hackatime_projects) FROM projects p
+        "SELECT unnest(p.hackatime_projects) FROM project p
          WHERE p.id = $1 AND p.user_id = $2 AND EXISTS (
-             SELECT 1 FROM submissions s
+             SELECT 1 FROM submission s
              WHERE s.project_id = p.id AND s.deleted_at IS NULL AND NOT s.rejected
          )",
     )
@@ -246,7 +246,7 @@ async fn update_project(
         return Err(reject(format!("{name} can't be unlinked from a shipped project.")));
     }
     let updated = sqlx::query(
-        "UPDATE projects SET name = $3, description = $4, repo_url = NULLIF($5, ''),
+        "UPDATE project SET name = $3, description = $4, repo_url = NULLIF($5, ''),
              demo_url = NULLIF($6, ''), tier = $7, hackatime_projects = $8
          WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
@@ -275,7 +275,7 @@ async fn upload_screenshot(
 ) -> Result<HttpResponse, ApiError> {
     uploads::ensure_image(&body)?;
     let owned: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
+        "SELECT EXISTS (SELECT 1 FROM project WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
     )
     .bind(*id)
     .bind(user_id)
@@ -285,7 +285,7 @@ async fn upload_screenshot(
         return Err(unknown_project());
     }
     let url = uploads::upload(&body).await?;
-    sqlx::query("UPDATE projects SET screenshot_url = $2 WHERE id = $1")
+    sqlx::query("UPDATE project SET screenshot_url = $2 WHERE id = $1")
         .bind(*id)
         .bind(url)
         .execute(pool.get_ref())

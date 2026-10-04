@@ -99,10 +99,10 @@ pub async fn ship_project(
     let project: Draft = sqlx::query_as(
         "SELECT id, name, description, COALESCE(repo_url, '') AS repo, COALESCE(demo_url, '') AS demo,
              screenshot_url AS screenshot, tier, hackatime_projects AS hackatime,
-             COALESCE((SELECT NOT rejected AND review_status IS DISTINCT FROM $3 FROM submissions
-                       WHERE project_id = projects.id AND deleted_at IS NULL
+             COALESCE((SELECT NOT rejected AND review_status IS DISTINCT FROM $3 FROM submission
+                       WHERE project_id = project.id AND deleted_at IS NULL
                        ORDER BY created_at DESC, id DESC LIMIT 1), false) AS reviewing
-         FROM projects WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+         FROM project WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
     .bind(*id)
     .bind(user_id)

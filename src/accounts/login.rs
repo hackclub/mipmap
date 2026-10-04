@@ -74,7 +74,7 @@ async fn sign_in(
 ) -> anyhow::Result<Option<Cookie<'static>>> {
     let data = get_auth_data_with_token(token).await?;
     let deleted: Option<bool> =
-        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM users WHERE hca_id = $1")
+        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM \"user\" WHERE hca_id = $1")
             .bind(&data.id)
             .fetch_optional(pool)
             .await?;
@@ -85,8 +85,8 @@ async fn sign_in(
     let user_id = profile::sync(pool, &data).await?;
     if let (false, Some(code)) = (existing, referral) {
         sqlx::query(
-            "UPDATE users SET referred_by = referrer.id FROM users referrer
-             WHERE users.id = $1 AND users.referred_by IS NULL
+            "UPDATE \"user\" SET referred_by = referrer.id FROM \"user\" referrer
+             WHERE \"user\".id = $1 AND \"user\".referred_by IS NULL
              AND referrer.referral_code = $2 AND referrer.id <> $1",
         )
         .bind(user_id)
@@ -94,7 +94,7 @@ async fn sign_in(
         .execute(pool)
         .await?;
     }
-    sqlx::query("UPDATE users SET last_login_at = now() WHERE id = $1")
+    sqlx::query("UPDATE \"user\" SET last_login_at = now() WHERE id = $1")
         .bind(user_id)
         .execute(pool)
         .await?;

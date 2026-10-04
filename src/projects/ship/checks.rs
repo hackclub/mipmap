@@ -82,7 +82,7 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         reject("Couldn't reach Hackatime. Please try again.")
     };
     let user = get_hackatime_user_with_token(&token).await.map_err(unreachable)?;
-    sqlx::query("UPDATE users SET hackatime_trust_level = $2 WHERE id = $1")
+    sqlx::query("UPDATE \"user\" SET hackatime_trust_level = $2 WHERE id = $1")
         .bind(user_id)
         .bind(&user.trust_factor.trust_level)
         .execute(pool)
@@ -102,7 +102,7 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         return Err(reject(format!("Hackatime has no project called {}.", missing.join(", "))));
     }
     let baseline: Option<Json<Totals>> =
-        sqlx::query_scalar("SELECT hackatime_baseline FROM users WHERE id = $1")
+        sqlx::query_scalar("SELECT hackatime_baseline FROM \"user\" WHERE id = $1")
             .bind(user_id)
             .fetch_one(pool)
             .await?;
@@ -133,7 +133,7 @@ pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(
         .map_err(|_| reject("Fix the repository link first."))?
         .key();
     let others: Vec<String> = sqlx::query_scalar(
-        "SELECT code_url FROM submissions
+        "SELECT code_url FROM submission
          WHERE project_id <> $1 AND deleted_at IS NULL AND strpos(lower(code_url), $2) > 0",
     )
     .bind(project_id)
@@ -201,7 +201,7 @@ pub async fn submit(
         return Err(anyhow::anyhow!("review record {record_id} is missing after creating it").into());
     }
     sqlx::query(
-        "INSERT INTO submissions (project_id, record_id, mips_per_hour, code_url)
+        "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url)
          VALUES ($1, $2, $3, $4)",
     )
     .bind(project.id)

@@ -15,8 +15,8 @@ pub fn spawn(pool: PgPool) {
 
 async fn sync(pool: &PgPool) -> sqlx::Result<()> {
     let users: Vec<i32> = sqlx::query_scalar(
-        "SELECT DISTINCT projects.user_id FROM projects JOIN users ON users.id = projects.user_id
-         WHERE projects.deleted_at IS NULL AND users.deleted_at IS NULL AND hackatime_projects <> '{}'",
+        "SELECT DISTINCT project.user_id FROM project JOIN \"user\" ON \"user\".id = project.user_id
+         WHERE project.deleted_at IS NULL AND \"user\".deleted_at IS NULL AND hackatime_projects <> '{}'",
     )
     .fetch_all(pool)
     .await?;

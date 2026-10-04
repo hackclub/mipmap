@@ -70,9 +70,9 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     let days = sqlx::query_as(
         "WITH signups AS (
              SELECT (signup_at AT TIME ZONE 'UTC')::date AS day, count(*) AS users
-             FROM users WHERE deleted_at IS NULL GROUP BY 1
+             FROM \"user\" WHERE deleted_at IS NULL GROUP BY 1
          ), active AS (
-             SELECT day, count(*) AS users FROM active_days GROUP BY day
+             SELECT day, count(*) AS users FROM active_day GROUP BY day
          ), range AS (
              SELECT generate_series(
                  LEAST((SELECT min(day) FROM signups), (now() AT TIME ZONE 'UTC')::date)::timestamp,
@@ -92,20 +92,20 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     .await?;
     let totals = sqlx::query_as(
         "SELECT
-             (SELECT COALESCE(sum(total_seconds), 0) FROM projects WHERE deleted_at IS NULL)::float8
+             (SELECT COALESCE(sum(total_seconds), 0) FROM project WHERE deleted_at IS NULL)::float8
                  / 3600 AS hours_building,
-             (SELECT count(DISTINCT project_id) FROM submissions WHERE deleted_at IS NULL)
+             (SELECT count(DISTINCT project_id) FROM submission WHERE deleted_at IS NULL)
                  AS projects_shipped,
              (SELECT COALESCE(sum(hours), 0) FROM (
-                  SELECT max(hours) AS hours FROM submissions
+                  SELECT max(hours) AS hours FROM submission
                   WHERE deleted_at IS NULL AND NOT rejected AND review_status = $1
                   GROUP BY project_id
               ) approved) AS hours_approved,
-             (SELECT COALESCE(sum(mips), 0) FROM submissions)
-                 + (SELECT count(*) FROM users WHERE referral_paid) * $2 AS mips_awarded,
-             (SELECT count(*) FROM snapshots WHERE deleted_at IS NULL) AS snapshots_shared,
-             (SELECT count(*) FROM users WHERE referral_paid) AS successful_referrals,
-             (SELECT count(*) FROM orders WHERE deleted_at IS NULL) AS orders_placed",
+             (SELECT COALESCE(sum(mips), 0) FROM submission)
+                 + (SELECT count(*) FROM \"user\" WHERE referral_paid) * $2 AS mips_awarded,
+             (SELECT count(*) FROM snapshot WHERE deleted_at IS NULL) AS snapshots_shared,
+             (SELECT count(*) FROM \"user\" WHERE referral_paid) AS successful_referrals,
+             (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL) AS orders_placed",
     )
     .bind(review::APPROVED)
     .bind(review::REFERRAL_MIPS)
@@ -113,19 +113,19 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     .await?;
     let funnel = sqlx::query_as(
         "SELECT
-             (SELECT count(*) FROM visitors) AS visited,
+             (SELECT count(*) FROM visitor) AS visited,
              count(*) AS signed_in,
              count(*) FILTER (WHERE hackatime_user_id IS NOT NULL) AS linked_hackatime,
-             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM active_days WHERE user_id = users.id))
+             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM active_day WHERE user_id = \"user\".id))
                  AS logged_time,
              count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM submissions JOIN projects ON projects.id = submissions.project_id
-                 WHERE projects.user_id = users.id AND submissions.deleted_at IS NULL
+                 SELECT 1 FROM submission JOIN project ON project.id = submission.project_id
+                 WHERE project.user_id = \"user\".id AND submission.deleted_at IS NULL
              )) AS shipped,
              count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM orders WHERE user_id = users.id AND deleted_at IS NULL
+                 SELECT 1 FROM \"order\" WHERE user_id = \"user\".id AND deleted_at IS NULL
              )) AS redeemed
-         FROM users WHERE deleted_at IS NULL",
+         FROM \"user\" WHERE deleted_at IS NULL",
     )
     .fetch_one(pool)
     .await?;
@@ -160,7 +160,7 @@ fn allow_visit(ip: IpAddr) -> bool {
 #[post("/visit")]
 async fn record_visit(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
     if middleware::client_ip(&req).is_some_and(allow_visit) {
-        sqlx::query("INSERT INTO visitors DEFAULT VALUES")
+        sqlx::query("INSERT INTO visitor DEFAULT VALUES")
             .execute(pool.get_ref())
             .await?;
     }

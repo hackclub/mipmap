@@ -19,7 +19,7 @@ fn hash(token: &str) -> Vec<u8> {
 pub async fn create(pool: &PgPool, user_id: i32) -> anyhow::Result<Cookie<'static>> {
     let token = hex::encode(rand::random::<[u8; 32]>());
     sqlx::query(
-        "INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '30 days')",
+        "INSERT INTO session (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '30 days')",
     )
     .bind(user_id)
     .bind(hash(&token))
@@ -37,7 +37,7 @@ pub async fn create(pool: &PgPool, user_id: i32) -> anyhow::Result<Cookie<'stati
 #[post("/logout")]
 pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
     if let Some(cookie) = req.cookie(COOKIE) {
-        sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
+        sqlx::query("DELETE FROM session WHERE token_hash = $1")
             .bind(hash(cookie.value()))
             .execute(pool.get_ref())
             .await?;
@@ -48,7 +48,7 @@ pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpRes
 }
 
 pub async fn prune(pool: &PgPool) -> sqlx::Result<()> {
-    sqlx::query("DELETE FROM sessions WHERE expires_at <= now()")
+    sqlx::query("DELETE FROM session WHERE expires_at <= now()")
         .execute(pool)
         .await?;
     Ok(())
@@ -68,15 +68,15 @@ pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<Session>> {
         .ok_or_else(|| anyhow::anyhow!("database pool missing"))?;
     let row: Option<(i32, bool)> = sqlx::query_as(
         "WITH s AS (
-             SELECT users.id, users.is_banned, users.last_activity_at, sessions.expires_at
-             FROM sessions JOIN users ON users.id = sessions.user_id
-             WHERE token_hash = $1 AND expires_at > now() AND users.deleted_at IS NULL
+             SELECT \"user\".id, \"user\".is_banned, \"user\".last_activity_at, session.expires_at
+             FROM session JOIN \"user\" ON \"user\".id = session.user_id
+             WHERE token_hash = $1 AND expires_at > now() AND \"user\".deleted_at IS NULL
          ), extended AS (
-             UPDATE sessions SET expires_at = now() + interval '30 days' FROM s
+             UPDATE session SET expires_at = now() + interval '30 days' FROM s
              WHERE token_hash = $1 AND s.expires_at < now() + interval '29 days'
          ), active AS (
-             UPDATE users SET last_activity_at = now() FROM s
-             WHERE users.id = s.id
+             UPDATE \"user\" SET last_activity_at = now() FROM s
+             WHERE \"user\".id = s.id
              AND (s.last_activity_at IS NULL OR s.last_activity_at < now() - interval '1 hour')
          )
          SELECT id, is_banned FROM s",

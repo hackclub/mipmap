@@ -3,11 +3,11 @@ use hc_helper::airtable::{AirtableTable, create_field, create_table, tables, ups
 use serde_json::{Map, Value, json};
 use sqlx::{AssertSqlSafe, PgPool};
 
-const TABLES: &[&str] = &["users", "projects", "snapshots", "orders", "unlocks", "submissions"];
+const TABLES: &[&str] = &["user", "project", "snapshot", "order", "unlock", "submission"];
 
 fn table_name(table: &str) -> String {
     env::var(&format!("AIRTABLE_MIRROR_{}_TABLE", table.to_uppercase()))
-        .unwrap_or_else(|| table.strip_suffix('s').unwrap_or(table).to_string())
+        .unwrap_or_else(|| table.to_string())
 }
 
 pub fn spawn(pool: PgPool) {
@@ -131,7 +131,7 @@ async fn sync(pool: &PgPool, token: &str, base_id: &str, table: &str) -> anyhow:
         .fetch_one(pool)
         .await?;
     let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
-        "SELECT to_jsonb(t)::text FROM {table} t
+        "SELECT to_jsonb(t)::text FROM \"{table}\" t
          WHERE t.updated_at > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'
          ORDER BY t.id"
     )))

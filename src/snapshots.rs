@@ -62,10 +62,10 @@ pub async fn overview(
 
 async fn everyone(pool: &PgPool) -> sqlx::Result<Vec<Snapshot>> {
     sqlx::query_as(
-        "SELECT snapshots.id, image_url AS image, caption, display_name AS author
-         FROM snapshots JOIN users ON users.id = snapshots.user_id
-         WHERE snapshots.deleted_at IS NULL AND users.deleted_at IS NULL AND NOT users.is_banned
-         ORDER BY snapshots.created_at DESC LIMIT $1",
+        "SELECT snapshot.id, image_url AS image, caption, display_name AS author
+         FROM snapshot JOIN \"user\" ON \"user\".id = snapshot.user_id
+         WHERE snapshot.deleted_at IS NULL AND \"user\".deleted_at IS NULL AND NOT \"user\".is_banned
+         ORDER BY snapshot.created_at DESC LIMIT $1",
     )
     .bind(FEED_SIZE)
     .fetch_all(pool)
@@ -74,7 +74,7 @@ async fn everyone(pool: &PgPool) -> sqlx::Result<Vec<Snapshot>> {
 
 async fn mine(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Snapshot>> {
     sqlx::query_as(
-        "SELECT id, image_url AS image, caption, display_name AS author FROM snapshots
+        "SELECT id, image_url AS image, caption, display_name AS author FROM snapshot
          WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
     )
     .bind(user_id)
@@ -91,14 +91,14 @@ async fn status(
     let (last, baseline, sent_today, shared): (Option<Json<Totals>>, Option<Json<Totals>>, bool, i64) =
         sqlx::query_as(
             "SELECT
-                 (SELECT hackatime_totals FROM snapshots
+                 (SELECT hackatime_totals FROM snapshot
                   WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
                  hackatime_baseline,
-                 EXISTS (SELECT 1 FROM snapshots
+                 EXISTS (SELECT 1 FROM snapshot
                          WHERE user_id = $1 AND deleted_at IS NULL
                          AND created_at > now() - interval '16 hours'),
-                 (SELECT count(*) FROM snapshots WHERE user_id = $1 AND deleted_at IS NULL)
-             FROM users WHERE id = $1",
+                 (SELECT count(*) FROM snapshot WHERE user_id = $1 AND deleted_at IS NULL)
+             FROM \"user\" WHERE id = $1",
         )
         .bind(user_id)
         .fetch_one(pool)
@@ -168,10 +168,10 @@ pub async fn create_snapshot(
     let url = uploads::upload(&form.image.data).await?;
     let mut tx = pool.begin().await?;
     let sent_today: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM snapshots
+        "SELECT EXISTS (SELECT 1 FROM snapshot
                         WHERE user_id = u.id AND deleted_at IS NULL
                         AND created_at > now() - interval '16 hours')
-         FROM users u WHERE u.id = $1 FOR UPDATE",
+         FROM \"user\" u WHERE u.id = $1 FOR UPDATE",
     )
     .bind(user_id)
     .fetch_one(&mut *tx)
@@ -180,7 +180,7 @@ pub async fn create_snapshot(
         return Err(reject(ALREADY_SENT));
     }
     sqlx::query(
-        "INSERT INTO snapshots (user_id, display_name, caption, image_url, hackatime_totals)
+        "INSERT INTO snapshot (user_id, display_name, caption, image_url, hackatime_totals)
          VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(user_id)

@@ -12,7 +12,7 @@ pub async fn sync(pool: &PgPool, data: &AuthData) -> anyhow::Result<i32> {
     anyhow::ensure!(!data.id.is_empty(), "HCA returned a profile without an id");
     let address = address(data).unwrap_or_default();
     let id = sqlx::query_scalar(
-        "INSERT INTO users (
+        "INSERT INTO \"user\" (
              hca_id, first_name, last_name, email, verification_status, ysws_eligible,
              birthday, phone_number, slack_id,
              address_first_name, address_last_name, address_line_1, address_line_2, address_city,
