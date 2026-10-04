@@ -21,7 +21,7 @@ static COMPRESSING: LazyLock<Semaphore> = LazyLock::new(|| {
 });
 
 pub fn ensure_image(bytes: &[u8]) -> Result<(), ApiError> {
-    const INVALID: &str = "Please choose a PNG, JPEG or WebP image.";
+    const INVALID: &str = "Please choose a PNG, JPEG or WebP image";
     match bytes {
         [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, ..]
         | [0xff, 0xd8, 0xff, ..]
@@ -35,7 +35,7 @@ pub fn ensure_image(bytes: &[u8]) -> Result<(), ApiError> {
         .ok_or_else(|| reject(INVALID))?;
     if width > MAX_UPLOAD_SIDE || height > MAX_UPLOAD_SIDE {
         return Err(reject(format!(
-            "Images can be at most {MAX_UPLOAD_SIDE} x {MAX_UPLOAD_SIDE} pixels."
+            "Images can be at most {MAX_UPLOAD_SIDE} x {MAX_UPLOAD_SIDE} pixels"
         )));
     }
     Ok(())

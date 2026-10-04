@@ -34,13 +34,13 @@ pub fn details(project: &Draft) -> Result<(), ApiError> {
     .filter_map(|(field, missing)| missing.then_some(field))
     .collect();
     if !missing.is_empty() {
-        return Err(reject(format!("Missing {}.", missing.join(", "))));
+        return Err(reject(format!("Missing {}", missing.join(", "))));
     }
     Ok(())
 }
 
 pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
-    let sign_in = || reject("Couldn't load your Hack Club account. Try signing in again.");
+    let sign_in = || reject("Couldn't load your Hack Club account. Try signing in again");
     let token = tokens::load(pool, user_id, Provider::Hca)
         .await?
         .ok_or_else(sign_in)?;
@@ -60,7 +60,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
         return Err(reject(profile::NO_ADDRESS));
     }
     if data.birthday.trim().is_empty() {
-        return Err(reject("Add your birthday to your Hack Club account."));
+        return Err(reject("Add your birthday to your Hack Club account"));
     }
     Ok(token)
 }
@@ -76,10 +76,10 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
     ensure_hackatime_free(pool, user_id, project.id, names).await?;
     let token = tokens::load(pool, user_id, Provider::Hackatime)
         .await?
-        .ok_or_else(|| reject("Link your Hackatime account first."))?;
+        .ok_or_else(|| reject("Link your Hackatime account first"))?;
     let unreachable = |e: anyhow::Error| {
         log::warn!("Hackatime lookup for ship failed: {e:#}");
-        reject("Couldn't reach Hackatime. Please try again.")
+        reject("Couldn't reach Hackatime. Please try again")
     };
     let user = get_hackatime_user_with_token(&token).await.map_err(unreachable)?;
     sqlx::query("UPDATE \"user\" SET hackatime_trust_level = $2 WHERE id = $1")
@@ -88,7 +88,7 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         .execute(pool)
         .await?;
     if user.trust_factor.trust_level == "red" {
-        return Err(reject("Your Hackatime account has been flagged, so you can't ship right now."));
+        return Err(reject("Your Hackatime account has been flagged, so you can't ship right now"));
     }
     let projects = get_hackatime_project_summaries_with_token(&token)
         .await
@@ -99,7 +99,7 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         .map(String::as_str)
         .collect();
     if !missing.is_empty() {
-        return Err(reject(format!("Hackatime has no project called {}.", missing.join(", "))));
+        return Err(reject(format!("Hackatime has no project called {}", missing.join(", "))));
     }
     let baseline: Option<Json<Totals>> =
         sqlx::query_scalar("SELECT hackatime_baseline FROM \"user\" WHERE id = $1")
@@ -118,19 +118,21 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
     Ok(Hackatime { token, user, seconds })
 }
 
-pub async fn readme(link: &str) -> Result<Repo, ApiError> {
+pub async fn readme(link: &str) -> Result<(Repo, bool), ApiError> {
     let repo = repos::parse(link)?;
-    if !repos::has_readme(&repo).await? {
-        return Err(reject(
-            "Couldn't find a README. Make sure the repository is public and has one.",
-        ));
-    }
-    Ok(repo)
+    let found = match repos::has_readme(&repo).await {
+        Ok(found) => found,
+        Err(e) => {
+            log::warn!("README check for {} failed: {e:#}", repo.url());
+            false
+        }
+    };
+    Ok((repo, found))
 }
 
 pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(), ApiError> {
     let key = repos::parse(link)
-        .map_err(|_| reject("Fix the repository link first."))?
+        .map_err(|_| reject("Fix the repository link first"))?
         .key();
     let others: Vec<String> = sqlx::query_scalar(
         "SELECT code_url FROM submission
@@ -144,7 +146,7 @@ pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(
         .iter()
         .any(|other| repos::parse(other).is_ok_and(|other| other.key() == key))
     {
-        return Err(reject("Another project has already shipped this repository."));
+        return Err(reject("Another project has already shipped this repository"));
     }
     Ok(())
 }
@@ -152,21 +154,21 @@ pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(
 pub async fn demo(link: &str) -> Result<(), ApiError> {
     let link = link.trim();
     if link.is_empty() {
-        return Err(reject("Add a demo link first."));
+        return Err(reject("Add a demo link first"));
     }
     let url = Url::parse(link)
         .ok()
         .filter(http::is_public_url)
-        .ok_or_else(|| reject("The demo link has to be a public http(s) URL."))?;
+        .ok_or_else(|| reject("The demo link has to be a public http(s) URL"))?;
     let response = http::CLIENT.get(url).send().await.map_err(|e| {
         if e.is_timeout() {
-            reject("The demo link timed out.")
+            reject("The demo link timed out")
         } else {
-            reject("Couldn't reach the demo link.")
+            reject("Couldn't reach the demo link")
         }
     })?;
     if !response.status().is_success() {
-        return Err(reject(format!("The demo link returned {}.", response.status())));
+        return Err(reject(format!("The demo link returned {}", response.status())));
     }
     Ok(())
 }

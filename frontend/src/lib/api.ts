@@ -39,9 +39,9 @@ export const image_types = "image/png,image/jpeg,image/webp";
 
 export const image_error = (file: File) =>
   !image_types.split(",").includes(file.type)
-    ? "Please choose a PNG, JPEG or WebP image."
+    ? "Please choose a PNG, JPEG or WebP image"
     : file.size > 10 * 1024 * 1024
-      ? "Images must be 10 MB or smaller."
+      ? "Images must be 10 MB or smaller"
       : "";
 
 export const message = (error: unknown, fallback?: string) =>

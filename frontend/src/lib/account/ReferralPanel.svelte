@@ -9,8 +9,8 @@
     const labels = { idle: "Copy", copied: "Copied!", manual: "Press Ctrl+C" };
     const announcements = {
         idle: "",
-        copied: "Link copied.",
-        manual: "Press Ctrl+C to copy the link.",
+        copied: "Link copied",
+        manual: "Press Ctrl+C to copy the link",
     };
 
     const link = $derived(`${location.origin}/?ref=${code}`);

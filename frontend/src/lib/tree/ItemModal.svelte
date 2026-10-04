@@ -36,7 +36,7 @@
 
     const uid = $props.id();
     const token_description =
-        "Gives you one token which can be used to get yourself one prize.";
+        "Gives you one token which can be used to get yourself one prize";
 
     const title = $derived(meta?.title ?? node.name);
     const description = $derived(

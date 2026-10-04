@@ -138,7 +138,7 @@ async fn ensure_hackatime_free(
     .fetch_optional(pool)
     .await?;
     match taken {
-        Some(name) => Err(reject(format!("{name} is already linked to another of your projects."))),
+        Some(name) => Err(reject(format!("{name} is already linked to another of your projects"))),
         None => Ok(()),
     }
 }
@@ -215,7 +215,7 @@ async fn update_project(
     body: web::Json<ProjectFields>,
 ) -> Result<HttpResponse, ApiError> {
     let _shipping = ship::Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped."))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
     let fields = body.into_inner();
     let name = required_name(&fields.name)?;
     let description = limited("Description", &fields.description, DESCRIPTION_LIMIT)?;
@@ -243,7 +243,7 @@ async fn update_project(
     .fetch_all(pool.get_ref())
     .await?;
     if let Some(name) = shipped.iter().find(|name| !hackatime.contains(name)) {
-        return Err(reject(format!("{name} can't be unlinked from a shipped project.")));
+        return Err(reject(format!("{name} can't be unlinked from a shipped project")));
     }
     let updated = sqlx::query(
         "UPDATE project SET name = $3, description = $4, repo_url = NULLIF($5, ''),

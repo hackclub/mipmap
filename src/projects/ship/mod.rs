@@ -59,6 +59,17 @@ impl Events {
         let _ = self.0.send(Bytes::from(format!("{line}\n")));
     }
 
+    fn failed(&self, id: &str, error: ApiError) {
+        let message = match error {
+            ApiError::Rejected(_, message) => message,
+            ApiError::Internal(e) => {
+                log::error!("ship check {id} failed: {e:#}");
+                "Something went wrong, please try again".into()
+            }
+        };
+        self.send(json!({ "check": id, "status": "failed", "message": message }));
+    }
+
     async fn check<T>(
         &self,
         id: &str,
@@ -72,14 +83,31 @@ impl Events {
                 Some(value)
             }
             Err(error) => {
-                let message = match error {
-                    ApiError::Rejected(_, message) => message,
-                    ApiError::Internal(e) => {
-                        log::error!("ship check {id} failed: {e:#}");
-                        "Something went wrong, please try again.".into()
-                    }
-                };
-                self.send(json!({ "check": id, "status": "failed", "message": message }));
+                self.failed(id, error);
+                None
+            }
+        }
+    }
+
+    async fn advise<T>(
+        &self,
+        id: &str,
+        label: &str,
+        unverified: &str,
+        check: impl Future<Output = Result<(T, bool), ApiError>>,
+    ) -> Option<T> {
+        self.send(json!({ "check": id, "label": label, "status": "running" }));
+        match check.await {
+            Ok((value, true)) => {
+                self.send(json!({ "check": id, "status": "passed" }));
+                Some(value)
+            }
+            Ok((value, false)) => {
+                self.send(json!({ "check": id, "status": "unverified", "message": unverified }));
+                Some(value)
+            }
+            Err(error) => {
+                self.failed(id, error);
                 None
             }
         }
@@ -93,9 +121,9 @@ pub async fn ship_project(
     id: web::Path<i32>,
 ) -> Result<HttpResponse, ApiError> {
     let table = review::table()
-        .ok_or_else(|| reject_with(StatusCode::SERVICE_UNAVAILABLE, "Shipping isn't open yet."))?;
+        .ok_or_else(|| reject_with(StatusCode::SERVICE_UNAVAILABLE, "Shipping isn't open yet"))?;
     let shipping = Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is already being shipped."))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is already being shipped"))?;
     let project: Draft = sqlx::query_as(
         "SELECT id, name, description, COALESCE(repo_url, '') AS repo, COALESCE(demo_url, '') AS demo,
              screenshot_url AS screenshot, tier, hackatime_projects AS hackatime,
@@ -111,7 +139,7 @@ pub async fn ship_project(
     .await?
     .ok_or_else(unknown_project)?;
     if project.reviewing {
-        return Err(reject_with(StatusCode::CONFLICT, "This project is still being reviewed."));
+        return Err(reject_with(StatusCode::CONFLICT, "This project is still being reviewed"));
     }
 
     let (tx, rx) = unbounded_channel();
@@ -155,7 +183,12 @@ async fn run(
         .check("hackatime", "Hackatime", checks::hackatime(pool, user_id, project))
         .await;
     let repo = events
-        .check("readme", "Repository has a README", checks::readme(&project.repo))
+        .advise(
+            "readme",
+            "Repository has a README",
+            "Couldn't verify a README",
+            checks::readme(&project.repo),
+        )
         .await;
     let unique = events
         .check(
@@ -171,7 +204,7 @@ async fn run(
     let (Some(()), Some(hca_token), Some(hackatime), Some(repo), Some(()), Some(())) =
         (details, account, hackatime, repo, unique, demo)
     else {
-        return Err("Fix the failed checks and try again.");
+        return Err("Fix the failed checks and try again");
     };
 
     events
@@ -181,5 +214,5 @@ async fn run(
             checks::submit(pool, project, &repo, table, &hca_token, hackatime),
         )
         .await
-        .ok_or("Submission failed. Try again once or twice, then bug me about it.")
+        .ok_or("Submission failed. Try again once or twice, then bug me about it")
 }

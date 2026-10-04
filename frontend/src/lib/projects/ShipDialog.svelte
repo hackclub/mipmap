@@ -60,7 +60,7 @@
     <h2 id="{uid}-title">Ship {project.name}</h2>
     {#if !started}
         <p class="note">
-            Shipping sends your project for review. Every check has to pass.
+            Shipping sends your project for review
         </p>
     {/if}
     {#if checks.length}
@@ -74,6 +74,10 @@
                             <svg viewBox="0 0 16 16" aria-hidden="true">
                                 <path d="M3 8.5 6.5 12 13 4.5" />
                             </svg>
+                        {:else if entry.status === "unverified"}
+                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                                <path d="M5.8 6a2.3 2.3 0 1 1 3.4 2c-.8.5-1.2.9-1.2 1.8M8 12.6v.2" />
+                            </svg>
                         {:else}
                             <svg viewBox="0 0 16 16" aria-hidden="true">
                                 <path d="M4 4 12 12M12 4 4 12" />
@@ -81,7 +85,7 @@
                         {/if}
                     </span>
                     <span class="label">{entry.label ?? entry.check}</span>
-                    {#if entry.status === "failed" && entry.message && entry.check !== "submit"}
+                    {#if (entry.status === "failed" || entry.status === "unverified") && entry.message && entry.check !== "submit"}
                         <span class="note detail">{entry.message}</span>
                     {/if}
                 </li>
@@ -89,7 +93,7 @@
         </ol>
     {/if}
     {#if shipped}
-        <p class="note">Shipped! It's waiting for review.</p>
+        <p class="note">Shipped! It's waiting for review</p>
     {/if}
     {#if error}
         <p class="note" role="alert">
@@ -97,7 +101,7 @@
                 Submission failed. Try again once or twice, then bug
                 <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR"
                     >me</a
-                > about it.
+                > about it
             {:else}
                 {error}
             {/if}
@@ -169,7 +173,8 @@
         stroke-linejoin: round;
     }
 
-    .passed .marker {
+    .passed .marker,
+    .unverified .marker {
         color: #d6ab70;
     }
 

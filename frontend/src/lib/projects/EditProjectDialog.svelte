@@ -102,7 +102,7 @@
                     </label>
                 </li>
             {:else}
-                <li class="empty">No matching projects.</li>
+                <li class="empty">No matching projects</li>
             {/each}
         </ul>
     </section>

@@ -43,16 +43,16 @@ impl Repo {
 pub fn parse(link: &str) -> Result<Repo, ApiError> {
     let link = link.trim();
     if link.is_empty() {
-        return Err(reject("Add a repository link first."));
+        return Err(reject("Add a repository link first"));
     }
     let url = Url::parse(link)
         .or_else(|_| Url::parse(&format!("https://{link}")))
-        .map_err(|_| reject("The repository link isn't a valid URL."))?;
+        .map_err(|_| reject("The repository link isn't a valid URL"))?;
     let host = url
         .host_str()
         .map(|host| host.trim_start_matches("www."))
         .and_then(|host| HOSTS.into_iter().find(|known| known.domain() == host))
-        .ok_or_else(|| reject("The repository has to be on GitHub, GitLab or Codeberg."))?;
+        .ok_or_else(|| reject("The repository has to be on GitHub, GitLab or Codeberg"))?;
     let mut segments: Vec<&str> = url
         .path_segments()
         .into_iter()
@@ -68,7 +68,7 @@ pub fn parse(link: &str) -> Result<Repo, ApiError> {
         _ => segments.truncate(2),
     }
     if segments.len() < 2 {
-        return Err(reject("The repository link should point at a repository."));
+        return Err(reject("The repository link should point at a repository"));
     }
     if let Some(last) = segments.last_mut() {
         *last = last.strip_suffix(".git").unwrap_or(last);

@@ -88,12 +88,12 @@ pub async fn callback(
     match link(&pool, user_id, &token).await {
         Ok(Linked::Yes) => response,
         Ok(Linked::Taken) => HttpResponse::Conflict()
-            .body("That Hackatime account is already linked to another mipmap account."),
+            .body("That Hackatime account is already linked to another mipmap account"),
         Ok(Linked::Other) => HttpResponse::Conflict()
-            .body("Your Mipmap account is already linked to a different Hackatime account."),
+            .body("Your Mipmap account is already linked to a different Hackatime account"),
         Err(e) => {
             log::error!("linking Hackatime failed: {e:#}");
-            HttpResponse::InternalServerError().body("Couldn't link Hackatime, please try again.")
+            HttpResponse::InternalServerError().body("Couldn't link Hackatime, please try again")
         }
     }
 }

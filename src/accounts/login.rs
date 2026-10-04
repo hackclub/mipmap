@@ -52,7 +52,7 @@ pub async fn callback(
     };
     let referral = req.cookie(REFERRAL_COOKIE).map(|cookie| cookie.value().to_string());
     match sign_in(&pool, &token, referral.as_deref()).await {
-        Ok(None) => HttpResponse::Forbidden().body("This account has been deleted."),
+        Ok(None) => HttpResponse::Forbidden().body("This account has been deleted"),
         Ok(Some(cookie)) => {
             let _ = response.add_cookie(&cookie);
             if referral.is_some() {
@@ -62,7 +62,7 @@ pub async fn callback(
         }
         Err(e) => {
             log::error!("sign in failed: {e:#}");
-            HttpResponse::InternalServerError().body("Couldn't sign you in, please try again.")
+            HttpResponse::InternalServerError().body("Couldn't sign you in, please try again")
         }
     }
 }

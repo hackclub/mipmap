@@ -10,7 +10,7 @@
 
 <main>
     <h1>Mipmap Docs</h1>
-    <p>Coming soon.</p>
+    <p>Coming soon</p>
 </main>
 
 <style>

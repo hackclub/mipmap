@@ -19,7 +19,7 @@ export interface Project extends ProjectFields {
 
 export interface CheckEvent {
   check: string;
-  status: "running" | "passed" | "failed";
+  status: "running" | "passed" | "unverified" | "failed";
   label?: string;
   message?: string;
 }

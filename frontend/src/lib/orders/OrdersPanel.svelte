@@ -28,7 +28,7 @@
             {/each}
         </ul>
     {:else}
-        <p class="empty">No orders yet.</p>
+        <p class="empty">No orders yet</p>
     {/if}
 </Section>
 

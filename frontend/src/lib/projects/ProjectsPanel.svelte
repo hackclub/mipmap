@@ -55,7 +55,7 @@
                 onship={() => (dialog = { kind: "ship", id: project.id })}
             />
         {:else}
-            <p class="empty">No projects yet.</p>
+            <p class="empty">No projects yet</p>
         {/each}
     </div>
 </Section>

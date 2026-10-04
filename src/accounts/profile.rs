@@ -2,7 +2,7 @@ use super::tokens::{self, Provider};
 use hc_helper::auth::data::{Address, AuthData, get_auth_data_with_token};
 use sqlx::PgPool;
 
-pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club account.";
+pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club account";
 
 pub fn address(data: &AuthData) -> Option<Address> {
     data.primary_address().or_else(|| data.addresses.first().cloned())
@@ -77,9 +77,9 @@ pub async fn refresh(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
 pub fn blocked_reason(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
     match verification_status {
         Some("verified") if ysws_eligible => None,
-        Some("verified") => Some("Your Hack Club account isn't eligible for YSWS prizes."),
-        Some("pending") => Some("Your identity verification is still pending."),
-        Some("rejected") => Some("Your identity verification was rejected."),
-        _ => Some("Verify your identity to unlock and purchase items."),
+        Some("verified") => Some("Your Hack Club account isn't eligible for YSWS prizes"),
+        Some("pending") => Some("Your identity verification is still pending"),
+        Some("rejected") => Some("Your identity verification was rejected"),
+        _ => Some("Verify your identity to unlock and purchase items"),
     }
 }

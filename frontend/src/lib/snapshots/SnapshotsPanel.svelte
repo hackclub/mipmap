@@ -23,7 +23,7 @@
                 <strong>{snapshots.status.multiplier.toFixed(2)}× Mips</strong>
                 <p>
                     Each shared snapshot gets you another 1% more Mips, up
-                    to a maximum 25% boost!
+                    to a maximum 32% boost!
                 </p>
             </div>
         </div>
@@ -31,7 +31,7 @@
             {#each snapshots.mine as snapshot (snapshot.id)}
                 <SnapshotCard {snapshot} />
             {:else}
-                <p class="empty">No snapshots yet.</p>
+                <p class="empty">No snapshots yet</p>
             {/each}
         </div>
         <div class="area everyone" style:--columns={columns}>
