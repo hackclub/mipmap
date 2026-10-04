@@ -1,40 +1,66 @@
-import { json, request } from "$lib/api";
-import type {
-  HackatimeProject,
-  Project,
-  ProjectFields,
-} from "$lib/projects/types";
+import { json, request, send_json } from "$lib/api";
+import { dashboard, mutate, type Dashboard } from "$lib/dashboard/state.svelte";
+import type { CheckEvent, ProjectFields } from "$lib/projects/types";
 
-const send = (method: string, body: unknown) => ({
-  method,
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
-export const fetch_projects = () =>
-  request("/api/projects").then((r) => json<Project[]>(r));
+type ShipLine =
+  | CheckEvent
+  | { dashboard: Dashboard | null }
+  | { error: string };
 
 export const create_project = (name: string) =>
-  request("/api/projects", send("POST", { name })).then((r) =>
-    json<Project>(r),
-  );
+  mutate("/api/projects", send_json("POST", { name }));
 
 export const update_project = (id: number, fields: ProjectFields) =>
-  request(`/api/projects/${id}`, send("PUT", fields)).then((r) =>
-    json<Project>(r),
-  );
+  mutate(`/api/projects/${id}`, send_json("PUT", fields));
 
 export const upload_screenshot = (id: number, file: File) =>
-  request(`/api/projects/${id}/screenshot`, {
+  mutate(`/api/projects/${id}/screenshot`, {
     method: "POST",
     headers: { "Content-Type": file.type },
     body: file,
-  }).then((r) => json<Project>(r));
+  });
 
-export const fetch_hackatime_projects = () =>
-  request("/dashboard/hackatime-projects.json").then((r) =>
-    json<HackatimeProject[]>(r),
-  );
+export async function ship_project(
+  id: number,
+  onevent: (event: CheckEvent) => void,
+) {
+  const response = await request(`/api/projects/${id}/ship`, {
+    method: "POST",
+  });
+  if (!response.ok) await json(response);
+  if (!response.body) throw new Error("Lost connection while shipping");
 
-export const hours = (seconds: number) =>
-  `${(seconds / 3600).toFixed(1)} hours`;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let shipped = false;
+
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    const event: ShipLine = JSON.parse(line);
+    if ("error" in event) throw new Error(event.error);
+    if ("dashboard" in event) {
+      if (event.dashboard) dashboard.set(event.dashboard);
+      else dashboard.run();
+      shipped = true;
+    } else {
+      onevent(event);
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      lines.forEach(handle);
+      if (done) break;
+    }
+    handle(buffer);
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  if (!shipped) throw new Error("Lost connection while shipping");
+}

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
-	import SiteHead from '$lib/SiteHead.svelte';
 
 	let { children } = $props();
 </script>
@@ -20,7 +19,6 @@
 	</script>
 </svelte:head>
 
-<SiteHead />
 {@render children()}
 
 <style>

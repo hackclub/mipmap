@@ -1,47 +1,28 @@
-use actix_web::{HttpRequest, HttpResponse, get, post, web};
-use hc_helper::get_auth_token;
+use crate::{
+    accounts::{
+        hackatime::{self, Totals},
+        session::User,
+    },
+    dashboard,
+    error::{ApiError, reject},
+    projects::{self, Project},
+    uploads,
+};
+use actix_multipart::form::{MultipartForm, bytes::Bytes, text::Text};
+use actix_web::{HttpResponse, post, web};
 use serde::Serialize;
+use sqlx::{PgPool, types::Json};
+use std::collections::BTreeSet;
 
-const EVERYONE_CAPTIONS: [&str; 24] = [
-    "Got the PCB routed!",
-    "First light on the raytracer",
-    "Soldered the last header pin",
-    "Finally got the OLED displaying text",
-    "Our robot arm took its first steps",
-    "Tested the new keyboard layout",
-    "Enclosure came off the printer clean",
-    "Shaders are compiling at last",
-    "Wired up the sensor array",
-    "Demo day prep is going well",
-    "The synth plays its first chord",
-    "Mapped out the whole level in Tiled",
-    "Fixed the bug that ate my weekend",
-    "Weather station is online",
-    "Prototype number three is alive",
-    "Laser-cut the case today",
-    "Drone passed its first hover test",
-    "Added dark mode to the dashboard",
-    "Flashed the firmware without errors",
-    "Hand-wired the whole macropad",
-    "Particle effects look great",
-    "Calibrated the stepper motors",
-    "Plotted my first pen drawing",
-    "Repo is finally public",
-];
+const REQUIRED_SECONDS: i64 = 15 * 60;
+const FEED_SIZE: i64 = 24;
+const CAPTION_LIMIT: usize = 500;
+const DISPLAY_NAME_LIMIT: usize = 40;
+const ALREADY_SENT: &str = "You've already sent a snapshot today";
 
-const MY_CAPTIONS: [&str; 5] = [
-    "Sketched out the first design",
-    "Breadboard prototype works",
-    "Ordered the PCBs",
-    "Case design is done",
-    "Everything fits together",
-];
-
-const AUTHORS: [&str; 6] = ["Ava", "Kai", "Mina", "Theo", "Priya", "Jonah"];
-
-#[derive(Serialize)]
+#[derive(Serialize, sqlx::FromRow)]
 struct Snapshot {
-    id: u32,
+    id: i32,
     image: String,
     caption: String,
     author: String,
@@ -49,103 +30,166 @@ struct Snapshot {
 
 #[derive(Serialize)]
 struct Status {
-    tracked_seconds: u32,
-    required_seconds: u32,
+    tracked_seconds: i64,
+    required_seconds: i64,
     sent_today: bool,
+    multiplier: f64,
 }
 
-fn dummy(kind: &str, captions: &[&str], authors: &[&str]) -> Vec<Snapshot> {
-    (1..=captions.len() as u32)
-        .rev()
-        .map(|n| Snapshot {
-            id: n,
-            image: format!("https://picsum.photos/seed/mipmap-{kind}-{n}/800/600"),
-            caption: captions[n as usize - 1].to_string(),
-            author: authors[n as usize % authors.len()].to_string(),
-        })
-        .collect()
+pub fn multiplier(shared: i64) -> f64 {
+    (100 + shared.clamp(0, 25)) as f64 / 100.0
 }
 
-#[get("/snapshots")]
-pub async fn list_snapshots(req: HttpRequest) -> HttpResponse {
-    let _token = get_auth_token!(req);
-    HttpResponse::Ok().json(dummy("everyone", &EVERYONE_CAPTIONS, &AUTHORS))
+#[derive(Serialize)]
+pub struct Overview {
+    everyone: Vec<Snapshot>,
+    mine: Vec<Snapshot>,
+    status: Status,
 }
 
-#[get("/snapshots/mine")]
-pub async fn my_snapshots(req: HttpRequest) -> HttpResponse {
-    let _token = get_auth_token!(req);
-    HttpResponse::Ok().json(dummy("mine", &MY_CAPTIONS, &["Orpheus"]))
-}
-
-#[get("/snapshots/status")]
-pub async fn status(req: HttpRequest) -> HttpResponse {
-    let _token = get_auth_token!(req);
-    HttpResponse::Ok().json(Status {
-        tracked_seconds: 4140,
-        required_seconds: 900,
-        sent_today: false,
+pub async fn overview(
+    pool: &PgPool,
+    user_id: i32,
+    current: Option<&Totals>,
+    projects: &[Project],
+) -> sqlx::Result<Overview> {
+    Ok(Overview {
+        status: status(pool, user_id, current, projects).await?,
+        everyone: everyone(pool).await?,
+        mine: mine(pool, user_id).await?,
     })
 }
 
-#[post("/snapshots")]
-pub async fn create_snapshot(req: HttpRequest, _body: web::Bytes) -> HttpResponse {
-    let _token = get_auth_token!(req);
-    todo!()
+async fn everyone(pool: &PgPool) -> sqlx::Result<Vec<Snapshot>> {
+    sqlx::query_as(
+        "SELECT snapshots.id, image_url AS image, caption, display_name AS author
+         FROM snapshots JOIN users ON users.id = snapshots.user_id
+         WHERE snapshots.deleted_at IS NULL AND users.deleted_at IS NULL AND NOT users.is_banned
+         ORDER BY snapshots.created_at DESC LIMIT $1",
+    )
+    .bind(FEED_SIZE)
+    .fetch_all(pool)
+    .await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::{App, cookie::Cookie, http::StatusCode, test};
-    use serde_json::{Value, json};
+async fn mine(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Snapshot>> {
+    sqlx::query_as(
+        "SELECT id, image_url AS image, caption, display_name AS author FROM snapshots
+         WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+}
 
-    #[actix_web::test]
-    async fn snapshots_flow() {
-        let app = test::init_service(
-            App::new().service(
-                web::scope("/api")
-                    .service(list_snapshots)
-                    .service(my_snapshots)
-                    .service(status)
-                    .service(create_snapshot),
-            ),
+async fn status(
+    pool: &PgPool,
+    user_id: i32,
+    current: Option<&Totals>,
+    projects: &[Project],
+) -> sqlx::Result<Status> {
+    let (last, baseline, sent_today, shared): (Option<Json<Totals>>, Option<Json<Totals>>, bool, i64) =
+        sqlx::query_as(
+            "SELECT
+                 (SELECT hackatime_totals FROM snapshots
+                  WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1),
+                 hackatime_baseline,
+                 EXISTS (SELECT 1 FROM snapshots
+                         WHERE user_id = $1 AND deleted_at IS NULL
+                         AND created_at > now() - interval '16 hours'),
+                 (SELECT count(*) FROM snapshots WHERE user_id = $1 AND deleted_at IS NULL)
+             FROM users WHERE id = $1",
         )
-        .await;
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+    let reference = last.or(baseline).map(|json| json.0).unwrap_or_default();
+    let linked: BTreeSet<&str> = projects
+        .iter()
+        .flat_map(|project| project.hackatime.iter().map(String::as_str))
+        .collect();
+    let tracked_seconds = current.map_or(0, |current| {
+        linked
+            .iter()
+            .map(|name| {
+                let now = current.get(*name).copied().unwrap_or(0);
+                let then = reference.get(*name).copied().unwrap_or(0);
+                (now - then).max(0)
+            })
+            .sum()
+    });
+    Ok(Status {
+        tracked_seconds,
+        required_seconds: REQUIRED_SECONDS,
+        sent_today,
+        multiplier: multiplier(shared),
+    })
+}
 
-        let get = |uri: &str| {
-            test::TestRequest::get()
-                .uri(uri)
-                .cookie(Cookie::new("auth-token", "snapshots-test-user"))
-                .to_request()
-        };
+#[derive(MultipartForm)]
+struct SnapshotForm {
+    #[multipart(limit = "10MB")]
+    image: Bytes,
+    caption: Text<String>,
+    display_name: Text<String>,
+}
 
-        let res = test::call_service(&app, get("/api/snapshots")).await;
-        assert_eq!(res.status(), StatusCode::OK);
-        let body: Value = test::read_body_json(res).await;
-        assert_eq!(body.as_array().unwrap().len(), 24);
-        assert_eq!(body[0]["id"], 24);
-        assert_eq!(
-            body[0]["image"],
-            "https://picsum.photos/seed/mipmap-everyone-24/800/600"
-        );
-        assert_eq!(body[23]["id"], 1);
-
-        let res = test::call_service(&app, get("/api/snapshots/mine")).await;
-        assert_eq!(res.status(), StatusCode::OK);
-        let body: Value = test::read_body_json(res).await;
-        assert_eq!(body.as_array().unwrap().len(), 5);
-        assert_eq!(
-            body[0]["image"],
-            "https://picsum.photos/seed/mipmap-mine-5/800/600"
-        );
-
-        let res = test::call_service(&app, get("/api/snapshots/status")).await;
-        assert_eq!(res.status(), StatusCode::OK);
-        let body: Value = test::read_body_json(res).await;
-        assert_eq!(
-            body,
-            json!({ "tracked_seconds": 4140, "required_seconds": 900, "sent_today": false })
-        );
+#[post("/snapshots")]
+pub async fn create_snapshot(
+    User(user_id): User,
+    pool: web::Data<PgPool>,
+    MultipartForm(form): MultipartForm<SnapshotForm>,
+) -> Result<HttpResponse, ApiError> {
+    let caption = form.caption.trim();
+    let display_name = form.display_name.trim();
+    if caption.is_empty() || caption.chars().count() > CAPTION_LIMIT {
+        return Err(reject(format!("Caption must be 1 to {CAPTION_LIMIT} characters")));
     }
+    if display_name.is_empty() || display_name.chars().count() > DISPLAY_NAME_LIMIT {
+        return Err(reject(format!(
+            "Publicly displayed username must be 1 to {DISPLAY_NAME_LIMIT} characters"
+        )));
+    }
+    uploads::ensure_image(&form.image.data)?;
+
+    let Some(hackatime) = hackatime::summaries(&pool, user_id).await else {
+        return Err(reject("Link Hackatime first"));
+    };
+    let totals = hackatime::totals(&hackatime);
+    let projects = projects::list(&pool, user_id).await?;
+    let status = status(&pool, user_id, Some(&totals), &projects).await?;
+    if status.sent_today {
+        return Err(reject(ALREADY_SENT));
+    }
+    if status.tracked_seconds < status.required_seconds {
+        return Err(reject("You haven't tracked enough time yet"));
+    }
+
+    let url = uploads::upload(&form.image.data).await?;
+    let mut tx = pool.begin().await?;
+    let sent_today: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM snapshots
+                        WHERE user_id = u.id AND deleted_at IS NULL
+                        AND created_at > now() - interval '16 hours')
+         FROM users u WHERE u.id = $1 FOR UPDATE",
+    )
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if sent_today {
+        return Err(reject(ALREADY_SENT));
+    }
+    sqlx::query(
+        "INSERT INTO snapshots (user_id, display_name, caption, image_url, hackatime_totals)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(user_id)
+    .bind(display_name)
+    .bind(caption)
+    .bind(url)
+    .bind(Json(&totals))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    dashboard::respond(&pool, user_id).await
 }

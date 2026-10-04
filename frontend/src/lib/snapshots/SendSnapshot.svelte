@@ -1,24 +1,24 @@
 <script lang="ts">
-    import Field from "$lib/Field.svelte";
-    import MipmapButton from "$lib/MipmapButton.svelte";
-    import { send_snapshot } from "$lib/snapshots/api";
-    import type { Snapshot, SnapshotStatus } from "$lib/snapshots/types";
+    import { image_error, image_types } from "$lib/api";
+    import Field from "$lib/ui/Field.svelte";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import {
+        save_username,
+        saved_username,
+        send_snapshot,
+    } from "$lib/snapshots/api";
+    import type { SnapshotStatus } from "$lib/snapshots/types";
+    import { Task } from "$lib/load.svelte";
 
-    let {
-        status,
-        onsend,
-    }: {
-        status?: SnapshotStatus;
-        onsend: (snapshot: Snapshot) => Promise<void>;
-    } = $props();
+    let { status }: { status: SnapshotStatus } = $props();
 
     let picker = $state<HTMLInputElement>();
     let image = $state<File | null>(null);
     let preview = $state("");
     let caption = $state("");
+    let username = $state(saved_username());
     let dragging = $state(false);
-    let pending = $state(false);
-    let error = $state("");
+    const send = new Task();
 
     $effect(() => {
         const url = preview;
@@ -28,43 +28,42 @@
     });
 
     const ready = $derived(
-        status !== undefined &&
-            !status.sent_today &&
-            status.tracked_seconds >= status.required_seconds,
+        !status.sent_today && status.tracked_seconds >= status.required_seconds,
+    );
+    const filled = $derived(
+        Boolean(image && caption.trim() && username.trim()),
     );
     const progress = $derived(
-        status &&
-            `${Math.floor(status.tracked_seconds / 60)} / ${Math.floor(status.required_seconds / 60)} minutes`,
+        `${Math.floor(status.tracked_seconds / 60)} / ${Math.floor(status.required_seconds / 60)} minutes`,
     );
 
     function pick(files: FileList | null | undefined) {
         const file = files?.[0];
         if (!file) return;
-        if (!file.type.startsWith("image/")) {
-            error = "Please choose an image file.";
-            return;
-        }
-        error = "";
+        send.error = image_error(file);
+        if (send.error) return;
         image = file;
         preview = URL.createObjectURL(file);
     }
 
     async function submit(e: SubmitEvent) {
         e.preventDefault();
-        if (!ready || !image || !caption.trim() || pending) return;
-        pending = true;
-        error = "";
-        try {
-            const snapshot = await send_snapshot(image, caption.trim());
-            image = null;
-            preview = "";
-            caption = "";
-            await onsend(snapshot);
-        } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
-        } finally {
-            pending = false;
-        }
+        if (!ready || !image || !filled || send.pending) return;
+        const file = image;
+        const sent = caption;
+        await send.run(
+            () => {
+                save_username(username.trim());
+                return send_snapshot(file, sent.trim(), username.trim());
+            },
+            () => {
+                if (image === file) {
+                    image = null;
+                    preview = "";
+                }
+                if (caption === sent) caption = "";
+            },
+        );
     }
 </script>
 
@@ -98,33 +97,36 @@
     <input
         bind:this={picker}
         type="file"
-        accept="image/*"
+        accept={image_types}
         hidden
         onchange={(e) => {
             pick(e.currentTarget.files);
             e.currentTarget.value = "";
         }}
     />
+    <Field
+        label="Publicly Displayed Username"
+        bind:value={username}
+        maxlength={40}
+    />
     <div class="caption">
-        <Field label="Caption" bind:value={caption} multiline />
+        <Field label="Caption" bind:value={caption} multiline maxlength={500} />
     </div>
     <div class="side">
         <MipmapButton
             type="submit"
-            disabled={!ready || !image || !caption.trim() || pending}
+            disabled={!ready || !filled || send.pending}
         >
             Send
         </MipmapButton>
-        {#if status}
-            <div class="progress">{progress}</div>
-            <div class="note">
-                {status.sent_today
-                    ? "You've gotta wait for tomorrow to send the next one!"
-                    : "You can still send a snapshot today!"}
-            </div>
-        {/if}
-        {#if error}
-            <div class="note">{error}</div>
+        <div class="progress">{progress}</div>
+        <div class="note">
+            {status.sent_today
+                ? "You've gotta wait for tomorrow to send the next one!"
+                : "You can still send a snapshot today!"}
+        </div>
+        {#if send.error}
+            <div class="note">{send.error}</div>
         {/if}
     </div>
 </form>
@@ -133,12 +135,17 @@
     form {
         display: grid;
         grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
-        grid-template-rows: minmax(0, 1fr) auto;
+        grid-template-rows: auto minmax(0, 1fr) auto;
         grid-template-areas:
+            "drop username"
             "drop caption"
             "drop side";
         gap: 1.5rem;
         height: 100%;
+    }
+
+    form > :global(.field) {
+        grid-area: username;
     }
 
     .caption {

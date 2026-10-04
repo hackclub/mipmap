@@ -1,9 +1,7 @@
 <script lang="ts">
-	const title = 'Hack Club Mipmap - Build a Game Without an Engine';
-	const description =
-		'Hack Club Mipmap challenges teens to build a game without an engine, learn how games work, progress a tech tree, and unlock prizes.';
+	let { title, description, path }: { title: string; description: string; path: string } =
+		$props();
 	const site_url = (import.meta.env.VITE_SITE_URL || '').trim().replace(/\/+$/, '');
-	const canonical = site_url ? `${site_url}/` : null;
 </script>
 
 <svelte:head>
@@ -13,11 +11,12 @@
 	<meta property="og:site_name" content="Hack Club Mipmap" />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
-	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content={title} />
-	<meta name="twitter:description" content={description} />
-	{#if canonical}
-		<link rel="canonical" href={canonical} />
-		<meta property="og:url" content={canonical} />
+	{#if site_url}
+		<link rel="canonical" href="{site_url}{path}" />
+		<meta property="og:url" content="{site_url}{path}" />
+		<meta property="og:image" content="{site_url}/og.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+	{:else}
+		<meta name="twitter:card" content="summary" />
 	{/if}
 </svelte:head>

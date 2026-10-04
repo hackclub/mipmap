@@ -1,13 +1,11 @@
 <script lang="ts">
     let {
         label,
-        duration = 1500,
         disabled = false,
         autofocus = false,
         onconfirm,
     }: {
         label: string;
-        duration?: number;
         disabled?: boolean;
         autofocus?: boolean;
         onconfirm: () => void;
@@ -15,6 +13,7 @@
 
     const uid = $props.id();
 
+    const duration = 1500;
     const drain_time = 300;
     const max_step = 100;
     const max_shake = 4;

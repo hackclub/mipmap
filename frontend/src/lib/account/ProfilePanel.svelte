@@ -1,46 +1,77 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import Section from "$lib/Section.svelte";
-    import LoadError from "$lib/LoadError.svelte";
-    import type { Bounds } from "$lib/PanZoom.svelte";
-    import { Load } from "$lib/load.svelte";
-    import { fetch_profile } from "$lib/account/api";
+    import Section from "$lib/dashboard/Section.svelte";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import { json, request } from "$lib/api";
+    import { Task } from "$lib/load.svelte";
+    import type { User } from "$lib/dashboard/state.svelte";
+    import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
 
     let {
         bounds,
         currency,
+        user,
         tokens,
-    }: { bounds: Bounds; currency: string; tokens?: number } = $props();
+    }: { bounds: Bounds; currency: string; user: User; tokens: number } =
+        $props();
 
-    const profile = new Load(fetch_profile);
+    const logout = new Task("Couldn't log out");
 
-    onMount(profile.run);
+    const log_out = () =>
+        logout.run(async () => {
+            const response = await request("/api/logout", { method: "POST" });
+            if (!response.ok) await json(response);
+            location.href = "/";
+        });
 </script>
 
 <Section title="Profile" {bounds} zoom={3} padded>
-    <dl>
-        {#if profile.data}
+    <div class="profile">
+        <dl>
             <dt>First name</dt>
-            <dd>{profile.data.first_name}</dd>
+            <dd>{user.first_name ?? ""}</dd>
             <dt>{currency}</dt>
-            <dd>{profile.data.fragments} {currency}</dd>
-        {/if}
-        {#if tokens !== undefined}
+            <dd>{user.mips} {currency}</dd>
             <dt>Tokens</dt>
             <dd>{tokens} left to spend</dd>
-        {/if}
-    </dl>
-    {#if profile.error}
-        <LoadError error={profile.error} onretry={profile.run} />
-    {/if}
+        </dl>
+        <div class="logout">
+            <MipmapButton
+                type="button"
+                disabled={logout.pending}
+                onclick={log_out}
+            >
+                Log out
+            </MipmapButton>
+            {#if logout.error}
+                <p role="alert">{logout.error}</p>
+            {/if}
+        </div>
+    </div>
 </Section>
 
 <style>
-    dl {
+    .profile {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
         gap: 0.75rem 1.5rem;
+    }
+
+    dl {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        row-gap: 0.75rem;
         margin: 0;
+    }
+
+    .logout {
+        grid-column: 2;
+        margin-top: 0.75rem;
+    }
+
+    .logout p {
+        margin: 0.75rem 0 0;
+        font-size: 0.85em;
     }
 
     dt {

@@ -10,7 +10,6 @@
         unlocked,
         purchased,
         left = 0,
-        top = 0,
         onselect,
     }: {
         nodes: Map<number, TreeNode>;
@@ -20,7 +19,6 @@
         unlocked: Set<number>;
         purchased: Set<number>;
         left?: number;
-        top?: number;
         onselect: (id: number) => void;
     } = $props();
 
@@ -31,7 +29,6 @@
 <div
     class="tree"
     style:left="{left}px"
-    style:top="{top}px"
     style:width="{layout.width}px"
     style:height="{layout.height}px"
 >
@@ -79,6 +76,7 @@
 <style>
     .tree {
         position: absolute;
+        top: 0;
     }
 
     .edges {

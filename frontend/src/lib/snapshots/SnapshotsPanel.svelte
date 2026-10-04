@@ -1,70 +1,43 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import LoadError from "$lib/LoadError.svelte";
-    import Section from "$lib/Section.svelte";
-    import type { Bounds } from "$lib/PanZoom.svelte";
-    import { Load } from "$lib/load.svelte";
+    import Section from "$lib/dashboard/Section.svelte";
+    import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
+    import type { Dashboard } from "$lib/dashboard/state.svelte";
     import SendSnapshot from "$lib/snapshots/SendSnapshot.svelte";
     import SnapshotCard from "$lib/snapshots/SnapshotCard.svelte";
-    import {
-        fetch_my_snapshots,
-        fetch_snapshots,
-        fetch_status,
-    } from "$lib/snapshots/api";
 
-    let { bounds }: { bounds: Bounds } = $props();
+    let {
+        bounds,
+        snapshots,
+    }: { bounds: Bounds; snapshots: Dashboard["snapshots"] } = $props();
 
     const columns = 6;
     const rows = 4;
-
-    const everyone = new Load(fetch_snapshots);
-    const mine = new Load(fetch_my_snapshots);
-    const status = new Load(fetch_status);
-
-    onMount(() => {
-        everyone.run();
-        mine.run();
-        status.run();
-    });
 </script>
 
 <Section title="Snapshots" {bounds} zoom={2.5}>
     <div class="areas">
         <div class="area send">
             <h3>Send a Snapshot!</h3>
-            {#if status.error}
-                <LoadError error={status.error} onretry={status.run} />
-            {:else}
-                <SendSnapshot
-                    status={status.data}
-                    onsend={async (snapshot) => {
-                        mine.data = [snapshot, ...(mine.data ?? [])];
-                        await status.run();
-                    }}
-                />
-            {/if}
+            <SendSnapshot status={snapshots.status} />
+            <div class="multiplier">
+                <strong>{snapshots.status.multiplier.toFixed(2)}× Mips</strong>
+                <p>
+                    Each shared snapshot gets you another 1% more Mips, up
+                    to a maximum 25% boost!
+                </p>
+            </div>
         </div>
         <div class="area mine" data-scroll>
-            {#if mine.error}
-                <LoadError error={mine.error} onretry={mine.run} />
-            {:else if mine.data}
-                {#each mine.data as snapshot (snapshot.id)}
-                    <SnapshotCard {snapshot} />
-                {:else}
-                    <p class="empty">No snapshots yet.</p>
-                {/each}
-            {/if}
+            {#each snapshots.mine as snapshot (snapshot.id)}
+                <SnapshotCard {snapshot} />
+            {:else}
+                <p class="empty">No snapshots yet.</p>
+            {/each}
         </div>
         <div class="area everyone" style:--columns={columns}>
-            {#if everyone.error}
-                <div class="error">
-                    <LoadError error={everyone.error} onretry={everyone.run} />
-                </div>
-            {:else if everyone.data}
-                {#each everyone.data.slice(0, columns * rows) as snapshot (snapshot.id)}
-                    <SnapshotCard {snapshot} />
-                {/each}
-            {/if}
+            {#each snapshots.everyone.slice(0, columns * rows) as snapshot (snapshot.id)}
+                <SnapshotCard {snapshot} />
+            {/each}
         </div>
     </div>
 </Section>
@@ -73,7 +46,7 @@
     .areas {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-        grid-template-rows: minmax(0, 1fr) minmax(0, 3fr);
+        grid-template-rows: minmax(0, 9fr) minmax(0, 11fr);
         grid-template-areas:
             "send everyone"
             "mine everyone";
@@ -100,6 +73,19 @@
         min-height: 0;
     }
 
+    .multiplier {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding-top: 1rem;
+        border-top: 2px solid #4f2f1f;
+    }
+
+    .multiplier p {
+        margin: 0;
+        font-size: 0.85em;
+    }
+
     h3 {
         margin: 0;
         font: inherit;
@@ -122,10 +108,6 @@
         grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
         align-content: start;
         gap: 1.5rem;
-    }
-
-    .error {
-        grid-column: 1 / -1;
     }
 
     .empty {

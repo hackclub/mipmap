@@ -1,12 +1,13 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import MipmapLogo from "$lib/MipmapLogo.svelte";
-    import MipmapButton from "$lib/MipmapButton.svelte";
-    import CogField from "$lib/CogField.svelte";
-    import FaqSection from "$lib/FaqSection.svelte";
-    import TextBlock from "$lib/TextBlock.svelte";
+    import MipmapLogo from "$lib/landing/MipmapLogo.svelte";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import CogField from "$lib/landing/CogField.svelte";
+    import FaqSection from "$lib/landing/FaqSection.svelte";
+    import TextBlock from "$lib/landing/TextBlock.svelte";
+    import SiteHead from "$lib/SiteHead.svelte";
     import { grid } from "$lib/cog_layout";
-    import { grow_field } from "$lib/cog_field";
+    import { grow_field } from "$lib/landing/cog_field";
 
     let viewport_width = $state(1024);
     let viewport_height = $state(768);
@@ -20,30 +21,11 @@
     let right_box_height = $state(0);
     let description_box_height = $state(0);
     let faq_height = $state(632);
-    let now = $state(0);
     let ready = $state(false);
-
-    const start_time = new Date("2026-10-07T16:00:00-04:00").getTime();
-    const remaining_seconds = $derived(
-        now === 0 ? 0 : Math.max(0, Math.ceil((start_time - now) / 1000)),
-    );
-    const countdown_active = $derived(remaining_seconds > 0);
-    const countdown = $derived(
-        [
-            Math.floor(remaining_seconds / 3600),
-            Math.floor((remaining_seconds % 3600) / 60),
-            remaining_seconds % 60,
-        ]
-            .map(
-                (part, index) =>
-                    `${String(part).padStart(2, "0")}${["h", "m", "s"][index]}`,
-            )
-            .join(" "),
-    );
 
     const logo_aspect = 84.666664 / 66.145827;
     const phone = $derived(viewport_width <= 600);
-    const logo_top = $derived(phone && countdown_active ? 128 : 24);
+    const logo_top = 24;
 
     const logo = $derived.by(() => {
         const w = viewport_width;
@@ -133,29 +115,27 @@
             : [],
     );
 
-    function handle_login_click() {
-        const is_local = ["localhost", "127.0.0.1", "[::1]"].includes(
-            window.location.hostname,
-        );
-        if (countdown_active && !is_local) {
-            window.alert("Mipmap hasn't started yet!");
-            return;
-        }
-        window.location.href = "/login";
-    }
-
     function measure() {
         viewport_width = document.documentElement.clientWidth;
         viewport_height = window.innerHeight;
     }
 
     onMount(() => {
+        try {
+            if (!localStorage.getItem("visited")) {
+                fetch("/api/visit", { method: "POST" })
+                    .then((r) => r.ok && localStorage.setItem("visited", "1"))
+                    .catch(() => {});
+            }
+        } catch {}
+        const code = new URLSearchParams(location.search).get("ref");
+        if (code && /^[A-Za-z0-9]{1,32}$/.test(code)) {
+            document.cookie = `ref=${code}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`;
+        }
         measure();
-        now = Date.now();
         const reveal = window.requestAnimationFrame(() =>
             window.requestAnimationFrame(() => (ready = true)),
         );
-        const interval = window.setInterval(() => (now = Date.now()), 1000);
         let scroll_frame = 0;
         const update_scroll = () => {
             if (scroll_frame) return;
@@ -168,7 +148,6 @@
         window.addEventListener("scroll", update_scroll, { passive: true });
         return () => {
             window.cancelAnimationFrame(reveal);
-            window.clearInterval(interval);
             window.removeEventListener("scroll", update_scroll);
             if (scroll_frame) window.cancelAnimationFrame(scroll_frame);
         };
@@ -176,6 +155,12 @@
 </script>
 
 <svelte:window onresize={measure} />
+
+<SiteHead
+    title="Hack Club Mipmap - Build a Game Without an Engine"
+    description="Hack Club Mipmap challenges teens to build a game without an engine, learn how games work, progress a tech tree, and unlock prizes."
+    path="/"
+/>
 
 <div class="field" style:height="{cog_field_height}px">
     <CogField {cogs} {scroll_y} {viewport_height} {footer_blocked} />
@@ -207,10 +192,7 @@
         <div class="actions">
             <MipmapButton
                 type="button"
-                onclick={() =>
-                    window.alert(
-                        "Whoops, this should bring you somewhere. Bug me in #mipmap!",
-                    )}
+                onclick={() => (window.location.href = "/docs")}
             >
                 Learn here!
             </MipmapButton>
@@ -229,7 +211,10 @@
     >
         <h2>Wanna get started?</h2>
         <div class="actions">
-            <MipmapButton type="button" onclick={handle_login_click}>
+            <MipmapButton
+                type="button"
+                onclick={() => (window.location.href = "/login")}
+            >
                 Log in!
             </MipmapButton>
         </div>
@@ -248,7 +233,7 @@
         <p>
             Ever wondered how video games work under the hood? Here's your
             chance to find out! Hack Club Mipmap is a program for teenagers
-            (13–18 inclusive) by the nonprofit <a href="https://hackclub.com"
+            (13-18 inclusive) by the nonprofit <a href="https://hackclub.com"
                 >Hack Club</a
             > where you can ship a game made without an engine to progress your tech
             tree and unlock free prizes!
@@ -298,18 +283,6 @@
     </p>
 </footer>
 
-{#if countdown_active}
-    <div class="countdown-hanger" role="timer">
-        <span class="countdown-cord left" aria-hidden="true"></span>
-        <span class="countdown-cord right" aria-hidden="true"></span>
-        <span class="countdown-pin left" aria-hidden="true"></span>
-        <span class="countdown-pin right" aria-hidden="true"></span>
-        <div class="countdown">Starting in {countdown}</div>
-        <span class="countdown-pin join-left" aria-hidden="true"></span>
-        <span class="countdown-pin join-right" aria-hidden="true"></span>
-    </div>
-{/if}
-
 <div
     class="logo"
     style:top="{logo_top}px"
@@ -321,6 +294,7 @@
 
 <style>
     .site-footer {
+        position: relative;
         box-sizing: border-box;
         width: fit-content;
         max-width: calc(100% - 2rem);
@@ -367,77 +341,6 @@
     .logo {
         position: absolute;
         filter: drop-shadow(4px 6px 6px rgba(0, 0, 0, 0.45));
-    }
-
-    .countdown-hanger {
-        position: absolute;
-        top: 64px;
-        left: 24px;
-        width: 208px;
-        z-index: 100;
-    }
-
-    .countdown-cord {
-        position: absolute;
-        top: -52px;
-        width: 3px;
-        height: 57.27px;
-        background: #555555;
-        transform-origin: 50% 0;
-    }
-
-    .countdown-cord.left {
-        left: 24px;
-        transform: rotate(25deg);
-    }
-
-    .countdown-cord.right {
-        right: 24px;
-        transform: rotate(-25deg);
-    }
-
-    .countdown-pin {
-        position: absolute;
-        top: -59px;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #4f2f1f;
-    }
-
-    .countdown-pin.left {
-        left: 18px;
-    }
-
-    .countdown-pin.right {
-        right: 18px;
-    }
-
-    .countdown-pin.join-left,
-    .countdown-pin.join-right {
-        top: -7px;
-    }
-
-    .countdown-pin.join-left {
-        left: -7px;
-    }
-
-    .countdown-pin.join-right {
-        right: -7px;
-    }
-
-    .countdown {
-        box-sizing: border-box;
-        width: 208px;
-        padding: 0.65rem 0.75rem;
-        background: #74472a;
-        border: 2px solid #4f2f1f;
-        border-radius: 7px;
-        color: #ead7c2;
-        font-size: 0.875rem;
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
     }
 
     .actions {

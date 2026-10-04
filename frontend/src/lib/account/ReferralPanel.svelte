@@ -1,14 +1,10 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import Field from "$lib/Field.svelte";
-    import LoadError from "$lib/LoadError.svelte";
-    import MipmapButton from "$lib/MipmapButton.svelte";
-    import Section from "$lib/Section.svelte";
-    import type { Bounds } from "$lib/PanZoom.svelte";
-    import { Load } from "$lib/load.svelte";
-    import { fetch_referral } from "$lib/account/api";
+    import Field from "$lib/ui/Field.svelte";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import Section from "$lib/dashboard/Section.svelte";
+    import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
 
-    let { bounds }: { bounds: Bounds } = $props();
+    let { bounds, code }: { bounds: Bounds; code: string } = $props();
 
     const labels = { idle: "Copy", copied: "Copied!", manual: "Press Ctrl+C" };
     const announcements = {
@@ -17,19 +13,15 @@
         manual: "Press Ctrl+C to copy the link.",
     };
 
-    const referral = new Load(
-        async () => `${location.origin}/?ref=${(await fetch_referral()).code}`,
-    );
+    const link = $derived(`${location.origin}/?ref=${code}`);
     let copy_state = $state<keyof typeof labels>("idle");
     let row = $state<HTMLElement>();
     let timer: ReturnType<typeof setTimeout>;
 
-    onMount(referral.run);
-
     async function copy() {
         clearTimeout(timer);
         try {
-            await navigator.clipboard.writeText(referral.data ?? "");
+            await navigator.clipboard.writeText(link);
             copy_state = "copied";
         } catch {
             const input = row?.querySelector("input");
@@ -44,27 +36,19 @@
 <Section title="Referral" {bounds} zoom={3} padded>
     <p>
         Here's your referral link. If someone signs up with it and
-        ships a project, you get Fragments!
+        gets a project approved, you get 50 Mips!
     </p>
-    {#if referral.error}
-        <LoadError error={referral.error} onretry={referral.run} />
-    {:else}
-        <div class="row" bind:this={row}>
-            <Field
-                aria-label="Referral link"
-                value={referral.data ?? ""}
-                readonly
-                onfocus={(e) => e.currentTarget.select()}
-            />
-            <MipmapButton
-                type="button"
-                disabled={!referral.data}
-                onclick={copy}
-            >
-                {labels[copy_state]}
-            </MipmapButton>
-        </div>
-    {/if}
+    <div class="row" bind:this={row}>
+        <Field
+            aria-label="Referral link"
+            value={link}
+            readonly
+            onfocus={(e) => e.currentTarget.select()}
+        />
+        <MipmapButton type="button" onclick={copy}>
+            {labels[copy_state]}
+        </MipmapButton>
+    </div>
     <div class="status" aria-live="polite">{announcements[copy_state]}</div>
 </Section>
 

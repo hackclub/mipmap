@@ -37,6 +37,7 @@ CREATE TABLE users (
     is_banned BOOLEAN NOT NULL DEFAULT false,
     hackatime_user_id BIGINT,
     hackatime_trust_level TEXT,
+    hackatime_baseline JSONB,
     timezone TEXT,
     signup_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_login_at TIMESTAMPTZ,
@@ -55,6 +56,14 @@ CREATE TABLE auth_tokens (
     UNIQUE (user_id, provider)
 );
 
+CREATE TABLE sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users (id),
+    token_hash BYTEA NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE unlocks (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users (id),
@@ -68,9 +77,10 @@ CREATE TABLE unlocks (
 CREATE TABLE snapshots (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users (id),
+    display_name TEXT NOT NULL,
     caption TEXT NOT NULL DEFAULT '',
-    image_url TEXT,
-    hackatime_seconds BIGINT,
+    image_url TEXT NOT NULL,
+    hackatime_totals JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ

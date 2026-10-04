@@ -11,9 +11,7 @@ export interface TreeNode {
 
 export interface Tree {
   currency: string;
-  categories: { name: string; color: string }[];
   nodes: TreeNode[];
-  edges: { from: number; to: number }[];
 }
 
 export interface ItemMeta {

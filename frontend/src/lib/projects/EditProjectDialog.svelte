@@ -1,10 +1,10 @@
 <script lang="ts">
     import { untrack } from "svelte";
-    import Dialog from "$lib/Dialog.svelte";
-    import Field from "$lib/Field.svelte";
-    import MipmapButton from "$lib/MipmapButton.svelte";
+    import FormDialog from "$lib/ui/FormDialog.svelte";
+    import Field from "$lib/ui/Field.svelte";
     import TierSelect from "$lib/projects/TierSelect.svelte";
-    import { hours, update_project } from "$lib/projects/api";
+    import { update_project } from "$lib/projects/api";
+    import { hours } from "$lib/format";
     import type {
         HackatimeProject,
         Project,
@@ -15,12 +15,10 @@
         project,
         hackatime,
         onclose,
-        onsave,
     }: {
         project: Project;
         hackatime: HackatimeProject[];
         onclose: () => void;
-        onsave: (project: Project) => void;
     } = $props();
 
     const uid = $props.id();
@@ -29,12 +27,14 @@
     );
     let fields = $state<ProjectFields>(initial);
     let search = $state("");
-    let pending = $state(false);
-    let error = $state("");
-    let closed = false;
 
     const results = $derived(
-        hackatime.filter((entry) =>
+        [
+            ...hackatime,
+            ...fields.hackatime
+                .filter((name) => !hackatime.some((entry) => entry.name === name))
+                .map((name) => ({ name, seconds: 0 })),
+        ].filter((entry) =>
             entry.name.toLowerCase().includes(search.trim().toLowerCase()),
         ),
     );
@@ -44,95 +44,71 @@
             ? [...fields.hackatime, name]
             : fields.hackatime.filter((entry) => entry !== name);
     }
-
-    function close() {
-        closed = true;
-        onclose();
-    }
-
-    async function submit(e: SubmitEvent) {
-        e.preventDefault();
-        if (pending) return;
-        pending = true;
-        error = "";
-        try {
-            onsave(await update_project(id, $state.snapshot(fields)));
-            if (!closed) close();
-        } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
-        } finally {
-            pending = false;
-        }
-    }
 </script>
 
-<Dialog labelledby="{uid}-title" corner="bottom-right" onclose={close}>
-    <form onsubmit={submit}>
-        <h2 id="{uid}-title">Edit project</h2>
-        <Field label="Name" bind:value={fields.name} />
-        <Field label="Description" bind:value={fields.description} multiline />
-        <div class="row">
-            <Field
-                label="Repo"
-                type="url"
-                bind:value={fields.repo}
-                placeholder="https://"
-            />
-            <Field
-                label="Demo"
-                type="url"
-                bind:value={fields.demo}
-                placeholder="https://"
-            />
-        </div>
-        <TierSelect bind:value={fields.tier} />
+<FormDialog
+    title="Edit project"
+    submit="Save"
+    cancel
+    onsubmit={() => update_project(id, $state.snapshot(fields))}
+    {onclose}
+>
+    <Field label="Name" bind:value={fields.name} maxlength={100} />
+    <Field
+        label="Description"
+        bind:value={fields.description}
+        multiline
+        maxlength={5000}
+    />
+    <div class="row">
+        <Field
+            label="Repo"
+            type="url"
+            bind:value={fields.repo}
+            placeholder="https://"
+            maxlength={500}
+        />
+        <Field
+            label="Demo"
+            type="url"
+            bind:value={fields.demo}
+            placeholder="https://"
+            maxlength={500}
+        />
+    </div>
+    <TierSelect bind:value={fields.tier} />
 
-        <section class="hackatime" aria-labelledby="{uid}-hackatime">
-            <h3 id="{uid}-hackatime">Hackatime projects</h3>
-            <Field
-                type="search"
-                aria-label="Search Hackatime projects"
-                placeholder="Search"
-                bind:value={search}
-                onkeydown={(e) => e.key === "Enter" && e.preventDefault()}
-            />
-            <ul>
-                {#each results as entry (entry.name)}
-                    <li>
-                        <label>
-                            <span class="name">{entry.name}</span>
-                            <span class="hours">{hours(entry.seconds)}</span>
-                            <input
-                                type="checkbox"
-                                checked={fields.hackatime.includes(entry.name)}
-                                onchange={(e) =>
-                                    toggle(entry.name, e.currentTarget.checked)}
-                            />
-                        </label>
-                    </li>
-                {:else}
-                    <li class="empty">No matching projects.</li>
-                {/each}
-            </ul>
-        </section>
-
-        {#if error}
-            <div class="error">{error}</div>
-        {/if}
-        <div class="actions">
-            <MipmapButton type="button" onclick={close}>Cancel</MipmapButton>
-            <MipmapButton type="submit" disabled={pending}>Save</MipmapButton>
-        </div>
-    </form>
-</Dialog>
+    <section class="hackatime" aria-labelledby="{uid}-hackatime">
+        <h3 id="{uid}-hackatime">Hackatime projects</h3>
+        <Field
+            type="search"
+            aria-label="Search Hackatime projects"
+            placeholder="Search"
+            bind:value={search}
+            onkeydown={(e) => e.key === "Enter" && e.preventDefault()}
+        />
+        <ul>
+            {#each results as entry (entry.name)}
+                <li>
+                    <label>
+                        <span class="name">{entry.name}</span>
+                        <span class="hours">{hours(entry.seconds)}</span>
+                        <input
+                            type="checkbox"
+                            checked={fields.hackatime.includes(entry.name)}
+                            onchange={(e) =>
+                                toggle(entry.name, e.currentTarget.checked)}
+                        />
+                    </label>
+                </li>
+            {:else}
+                <li class="empty">No matching projects.</li>
+            {/each}
+        </ul>
+    </section>
+</FormDialog>
 
 <style>
-    form {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-
     .row {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -202,16 +178,6 @@
 
     input[type="checkbox"]:focus-visible {
         outline: 2px solid #ead7c2;
-    }
-
-    .actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 1rem;
-    }
-
-    .error {
-        font-size: 0.85em;
     }
 
     @media (max-width: 560px) {

@@ -1,40 +1,16 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import Section from "$lib/Section.svelte";
-    import LoadError from "$lib/LoadError.svelte";
-    import type { Bounds } from "$lib/PanZoom.svelte";
-    import { json, request } from "$lib/api";
-    import { Load } from "$lib/load.svelte";
-
-    interface Round {
-        ship_by: string;
-        review_by: string;
-        fulfill_by: string;
-    }
+    import Section from "$lib/dashboard/Section.svelte";
+    import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
+    import { long_date } from "$lib/format";
+    import rounds from "$lib/assets/fulfillment_rounds.json";
 
     let { bounds }: { bounds: Bounds } = $props();
 
-    const rows: [keyof Round, string][] = [
+    const rows: [keyof (typeof rounds)[number], string][] = [
         ["ship_by", "You ship a project by..."],
         ["review_by", "We'll get it reviewed by..."],
         ["fulfill_by", "After you claim prizes, they'll be shipped out by..."],
     ];
-
-    const format = (date: string) =>
-        new Date(date).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            timeZone: "UTC",
-        });
-
-    const rounds = new Load(() =>
-        request("/dashboard/fulfillment-rounds.json").then((r) =>
-            json<Round[]>(r),
-        ),
-    );
-
-    onMount(rounds.run);
 </script>
 
 <Section title="Fulfillment Rounds" {bounds} zoom={3} padded>
@@ -42,22 +18,18 @@
         You ship a project each of these dates, we'll make sure we review your
         project and fulfill claimed prizes by the specified dates.
     </p>
-    {#if rounds.error}
-        <LoadError error={rounds.error} onretry={rounds.run} />
-    {:else if rounds.data?.length}
-        <table style:--count={rounds.data.length}>
-            <tbody>
-                {#each rows as [key, label] (key)}
-                    <tr>
-                        <th scope="row">{label}</th>
-                        {#each rounds.data as round}
-                            <td>{format(round[key])}</td>
-                        {/each}
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-    {/if}
+    <table style:--count={rounds.length}>
+        <tbody>
+            {#each rows as [key, label] (key)}
+                <tr>
+                    <th scope="row">{label}</th>
+                    {#each rounds as round}
+                        <td>{long_date(round[key])}</td>
+                    {/each}
+                </tr>
+            {/each}
+        </tbody>
+    </table>
 </Section>
 
 <style>

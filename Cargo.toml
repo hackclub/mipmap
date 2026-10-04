@@ -13,7 +13,22 @@ hc_helper = { git = "https://github.com/breynard0/hc_helper" }
 log = "0.4"
 env_logger = "0.11"
 dotenvy = "0.15"
-sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring-webpki", "macros", "migrate"] }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring-webpki", "macros", "migrate", "json", "chrono"] }
 anyhow = "1.0.104"
 aes-gcm = "0.11.1"
 hex = "0.4.3"
+rand = "0.10"
+sha2 = "0.11.0"
+actix-multipart = "0.8.5"
+chrono = { version = "0.4.45", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+tokio = { version = "1", features = ["net", "sync"] }
+futures-util = "0.3"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+webp = { version = "0.3.1", default-features = false }
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[patch."https://github.com/breynard0/hc_helper"]
+hc_helper = { path = "/home/breynard/RustProjects/hc_helper" }

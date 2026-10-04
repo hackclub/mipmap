@@ -1,6 +1,6 @@
 <script lang="ts">
     import CogArt from "$lib/tree/CogArt.svelte";
-    import { node_color, unlocked_border } from "$lib/tree/style";
+    import { node_color, price_label, unlocked_border } from "$lib/tree/style";
     import type { Shape, TreeNode } from "$lib/tree/types";
 
     let {
@@ -29,13 +29,7 @@
         unlocked && !purchased && node.kind === "item" ? 6 : 3,
     );
     const color = $derived(node_color(node));
-    const price = $derived(
-        purchased
-            ? "Purchased!"
-            : unlocked
-              ? "Unlocked!"
-              : `${node.price} ${currency}`,
-    );
+    const price = $derived(price_label(node, currency, unlocked, purchased));
 </script>
 
 {#snippet cog(outline: boolean)}

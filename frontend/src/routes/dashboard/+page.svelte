@@ -1,10 +1,16 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import LoadError from "$lib/LoadError.svelte";
-    import NavMenu from "$lib/NavMenu.svelte";
-    import PanZoom, { type Bounds } from "$lib/PanZoom.svelte";
+    import { request } from "$lib/api";
+    import GuidesDialog from "$lib/guides/GuidesDialog.svelte";
+    import Tour from "$lib/guides/Tour.svelte";
+    import { steps, type Part } from "$lib/guides/TourSteps.svelte";
+    import LinkHackatime from "$lib/dashboard/LinkHackatime.svelte";
+    import LoadError from "$lib/ui/LoadError.svelte";
+    import NavMenu from "$lib/dashboard/NavMenu.svelte";
+    import PanZoom, { type Bounds } from "$lib/dashboard/PanZoom.svelte";
     import { Load } from "$lib/load.svelte";
-    import { arrange } from "$lib/sections";
+    import { account, dashboard } from "$lib/dashboard/state.svelte";
+    import { arrange } from "$lib/dashboard/sections";
     import ProfilePanel from "$lib/account/ProfilePanel.svelte";
     import ReferralPanel from "$lib/account/ReferralPanel.svelte";
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
@@ -17,32 +23,29 @@
     import item_metadata from "$lib/assets/item_metadata.json";
     import {
         fetch_layout,
-        fetch_progress,
         fetch_tree,
         purchase_item,
         unlock_item,
-        type Progress,
     } from "$lib/tree/api";
     import { node_color } from "$lib/tree/style";
     import type { ItemMetadata } from "$lib/tree/types";
 
     const metadata: ItemMetadata = item_metadata;
 
-    let unlocked = $state.raw<Set<number>>();
-    let purchased = $state.raw(new Set<number>());
     let selected = $state<number | null>(null);
     let panzoom = $state<PanZoom>();
-
-    function merge(progress: Progress) {
-        unlocked = new Set([...(unlocked ?? []), ...progress.unlocked]);
-        purchased = new Set([...purchased, ...progress.purchased]);
-    }
+    let guide = $state<"welcome" | "help" | null>(null);
+    let welcomed = $state(false);
+    let touring = $state(false);
+    let tour_step = $state(0);
 
     const structure = new Load(() =>
         Promise.all([fetch_tree(), fetch_layout()]),
     );
-    const progress = new Load(() => fetch_progress().then(merge));
 
+    const data = $derived(dashboard.data);
+    const unlocked = $derived(new Set(data?.unlocked));
+    const purchased = $derived(new Set(data?.purchased));
     const tree = $derived(structure.data?.[0]);
     const layout = $derived(structure.data?.[1]);
     const sections = $derived(layout && arrange(layout));
@@ -66,26 +69,42 @@
         selected === null ? undefined : nodes.get(selected),
     );
     const tokens = $derived(
-        [...(unlocked ?? [])].filter((id) => nodes.get(id)?.kind === "token")
-            .length - purchased.size,
+        [...unlocked].filter((id) => nodes.get(id)?.kind === "token").length -
+            purchased.size,
     );
     const available = $derived(
         selected_node?.requires.some(
-            (id) => unlocked?.has(id) || nodes.get(id)?.kind === "origin",
+            (id) => unlocked.has(id) || nodes.get(id)?.kind === "origin",
         ) ?? false,
     );
 
-    onMount(() => {
-        structure.run();
-        progress.run();
+    const focus = $derived(touring ? steps[tour_step].focus : undefined);
+    const faded = (part: Part) => !!focus && !focus.includes(part);
+
+    $effect(() => {
+        if (!data || data.user.guides_seen || welcomed) return;
+        welcomed = true;
+        guide = "welcome";
+        request("/api/guides/seen", { method: "POST" }).catch(() => {});
     });
 
-    async function act(action: (id: number) => Promise<Progress>) {
+    function start_tour() {
+        guide = null;
+        tour_step = 0;
+        touring = true;
+    }
+
+    onMount(() => {
+        structure.run();
+        dashboard.run();
+    });
+
+    async function act(action: (id: number) => Promise<void>) {
         if (selected === null) return;
         try {
-            merge(await action(selected));
+            await action(selected);
         } catch (e) {
-            progress.run();
+            dashboard.run();
             throw e;
         }
     }
@@ -95,15 +114,24 @@
     <title>Dashboard - Hack Club Mipmap</title>
 </svelte:head>
 
-{#if tree && layout && sections}
+{#if account.suspended}
+    <div class="status">Your account has been suspended</div>
+{:else if tree && layout && sections && data}
     <PanZoom
         bind:this={panzoom}
         home={sections.tree}
         limits={sections.all}
         keep={origin}
+        locked={touring}
     >
-        <ProjectsPanel bounds={sections.projects} />
-        {#if unlocked}
+        <div class="part" class:faded={faded("projects")}>
+            <ProjectsPanel
+                bounds={sections.projects}
+                projects={data.projects}
+                hackatime={data.hackatime_projects}
+            />
+        </div>
+        <div class="part" class:faded={faded("tree")}>
             <TechTree
                 left={sections.tree.left}
                 {nodes}
@@ -114,48 +142,104 @@
                 {purchased}
                 onselect={(id) => (selected = id)}
             />
-        {/if}
-        <FulfillmentPanel bounds={sections.fulfillment} />
-        <OrdersPanel bounds={sections.orders} />
-        <ReferralPanel bounds={sections.referral} />
-        <ProfilePanel
-            bounds={sections.profile}
-            currency={tree.currency}
-            tokens={unlocked ? tokens : undefined}
-        />
-        <SnapshotsPanel bounds={sections.snapshots} />
-    </PanZoom>
-
-    <NavMenu
-        items={[
-            { label: "Project", onselect: () => go(sections.projects) },
-            { label: "Snapshots", onselect: () => go(sections.snapshots) },
-            {
-                label: "Fulfillment Rounds",
-                onselect: () =>
-                    go(sections.fulfillment),
-            },
-            {
-                label: "Referrals",
-                onselect: () => go(sections.referral),
-            },
-            {
-                label: "Profile",
-                onselect: () => go(sections.profile),
-            },
-        ]}
-    />
-
-    {#if progress.error}
-        <div class="banner">
-            <LoadError
-                error="Couldn't load your progress: {progress.error}"
-                onretry={progress.run}
+        </div>
+        <div class="part" class:faded={faded("fulfillment")}>
+            <FulfillmentPanel bounds={sections.fulfillment} />
+        </div>
+        <div class="part" class:faded={faded("orders")}>
+            <OrdersPanel bounds={sections.orders} orders={data.orders} />
+        </div>
+        <div class="part" class:faded={faded("referral")}>
+            <ReferralPanel
+                bounds={sections.referral}
+                code={data.user.referral_code}
             />
         </div>
+        <div class="part" class:faded={faded("profile")}>
+            <ProfilePanel
+                bounds={sections.profile}
+                currency={tree.currency}
+                user={data.user}
+                {tokens}
+            />
+        </div>
+        <div class="part" class:faded={faded("snapshots")}>
+            <SnapshotsPanel
+                bounds={sections.snapshots}
+                snapshots={data.snapshots}
+            />
+        </div>
+    </PanZoom>
+
+    <button
+        type="button"
+        class="help"
+        class:locked={touring}
+        inert={touring}
+        aria-label="Help"
+        onclick={() => (guide = "help")}>?</button
+    >
+
+    <div class="nav" class:locked={touring} inert={touring}>
+        <NavMenu
+            items={[
+                { label: "Project", onselect: () => go(sections.projects) },
+                { label: "Snapshots", onselect: () => go(sections.snapshots) },
+                {
+                    label: "Fulfillment Rounds",
+                    onselect: () => go(sections.fulfillment),
+                },
+                { label: "Referrals", onselect: () => go(sections.referral) },
+                { label: "Profile", onselect: () => go(sections.profile) },
+            ]}
+        />
+    </div>
+
+    <div class="banners">
+        {#if data.user.blocked}
+            <div class="banner">
+                {data.user.blocked}
+                <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
+            </div>
+        {/if}
+        {#if dashboard.error}
+            <div class="banner">
+                <LoadError
+                    error="Couldn't load your dashboard: {dashboard.error}"
+                    onretry={dashboard.run}
+                />
+            </div>
+        {/if}
+    </div>
+
+    {#if guide}
+        <GuidesDialog
+            title={guide === "welcome" ? "Check out Mipmap!" : "Mipmap Guides"}
+            ontour={start_tour}
+            onclose={() => (guide = null)}
+        />
     {/if}
 
-    {#if selected_node && unlocked}
+    {#if touring}
+        <Tour
+            {sections}
+            {panzoom}
+            bind:step={tour_step}
+            onclose={() => {
+                touring = false;
+                panzoom?.settle();
+            }}
+        />
+    {/if}
+
+    {#if !data.user.hackatime_linked &&
+        (data.user.guides_seen || welcomed) &&
+        !guide &&
+        !touring}
+        <LinkHackatime />
+    {/if}
+
+    {#if selected_node}
         <ItemModal
             node={selected_node}
             meta={metadata[selected_node.id]}
@@ -164,19 +248,20 @@
             purchased={purchased.has(selected_node.id)}
             {tokens}
             {available}
+            blocked={data.user.blocked}
             image={selected_node.kind === "token" ? token_image : undefined}
             onclose={() => (selected = null)}
             onunlock={() => act(unlock_item)}
             onpurchase={() => act(purchase_item)}
         />
     {/if}
-{:else if structure.error}
+{:else if structure.error || dashboard.error}
     <div class="status">
         <LoadError
-            error={structure.error}
+            error={structure.error || dashboard.error}
             onretry={() => {
-                structure.run();
-                if (progress.error) progress.run();
+                if (structure.error) structure.run();
+                if (dashboard.error) dashboard.run();
             }}
         />
     </div>
@@ -189,6 +274,48 @@
 {/snippet}
 
 <style>
+    .part.faded {
+        opacity: 0.15;
+    }
+
+    .help {
+        position: fixed;
+        right: calc(1rem + 3rem + 4px + 0.5rem);
+        bottom: 1rem;
+        display: grid;
+        place-items: center;
+        width: calc(3rem + 4px);
+        height: calc(3rem + 4px);
+        padding: 0;
+        background: #74472a;
+        border: 2px solid #4f2f1f;
+        border-radius: 7px;
+        color: #ead7c2;
+        font: inherit;
+        font-size: clamp(1.25rem, 2vw, 1.75rem);
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+            background-color 0.3s,
+            color 0.3s,
+            opacity 0.3s;
+    }
+
+    .help:hover,
+    .help:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    .help.locked,
+    .nav.locked {
+        opacity: 0.4;
+    }
+
+    .nav {
+        transition: opacity 0.3s;
+    }
+
     .status {
         position: fixed;
         inset: 0;
@@ -199,13 +326,20 @@
         font-size: clamp(1.25rem, 2vw, 1.75rem);
     }
 
-    .banner {
+    .banners {
         position: fixed;
         top: 1rem;
         left: 50%;
         transform: translateX(-50%);
-        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        width: max-content;
         max-width: calc(100vw - 2rem);
+    }
+
+    .banner {
+        box-sizing: border-box;
         padding: 1rem 1.5rem;
         background: #74472a;
         border: 2px solid #4f2f1f;

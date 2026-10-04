@@ -1,7 +1,8 @@
 <script lang="ts">
     import { tick, type Snippet } from "svelte";
-    import { message } from "$lib/api";
-    import Dialog from "$lib/Dialog.svelte";
+    import Dialog, { refocus } from "$lib/ui/Dialog.svelte";
+    import { Task } from "$lib/load.svelte";
+    import { price_label } from "$lib/tree/style";
     import HoldButton from "$lib/tree/HoldButton.svelte";
     import type { ItemMeta, TreeNode } from "$lib/tree/types";
 
@@ -13,6 +14,7 @@
         purchased,
         tokens,
         available,
+        blocked,
         image,
         onclose,
         onunlock,
@@ -25,6 +27,7 @@
         purchased: boolean;
         tokens: number;
         available: boolean;
+        blocked: string | null;
         image?: Snippet;
         onclose: () => void;
         onunlock: () => Promise<void>;
@@ -40,37 +43,21 @@
         node.kind === "token" ? token_description : meta?.description,
     );
     const has_image = $derived(Boolean(image || meta?.image));
+    const actionable = $derived(
+        !unlocked || (node.kind === "item" && !purchased),
+    );
     const label = $derived(
         unlocked ? "Unlocked!" : available ? "Unlock" : "Prerequisite Missing",
     );
 
-    let pending = $state(false);
-    let error = $state("");
+    const task = new Task();
 
     let footer: HTMLDivElement;
 
     async function act(action: () => Promise<void>) {
-        pending = true;
-        error = "";
-        try {
-            await action();
-        } catch (e) {
-            error = message(e);
-        } finally {
-            pending = false;
-        }
+        await task.run(action);
         await tick();
-        const active = document.activeElement;
-        if (
-            active &&
-            active !== document.body &&
-            !(active instanceof HTMLButtonElement && active.disabled)
-        )
-            return;
-        (
-            footer.querySelector<HTMLElement>("button:not(:disabled)") ??
-            footer.closest<HTMLElement>('[role="dialog"]')
-        )?.focus();
+        refocus(footer, true);
     }
 </script>
 
@@ -93,29 +80,31 @@
         {/if}
         <div class="footer" bind:this={footer}>
             <div class="price">
-                {purchased
-                    ? "Purchased!"
-                    : unlocked
-                      ? "Unlocked!"
-                      : `${node.price} ${currency}`}
+                {price_label(node, currency, unlocked, purchased)}
             </div>
             {#if !unlocked || node.kind === "token"}
                 <HoldButton
                     {label}
-                    disabled={unlocked || !available || pending}
+                    disabled={unlocked || !available || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onunlock)}
                 />
             {:else if node.kind === "item" && !purchased}
                 <HoldButton
                     label="Purchase with token ({tokens})"
-                    disabled={tokens === 0 || pending}
+                    disabled={tokens === 0 || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onpurchase)}
                 />
             {/if}
-            {#if error}
-                <div class="error" role="alert">{error}</div>
+            {#if blocked && actionable}
+                <div class="note">
+                    {blocked}
+                    <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
+                </div>
+            {/if}
+            {#if task.error}
+                <div class="note" role="alert">{task.error}</div>
             {/if}
         </div>
     </div>
@@ -191,7 +180,7 @@
         font-weight: 700;
     }
 
-    .error {
+    .note {
         font-size: 0.85em;
     }
 

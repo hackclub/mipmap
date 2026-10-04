@@ -16,13 +16,11 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:8080",
-      "/login": "http://127.0.0.1:8080",
-      "/callback": "http://127.0.0.1:8080",
-      "/dashboard/tree.json": "http://127.0.0.1:8080",
-      "/dashboard/layout.json": "http://127.0.0.1:8080",
-      "/dashboard/hackatime-projects.json": "http://127.0.0.1:8080",
-      "/dashboard/fulfillment-rounds.json": "http://127.0.0.1:8080",
+      "/api": "http://0.0.0.0:8080",
+      "/login": "http://0.0.0.0:8080",
+      "/callback": "http://0.0.0.0:8080",
+      "/dashboard/tree.json": "http://0.0.0.0:8080",
+      "/dashboard/layout.json": "http://0.0.0.0:8080",
     },
   },
 });

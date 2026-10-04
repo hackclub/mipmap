@@ -1,50 +1,64 @@
 <script lang="ts">
-    import MipmapButton from "$lib/MipmapButton.svelte";
-    import { hours, upload_screenshot } from "$lib/projects/api";
+    import { image_error, image_types } from "$lib/api";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import { upload_screenshot } from "$lib/projects/api";
     import type { Project } from "$lib/projects/types";
+    import { hours, short_date } from "$lib/format";
+    import { Task } from "$lib/load.svelte";
+    import rounds from "$lib/assets/fulfillment_rounds.json";
 
     let {
         project,
         seconds,
         onedit,
         onship,
-        onupdate,
     }: {
         project: Project;
         seconds: number;
         onedit: () => void;
         onship: () => void;
-        onupdate: (project: Project) => void;
     } = $props();
 
-    let picker = $state<HTMLInputElement>();
-    let pending = $state(false);
-    let error = $state("");
+    const status_line = $derived.by(() => {
+        if (project.status === "draft") return "";
+        const shipped = project.status === "shipped";
+        const shipped_on = project.shipped_at?.slice(0, 10) ?? "";
+        if (project.status === "rejected") {
+            return `Shipped ${short_date(shipped_on)} · Rejected`;
+        }
+        const index = rounds.findIndex((round) => round.ship_by >= shipped_on);
+        let line = shipped
+            ? `Shipped ${short_date(shipped_on)} · In review`
+            : `Approved · ${project.mips_awarded} Mips earned`;
+        if (index !== -1) {
+            line += ` · Round ${index + 1}`;
+            if (shipped) {
+                line += ` · reviewed by ${short_date(rounds[index].review_by)}`;
+            }
+        }
+        return line;
+    });
 
-    async function upload(e: Event & { currentTarget: HTMLInputElement }) {
+    let picker = $state<HTMLInputElement>();
+    const upload = new Task("Upload failed");
+
+    async function pick(e: Event & { currentTarget: HTMLInputElement }) {
         const file = e.currentTarget.files?.[0];
         e.currentTarget.value = "";
-        if (!file || pending) return;
-        if (!file.type.startsWith("image/")) {
-            error = "Please choose an image file.";
-            return;
-        }
-        pending = true;
-        error = "";
-        try {
-            onupdate(await upload_screenshot(project.id, file));
-        } catch (e) {
-            error = e instanceof Error ? e.message : "Upload failed";
-        } finally {
-            pending = false;
-        }
+        if (!file || upload.pending) return;
+        upload.error = image_error(file);
+        if (upload.error) return;
+        await upload.run(() => upload_screenshot(project.id, file));
     }
 </script>
 
-<article class="tile">
+<article class="tile" class:with-status={status_line}>
     <h3>{project.name}</h3>
     {#if project.description}
         <p class="description">{project.description}</p>
+    {/if}
+    {#if status_line}
+        <p class="status">{status_line}</p>
     {/if}
     <div class="footer">
         <button
@@ -71,7 +85,7 @@
         type="button"
         class="shot"
         aria-label="Upload screenshot for {project.name}"
-        disabled={pending}
+        disabled={upload.pending}
         onclick={() => picker?.click()}
     >
         {#if project.screenshot}
@@ -83,15 +97,21 @@
     <input
         bind:this={picker}
         type="file"
-        accept="image/*"
+        accept={image_types}
         hidden
-        onchange={upload}
+        onchange={pick}
     />
     <div class="ship">
-        <MipmapButton type="button" onclick={onship}>Ship</MipmapButton>
+        {#if project.status === "shipped"}
+            <MipmapButton type="button" disabled>Reviewing</MipmapButton>
+        {:else}
+            <MipmapButton type="button" onclick={onship}>
+                {project.status === "draft" ? "Ship" : "Re-ship"}
+            </MipmapButton>
+        {/if}
     </div>
-    {#if error}
-        <div class="error">{error}</div>
+    {#if upload.error}
+        <div class="error">{upload.error}</div>
     {/if}
 </article>
 
@@ -112,6 +132,16 @@
         border-radius: 7px;
     }
 
+    .tile.with-status {
+        grid-template-rows: auto 1fr auto auto auto;
+        grid-template-areas:
+            "title shot"
+            "description shot"
+            "status shot"
+            "footer ship"
+            "error error";
+    }
+
     h3 {
         grid-area: title;
         margin: 0;
@@ -121,6 +151,12 @@
 
     .description {
         grid-area: description;
+        margin: 0;
+        font-size: 0.85em;
+    }
+
+    .status {
+        grid-area: status;
         margin: 0;
         font-size: 0.85em;
     }

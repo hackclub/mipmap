@@ -1,20 +1,29 @@
-import { json, request } from "$lib/api";
-import type { Snapshot, SnapshotStatus } from "$lib/snapshots/types";
+import { mutate } from "$lib/dashboard/state.svelte";
 
-export const fetch_snapshots = () =>
-  request("/api/snapshots").then((r) => json<Snapshot[]>(r));
-
-export const fetch_my_snapshots = () =>
-  request("/api/snapshots/mine").then((r) => json<Snapshot[]>(r));
-
-export const fetch_status = () =>
-  request("/api/snapshots/status").then((r) => json<SnapshotStatus>(r));
-
-export function send_snapshot(image: File, caption: string) {
+export function send_snapshot(
+  image: File,
+  caption: string,
+  display_name: string,
+) {
   const body = new FormData();
   body.append("image", image);
   body.append("caption", caption);
-  return request("/api/snapshots", { method: "POST", body }).then((r) =>
-    json<Snapshot>(r),
-  );
+  body.append("display_name", display_name);
+  return mutate("/api/snapshots", { method: "POST", body });
+}
+
+const key = "snapshot_username";
+
+export function saved_username() {
+  try {
+    return localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function save_username(name: string) {
+  try {
+    localStorage.setItem(key, name);
+  } catch {}
 }
