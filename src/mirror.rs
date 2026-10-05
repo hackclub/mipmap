@@ -3,7 +3,7 @@ use hc_helper::airtable::{AirtableTable, create_field, create_table, tables, ups
 use serde_json::{Map, Value, json};
 use sqlx::{AssertSqlSafe, PgPool};
 
-const TABLES: &[&str] = &["user", "project", "snapshot", "order", "unlock", "submission"];
+const TABLES: &[&str] = &["user", "project", "snapshot", "order", "unlock", "submission", "feedback"];
 
 fn table_name(table: &str) -> String {
     env::var(&format!("AIRTABLE_MIRROR_{}_TABLE", table.to_uppercase()))

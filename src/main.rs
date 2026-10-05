@@ -13,6 +13,7 @@ mod dashboard;
 mod database;
 mod env;
 mod error;
+mod feedback;
 mod http;
 mod middleware;
 mod mirror;
@@ -97,6 +98,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(projects::routes)
                     .configure(stats::api)
                     .service(snapshots::create_snapshot)
+                    .service(feedback::create_feedback)
                     .service(accounts::session::logout),
             )
             .service(

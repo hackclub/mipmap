@@ -14,6 +14,7 @@
     import ProfilePanel from "$lib/account/ProfilePanel.svelte";
     import ReferralPanel from "$lib/account/ReferralPanel.svelte";
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
+    import FeedbackPanel from "$lib/feedback/FeedbackPanel.svelte";
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
     import SnapshotsPanel from "$lib/snapshots/SnapshotsPanel.svelte";
     import CogArt from "$lib/tree/CogArt.svelte";
@@ -149,6 +150,9 @@
         <div class="part" class:faded={faded("orders")}>
             <OrdersPanel bounds={sections.orders} orders={data.orders} />
         </div>
+        <div class="part" class:faded={faded("feedback")}>
+            <FeedbackPanel bounds={sections.feedback} />
+        </div>
         <div class="part" class:faded={faded("referral")}>
             <ReferralPanel
                 bounds={sections.referral}
@@ -184,13 +188,15 @@
         <NavMenu
             items={[
                 { label: "Project", onselect: () => go(sections.projects) },
-                { label: "Snapshots", onselect: () => go(sections.snapshots) },
                 {
                     label: "Fulfillment Rounds",
                     onselect: () => go(sections.fulfillment),
                 },
+                { label: "Orders", onselect: () => go(sections.orders) },
                 { label: "Referrals", onselect: () => go(sections.referral) },
                 { label: "Profile", onselect: () => go(sections.profile) },
+                { label: "Feedback", onselect: () => go(sections.feedback) },
+                { label: "Snapshots", onselect: () => go(sections.snapshots) },
             ]}
         />
     </div>

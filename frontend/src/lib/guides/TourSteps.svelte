@@ -8,7 +8,8 @@
         | "orders"
         | "referral"
         | "profile"
-        | "snapshots";
+        | "snapshots"
+        | "feedback";
 
     export interface TourStep {
         title: string;
@@ -31,6 +32,7 @@
             focus: ["referral", "profile"],
         },
         { title: "Snapshots", body: snapshots, focus: ["snapshots"] },
+        { title: "Feedback", body: feedback, focus: ["feedback"] },
         { title: "That's everything!", body: done },
     ];
 </script>
@@ -55,10 +57,10 @@
     <p>
         Once you get your <span class="mip">Mips</span>, you can redeem them
         here at the <span class="tech-tree">Tech Tree</span>. You only need one
-        prerequisite of an item in order to be able to unlock that item. For actually claiming items, you'll notice Tokens spread
-        throughout the tree. After unlocked, they can be used to then claim <b
-            >any one item</b
-        > in the tree, regardless of where it's situated.
+        prerequisite of an item in order to be able to unlock that item. For
+        actually claiming items, you'll notice Tokens spread throughout the
+        tree. After unlocked, they can be used to then claim <b>any one item</b> in
+        the tree, regardless of where it's situated.
     </p>
 {/snippet}
 
@@ -81,6 +83,15 @@
     </p>
 {/snippet}
 
+{#snippet feedback()}
+    <p>
+        Share your voice on how <span class="mipmap">Mipmap</span> is going! It would
+        be awesome if you could do this somewhat frequently, since this is your chance
+        to directly shape the future direction of the program to make it even more
+        awesome.
+    </p>
+{/snippet}
+
 {#snippet snapshots()}
     <p>
         Here's the snapshots view! A snapshot is a screenshot plus a caption of
@@ -92,9 +103,9 @@
     <p>
         Also, posting snapshots gets you more <span class="mip">Mips</span>!
         Each one you share gives you an additional 1% towards all
-        <span class="mip">Mips</span> payouts, capping at 32%. You don't lose
-        these percentage points, but you can only post once per day so make
-        sure you've got your bonus up by the time you ship!
+        <span class="mip">Mips</span> payouts, capping at 32%. You don't lose these
+        percentage points, but you can only post once per day so make sure you've
+        got your bonus up by the time you ship!
     </p>
 {/snippet}
 

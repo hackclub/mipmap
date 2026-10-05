@@ -6,6 +6,7 @@ const projects_width = 2400;
 const side_width = 2400;
 const fulfillment_height = 1440;
 const orders_height = 780;
+const feedback_height = 2100;
 const referral_height = 780;
 const profile_height = 1000;
 const panel_height = 3360;
@@ -61,25 +62,35 @@ export function arrange(tree: { width: number; height: number }) {
     height: profile_height,
   });
   const snapshots = snap({
-    left: tree_bounds.left + (tree.width - snapshots_width) / 2,
+    left: margin,
     top: tree.height,
     width: snapshots_width,
     height: panel_height,
   });
-  const all_left = Math.min(margin, snapshots.left);
+  const feedback = snap({
+    left: side_left,
+    top: tree.height,
+    width: side_width,
+    height: feedback_height,
+  });
   const all: Bounds = {
-    left: all_left,
+    left: margin,
     top: margin,
     width:
       Math.max(side_left + side_width, snapshots.left + snapshots.width) -
-      all_left,
-    height: snapshots.top + snapshots.height - margin,
+      margin,
+    height:
+      Math.max(
+        snapshots.top + snapshots.height,
+        feedback.top + feedback.height,
+      ) - margin,
   };
   return {
     projects,
     tree: tree_bounds,
     fulfillment,
     orders,
+    feedback,
     referral,
     profile,
     snapshots,

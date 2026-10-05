@@ -9,12 +9,14 @@
         value = $bindable(""),
         multiline = false,
         focus = false,
+        rows = 3,
         ...rest
     }: {
         label?: string;
         value?: string;
         multiline?: boolean;
         focus?: boolean;
+        rows?: number;
     } & Omit<HTMLInputAttributes, "value"> = $props();
 
     const uid = $props.id();
@@ -27,7 +29,7 @@
     {#if multiline}
         <textarea
             id={uid}
-            rows="3"
+            {rows}
             bind:value
             data-autofocus={focus || undefined}
             {...rest as HTMLTextareaAttributes}></textarea>
