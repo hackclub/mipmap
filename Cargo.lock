@@ -2090,6 +2090,7 @@ dependencies = [
  "actix-web",
  "aes-gcm",
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "dotenvy",
  "env_logger",

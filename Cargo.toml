@@ -27,6 +27,7 @@ futures-util = "0.3"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 webp = { version = "0.3.1", default-features = false }
 tract-onnx = "0.23.8"
+base64 = "0.22"
 
 [profile.dev.package."*"]
 opt-level = 3

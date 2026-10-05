@@ -5,13 +5,16 @@ use crate::{
 };
 use actix_web::web;
 use anyhow::Context;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use image::{DynamicImage, ImageDecoder, ImageReader, imageops::FilterType};
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
+use serde_json::json;
 use std::{io::Cursor, sync::LazyLock, thread, time::Duration};
 use tokio::sync::Semaphore;
 
 const CDN_UPLOAD_URL: &str = "https://cdn.hackclub.com/api/v4/upload";
+const MODERATION_URL: &str = "https://api.openai.com/v1/moderations";
 const MAX_BYTES: usize = 150_000;
 const MAX_SIDE: u32 = 1920;
 const MAX_UPLOAD_SIDE: u32 = 4000;
@@ -46,15 +49,56 @@ struct Uploaded {
     url: String,
 }
 
-pub async fn upload(bytes: &[u8]) -> anyhow::Result<String> {
+#[derive(Deserialize)]
+struct Moderation {
+    results: Vec<ModerationResult>,
+}
+
+#[derive(Deserialize)]
+struct ModerationResult {
+    flagged: bool,
+}
+
+pub async fn upload(bytes: &[u8]) -> Result<String, ApiError> {
     let bytes = bytes.to_vec();
-    let permit = COMPRESSING.acquire().await?;
+    let permit = COMPRESSING.acquire().await.map_err(anyhow::Error::from)?;
     let webp = web::block(move || {
         let _permit = permit;
         compress(&bytes)
     })
-    .await??;
-    store(webp).await
+    .await
+    .map_err(anyhow::Error::from)??;
+    let flagged = moderate(&webp).await.map_err(|e| {
+        log::warn!("Image moderation failed: {e:#}");
+        reject("Couldn't check your image. Please try again")
+    })?;
+    if flagged {
+        return Err(reject("This image isn't allowed"));
+    }
+    Ok(store(webp).await?)
+}
+
+async fn moderate(webp: &[u8]) -> anyhow::Result<bool> {
+    let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
+    let response = http::CLIENT
+        .post(MODERATION_URL)
+        .bearer_auth(key)
+        .timeout(Duration::from_secs(30))
+        .json(&json!({
+            "model": "omni-moderation-latest",
+            "input": [{
+                "type": "image_url",
+                "image_url": { "url": format!("data:image/webp;base64,{}", STANDARD.encode(webp)) },
+            }],
+        }))
+        .send()
+        .await?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("moderation returned {status}: {}", response.text().await?);
+    }
+    let moderation: Moderation = response.json().await?;
+    Ok(moderation.results.iter().any(|result| result.flagged))
 }
 
 fn compress(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
