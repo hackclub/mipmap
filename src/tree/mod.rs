@@ -2,9 +2,11 @@ use actix_web::web;
 use serde::Deserialize;
 use std::sync::LazyLock;
 
+mod images;
 mod layout;
 mod progress;
 
+pub use images::{item_image, spawn as spawn_images};
 pub use layout::LAYOUT_JSON;
 pub use progress::unlocked;
 

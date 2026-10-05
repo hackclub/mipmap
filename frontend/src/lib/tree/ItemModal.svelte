@@ -73,7 +73,14 @@
                     {#if image}
                         {@render image()}
                     {:else if meta}
-                        <img src={meta.image} alt="" />
+                        <img
+                            src="/dashboard/item-images/{node.id}"
+                            alt=""
+                            onerror={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                if (img.src !== meta.image) img.src = meta.image;
+                            }}
+                        />
                     {/if}
                 </div>
             </div>
@@ -151,16 +158,17 @@
         box-sizing: border-box;
         width: min(80cqh, 100cqw);
         aspect-ratio: 1;
-        display: grid;
-        place-items: center;
+        position: relative;
         padding: 2px;
     }
 
     .frame :global(img),
     .frame :global(svg) {
+        position: absolute;
+        inset: 2px;
         display: block;
-        width: 100%;
-        height: 100%;
+        width: calc(100% - 4px);
+        height: calc(100% - 4px);
         object-fit: contain;
         filter: drop-shadow(2px 0 0 #4f2f1f) drop-shadow(-2px 0 0 #4f2f1f)
             drop-shadow(0 2px 0 #4f2f1f) drop-shadow(0 -2px 0 #4f2f1f);

@@ -54,6 +54,7 @@ async fn main() -> std::io::Result<()> {
     mirror::spawn(database_pool.clone());
     projects::review::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
+    tree::spawn_images();
     let database_pool = web::Data::new(database_pool);
 
     log::info!("listening on http://0.0.0.0:8080");

@@ -16,7 +16,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn pages(cfg: &mut web::ServiceConfig) {
-    cfg.service((page, tree_json, layout_json));
+    cfg.service((page, tree_json, layout_json, tree::item_image));
 }
 
 #[derive(Serialize, sqlx::FromRow)]
