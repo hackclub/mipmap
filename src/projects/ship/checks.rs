@@ -1,7 +1,6 @@
 use super::{Draft, repos, repos::Repo};
 use crate::{
     accounts::{
-        hackatime::Totals,
         profile,
         tokens::{self, Provider},
     },
@@ -18,7 +17,7 @@ use hc_helper::{
     submission::create_unified_with_token,
 };
 use reqwest::Url;
-use sqlx::{PgPool, types::Json};
+use sqlx::PgPool;
 
 pub fn details(project: &Draft) -> Result<(), ApiError> {
     let missing: Vec<&str> = [
@@ -101,19 +100,10 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
     if !missing.is_empty() {
         return Err(reject(format!("Hackatime has no project called {}", missing.join(", "))));
     }
-    let baseline: Option<Json<Totals>> =
-        sqlx::query_scalar("SELECT hackatime_baseline FROM \"user\" WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(pool)
-            .await?;
-    let baseline = baseline.map(|Json(totals)| totals).unwrap_or_default();
     let seconds = projects
         .iter()
         .filter(|project| names.contains(&project.name))
-        .map(|project| {
-            let before = baseline.get(&project.name).copied().unwrap_or(0) as f64;
-            (project.total_duration_seconds - before).max(0.0)
-        })
+        .map(|project| project.total_duration_seconds)
         .sum();
     Ok(Hackatime { token, user, seconds })
 }
