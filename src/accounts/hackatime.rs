@@ -111,7 +111,8 @@ async fn link(pool: &PgPool, user_id: i32, token: &str) -> anyhow::Result<Linked
     let mut tx = pool.begin().await?;
     let linked = sqlx::query(
         "UPDATE \"user\" SET hackatime_user_id = $2, hackatime_trust_level = $3,
-             hackatime_baseline = COALESCE(hackatime_baseline, $4)
+             hackatime_baseline = COALESCE(hackatime_baseline, $4),
+             hackatime_linked_at = COALESCE(hackatime_linked_at, now())
          WHERE id = $1 AND (hackatime_user_id IS NULL OR hackatime_user_id = $2)",
     )
     .bind(user_id)

@@ -149,6 +149,7 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     let mut changed: BTreeSet<i32> = sqlx::query_scalar(
         "UPDATE submission s
          SET review_status = r.status, hours = r.hours, code_url = r.code_url, rejected = r.rejected,
+             approved_at = CASE WHEN r.status = $6 AND NOT r.rejected THEN COALESCE(s.approved_at, now()) END,
              deleted_at = NULL
          FROM UNNEST($1::text[], $2::text[], $3::float8[], $4::text[], $5::bool[])
              AS r (record_id, status, hours, code_url, rejected)
@@ -162,6 +163,7 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     .bind(&hours)
     .bind(&code_urls)
     .bind(&rejected)
+    .bind(APPROVED)
     .fetch_all(&mut *tx)
     .await?
     .into_iter()

@@ -3,7 +3,26 @@ use hc_helper::airtable::{AirtableTable, create_field, create_table, tables, ups
 use serde_json::{Map, Value, json};
 use sqlx::{AssertSqlSafe, PgPool};
 
-const TABLES: &[&str] = &["user", "project", "snapshot", "order", "unlock", "submission", "feedback"];
+struct Source {
+    name: &'static str,
+    table: &'static str,
+    changed: &'static str,
+}
+
+const fn table(name: &'static str) -> Source {
+    Source { name, table: name, changed: "updated_at" }
+}
+
+const SOURCES: &[Source] = &[
+    table("user"),
+    table("project"),
+    table("snapshot"),
+    table("order"),
+    table("unlock"),
+    table("submission"),
+    table("feedback"),
+    Source { name: "user_loops", table: "user", changed: "changed_at" },
+];
 
 fn table_name(table: &str) -> String {
     env::var(&format!("AIRTABLE_MIRROR_{}_TABLE", table.to_uppercase()))
@@ -35,9 +54,9 @@ pub fn spawn(pool: PgPool) {
                     }
                 }
             }
-            for table in TABLES {
-                if let Err(e) = sync(&pool, token, base_id, table).await {
-                    log::error!("Airtable mirror sync of {table} failed: {e:#}");
+            for source in SOURCES {
+                if let Err(e) = sync(&pool, token, base_id, source).await {
+                    log::error!("Airtable mirror sync of {} failed: {e:#}", source.name);
                 }
             }
         }
@@ -66,20 +85,32 @@ fn field(name: &str, data_type: &str) -> Value {
 async fn set_up(pool: &PgPool, token: &str, base_id: &str) -> anyhow::Result<()> {
     let columns: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT table_name::text, column_name::text, data_type::text FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = ANY($1)
+         WHERE table_schema = 'public' AND table_name = ANY($1) AND column_name <> 'changed_at'
          ORDER BY table_name, column_name <> 'id', ordinal_position",
     )
-    .bind(TABLES)
+    .bind(SOURCES.iter().map(|source| source.name).collect::<Vec<_>>())
     .fetch_all(pool)
     .await?;
     let existing = tables(token, base_id).await?;
-    for table in TABLES {
+    for (i, Source { table, .. }) in SOURCES.iter().enumerate() {
+        if SOURCES[..i].iter().any(|earlier| earlier.table == *table) {
+            continue;
+        }
         let name = table_name(table);
-        let fields: Vec<Value> = columns
+        let sources: Vec<&str> = SOURCES
             .iter()
-            .filter(|(column_table, ..)| column_table == table)
-            .map(|(_, column, data_type)| field(column, data_type))
+            .filter(|source| source.table == *table)
+            .map(|source| source.name)
             .collect();
+        let mut fields: Vec<Value> = Vec::new();
+        for (_, column, data_type) in columns
+            .iter()
+            .filter(|(column_table, ..)| sources.contains(&column_table.as_str()))
+        {
+            if !fields.iter().any(|field| field["name"] == column.as_str()) {
+                fields.push(field(column, data_type));
+            }
+        }
         let changed = match existing.iter().find(|t| t.name == name || t.id == name) {
             None => {
                 create_table(token, base_id, &name, &fields).await?;
@@ -97,9 +128,9 @@ async fn set_up(pool: &PgPool, token: &str, base_id: &str) -> anyhow::Result<()>
             }
         };
         if changed {
-            log::info!("Set up Airtable mirror table {name}, resyncing all of {table}");
-            sqlx::query("DELETE FROM airtable_sync WHERE table_name = $1")
-                .bind(table)
+            log::info!("Set up Airtable mirror table {name}, resyncing all of {}", sources.join(", "));
+            sqlx::query("DELETE FROM airtable_sync WHERE table_name = ANY($1)")
+                .bind(&sources)
                 .execute(pool)
                 .await?;
         }
@@ -126,16 +157,17 @@ fn flatten(row: Map<String, Value>) -> Map<String, Value> {
         .collect()
 }
 
-async fn sync(pool: &PgPool, token: &str, base_id: &str, table: &str) -> anyhow::Result<()> {
+async fn sync(pool: &PgPool, token: &str, base_id: &str, source: &Source) -> anyhow::Result<()> {
+    let Source { name, table, changed } = source;
     let started: String = sqlx::query_scalar("SELECT now()::text")
         .fetch_one(pool)
         .await?;
     let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
-        "SELECT to_jsonb(t)::text FROM \"{table}\" t
-         WHERE t.updated_at > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'
+        "SELECT (to_jsonb(t) - 'changed_at')::text FROM \"{name}\" t
+         WHERE t.{changed} > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'
          ORDER BY t.id"
     )))
-    .bind(table)
+    .bind(name)
     .fetch_all(pool)
     .await?;
     if !rows.is_empty() {
@@ -154,7 +186,7 @@ async fn sync(pool: &PgPool, token: &str, base_id: &str, table: &str) -> anyhow:
         "INSERT INTO airtable_sync (table_name, synced_until) VALUES ($1, $2::timestamptz)
          ON CONFLICT (table_name) DO UPDATE SET synced_until = $2::timestamptz",
     )
-    .bind(table)
+    .bind(name)
     .bind(started)
     .execute(pool)
     .await?;
