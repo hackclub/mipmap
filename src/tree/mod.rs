@@ -8,7 +8,7 @@ mod progress;
 
 pub use images::{item_image, spawn as spawn_images};
 pub use layout::LAYOUT_JSON;
-pub use progress::unlocked;
+pub use progress::{backfill_prices, refund, unlocked};
 
 pub const TREE_JSON: &str = include_str!("../../Tree/Mipmap Tree.json");
 

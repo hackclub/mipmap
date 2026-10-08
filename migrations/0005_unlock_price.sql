@@ -1,0 +1,1 @@
+ALTER TABLE unlock ADD COLUMN price INTEGER;

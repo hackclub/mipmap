@@ -1,4 +1,4 @@
-use crate::{env, snapshots};
+use crate::{env, snapshots, tree};
 use hc_helper::{
     airtable::{AirtableTable, field_names, get_records},
     submission::UNIFIED_FIELDS,
@@ -6,11 +6,17 @@ use hc_helper::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
-use std::collections::BTreeSet;
+use std::{
+    collections::{BTreeSet, HashSet},
+    sync::{LazyLock, Mutex, PoisonError},
+};
 
 pub const APPROVED: &str = "2–Submitted";
 pub const REFERRER_MIPS: i32 = 100;
 pub const REFEREE_MIPS: i32 = 20;
+const MAX_HOURS: f64 = 10_000.0;
+
+static REPORTED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
 
 #[derive(Serialize)]
 pub struct Extras {
@@ -27,11 +33,39 @@ struct Review {
     #[serde(rename = "Automation - Status")]
     status: Option<Value>,
     #[serde(rename = "Optional - Override Hours Spent")]
-    hours: Option<f64>,
+    hours: Option<Value>,
     #[serde(rename = "Code URL")]
-    code_url: Option<String>,
-    #[serde(rename = "Rejected", default)]
-    rejected: bool,
+    code_url: Option<Value>,
+    #[serde(rename = "Rejected")]
+    rejected: Option<Value>,
+}
+
+impl Review {
+    fn hours(&self) -> Option<Option<f64>> {
+        let hours = match &self.hours {
+            None | Some(Value::Null) => Some(None),
+            Some(Value::Number(hours)) => hours.as_f64().map(Some),
+            Some(Value::String(hours)) if hours.trim().is_empty() => Some(None),
+            Some(Value::String(hours)) => hours
+                .trim()
+                .parse()
+                .ok()
+                .map(Some),
+            _ => None,
+        }?;
+        match hours {
+            Some(hours) if !(0.0..=MAX_HOURS).contains(&hours) => None,
+            hours => Some(hours),
+        }
+    }
+
+    fn rejected(&self) -> Option<bool> {
+        match &self.rejected {
+            None | Some(Value::Null) => Some(false),
+            Some(Value::Bool(rejected)) => Some(*rejected),
+            _ => None,
+        }
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -84,21 +118,12 @@ pub fn spawn(pool: PgPool) {
         return;
     };
     actix_web::rt::spawn(async move {
-        match field_names(table.clone()).await {
-            Ok(fields) => {
-                let missing: Vec<&str> = UNIFIED_FIELDS
-                    .iter()
-                    .chain(EXTRA_FIELDS)
-                    .copied()
-                    .filter(|field| !fields.iter().any(|name| name == field))
-                    .collect();
-                if !missing.is_empty() {
-                    log::warn!(
-                        "Review Airtable table is missing fields: {}",
-                        missing.join(", ")
-                    );
-                }
-            }
+        match missing_fields(&table).await {
+            Ok(missing) if !missing.is_empty() => log::warn!(
+                "Review Airtable table is missing fields: {}",
+                missing.join(", ")
+            ),
+            Ok(_) => {}
             Err(e) => log::warn!(
                 "Couldn't check the review Airtable table's fields (the token needs schema.bases:read): {e:#}"
             ),
@@ -113,6 +138,16 @@ pub fn spawn(pool: PgPool) {
     });
 }
 
+async fn missing_fields(table: &AirtableTable) -> anyhow::Result<Vec<&'static str>> {
+    let fields = field_names(table.clone()).await?;
+    Ok(UNIFIED_FIELDS
+        .iter()
+        .chain(EXTRA_FIELDS)
+        .copied()
+        .filter(|field| !fields.iter().any(|name| name == field))
+        .collect())
+}
+
 async fn sync(pool: &PgPool, table: &AirtableTable) -> anyhow::Result<()> {
     let ids: Vec<String> = sqlx::query_scalar("SELECT record_id FROM submission")
         .fetch_all(pool)
@@ -120,29 +155,57 @@ async fn sync(pool: &PgPool, table: &AirtableTable) -> anyhow::Result<()> {
     if ids.is_empty() {
         return Ok(());
     }
+    let fields = missing_fields(table).await;
+    if let Ok(missing) = &fields
+        && !missing.is_empty()
+    {
+        log::error!(
+            "Review Airtable table is missing fields: {}, skipping review sync",
+            missing.join(", ")
+        );
+        return Ok(());
+    }
     let reviews = get_records::<Review>(table.clone(), &ids).await?;
-    apply(pool, &ids, reviews).await
-}
-
-async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) -> anyhow::Result<()> {
-    if reviews.is_empty() {
+    if let Err(e) = &fields
+        && reviews.is_empty()
+    {
         log::warn!(
-            "None of the {} submissions are in the review table, skipping review sync",
+            "None of the {} submissions are in the review table and its fields couldn't be checked, skipping review sync: {e:#}",
             ids.len()
         );
         return Ok(());
     }
+    apply(pool, &ids, reviews).await
+}
+
+async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) -> anyhow::Result<()> {
+    let present: Vec<String> = reviews.iter().map(|(record_id, _)| record_id.clone()).collect();
     let mut found = Vec::new();
     let mut statuses = Vec::new();
     let mut hours = Vec::new();
     let mut code_urls = Vec::new();
     let mut rejected = Vec::new();
     for (record_id, review) in reviews {
+        let (Some(record_hours), Some(record_rejected)) = (review.hours(), review.rejected()) else {
+            log::error!(
+                "Review {record_id} has unreadable hours ({:?}) or rejected ({:?}), skipping it",
+                review.hours,
+                review.rejected
+            );
+            continue;
+        };
         found.push(record_id);
         statuses.push(review.status.as_ref().and_then(Value::as_str).map(str::to_string));
-        hours.push(review.hours);
-        code_urls.push(review.code_url.unwrap_or_default());
-        rejected.push(review.rejected);
+        hours.push(record_hours);
+        code_urls.push(
+            review
+                .code_url
+                .as_ref()
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        );
+        rejected.push(record_rejected);
     }
 
     let mut tx = pool.begin().await?;
@@ -168,25 +231,49 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     .await?
     .into_iter()
     .collect();
-    changed.extend(
-        sqlx::query_scalar::<_, i32>(
-            "UPDATE submission SET deleted_at = now()
-             WHERE record_id = ANY($1) AND NOT record_id = ANY($2) AND deleted_at IS NULL
-             RETURNING project_id",
-        )
-        .bind(ids)
-        .bind(&found)
-        .fetch_all(&mut *tx)
-        .await?,
-    );
+    let missing: Vec<(i32, String, bool)> = sqlx::query_as(
+        "SELECT project_id, record_id, NOT rejected AND review_status IS NOT DISTINCT FROM $3
+         FROM submission WHERE record_id = ANY($1) AND NOT record_id = ANY($2) AND deleted_at IS NULL",
+    )
+    .bind(ids)
+    .bind(&present)
+    .bind(APPROVED)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut removed = Vec::new();
+    for (project_id, record_id, approved) in missing {
+        if !approved {
+            log::warn!("Review {record_id} of project {project_id} is gone from the review table");
+            changed.insert(project_id);
+            removed.push(record_id);
+        } else if REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(record_id.clone()) {
+            log::error!(
+                "Approved review {record_id} of project {project_id} is gone from the review table, keeping its Mips"
+            );
+        }
+    }
+    sqlx::query("UPDATE submission SET deleted_at = now() WHERE record_id = ANY($1)")
+        .bind(&removed)
+        .execute(&mut *tx)
+        .await?;
+    let mut lowered = BTreeSet::new();
     for project_id in changed {
-        reconcile(&mut tx, project_id).await?;
+        lowered.extend(reconcile(&mut tx, project_id).await?);
+    }
+    for user_id in lowered {
+        let overdrawn: bool = sqlx::query_scalar("SELECT mips < 0 FROM \"user\" WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        if overdrawn {
+            tree::refund(&mut tx, user_id).await?;
+        }
     }
     tx.commit().await?;
     Ok(())
 }
 
-async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<()> {
+async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<Vec<i32>> {
     let user_id: i32 = sqlx::query_scalar("SELECT user_id FROM project WHERE id = $1")
         .bind(project_id)
         .fetch_one(&mut *conn)
@@ -251,27 +338,43 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
             .await?;
         log::info!("Project {project_id}'s Mips changed by {delta} to match the review table");
     }
-    let referrer: Option<i32> = sqlx::query_scalar(
-        "UPDATE \"user\" SET referral_paid = true
-         WHERE id = $1 AND referred_by IS NOT NULL AND NOT referral_paid AND EXISTS (
+    let approved: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
              SELECT 1 FROM submission JOIN project ON project.id = submission.project_id
              WHERE project.user_id = $1 AND submission.deleted_at IS NULL
              AND NOT submission.rejected AND submission.review_status = $2
-         )
-         RETURNING referred_by",
+         )",
     )
     .bind(user_id)
     .bind(APPROVED)
+    .fetch_one(&mut *conn)
+    .await?;
+    let referrer: Option<i32> = sqlx::query_scalar(
+        "UPDATE \"user\" SET referral_paid = $2
+         WHERE id = $1 AND referred_by IS NOT NULL AND referral_paid <> $2
+         RETURNING referred_by",
+    )
+    .bind(user_id)
+    .bind(approved)
     .fetch_optional(&mut *conn)
     .await?;
+    let mut lowered = Vec::new();
+    if delta < 0 {
+        lowered.push(user_id);
+    }
     if let Some(referrer) = referrer {
+        let sign = if approved { 1 } else { -1 };
+        if !approved {
+            log::warn!("User {user_id} has no approved submission left, revoking the referral bonus");
+            lowered.extend([referrer, user_id]);
+        }
         sqlx::query("UPDATE \"user\" SET mips = mips + CASE WHEN id = $1 THEN $3::int ELSE $4::int END WHERE id IN ($1, $2)")
             .bind(referrer)
             .bind(user_id)
-            .bind(REFERRER_MIPS)
-            .bind(REFEREE_MIPS)
+            .bind(sign * REFERRER_MIPS)
+            .bind(sign * REFEREE_MIPS)
             .execute(&mut *conn)
             .await?;
     }
-    Ok(())
+    Ok(lowered)
 }

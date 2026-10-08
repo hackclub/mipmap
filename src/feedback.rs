@@ -1,8 +1,8 @@
 use crate::{
     accounts::session::User,
-    error::{ApiError, reject},
+    error::{ApiError, reject, reject_with},
 };
-use actix_web::{HttpResponse, post, web};
+use actix_web::{HttpResponse, http::StatusCode, post, web};
 use serde::Deserialize;
 use sqlx::PgPool;
 
@@ -34,16 +34,31 @@ pub async fn create_feedback(
     if !(1..=10).contains(&body.score) {
         return Err(reject("Choose a score from 1 to 10"));
     }
-    sqlx::query(
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM \"user\" WHERE id = $1 FOR UPDATE")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    let inserted = sqlx::query(
         "INSERT INTO feedback (user_id, score, source, positives, improvements)
-         VALUES ($1, $2, $3, $4, $5)",
+         SELECT $1, $2, $3, $4, $5
+         WHERE NOT EXISTS (
+             SELECT 1 FROM feedback WHERE user_id = $1 AND created_at > now() - interval '1 day'
+         )",
     )
     .bind(user_id)
     .bind(body.score)
     .bind(clean(body.source)?)
     .bind(clean(body.positives)?)
     .bind(clean(body.improvements)?)
-    .execute(pool.get_ref())
+    .execute(&mut *tx)
     .await?;
+    if inserted.rows_affected() == 0 {
+        return Err(reject_with(
+            StatusCode::TOO_MANY_REQUESTS,
+            "You already sent feedback today. Thanks!",
+        ));
+    }
+    tx.commit().await?;
     Ok(HttpResponse::NoContent().finish())
 }

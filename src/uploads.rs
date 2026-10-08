@@ -1,16 +1,22 @@
 use crate::{
     env,
-    error::{ApiError, reject},
+    error::{ApiError, reject, reject_with},
     http,
 };
-use actix_web::web;
+use actix_web::{http::StatusCode, web};
 use anyhow::Context;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::{DynamicImage, ImageDecoder, ImageReader, imageops::FilterType};
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
-use serde_json::json;
-use std::{io::Cursor, sync::LazyLock, thread, time::Duration};
+use serde_json::{Value, json};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Cursor,
+    sync::{LazyLock, Mutex, PoisonError},
+    thread,
+    time::{Duration, Instant},
+};
 use tokio::sync::Semaphore;
 
 const CDN_UPLOAD_URL: &str = "https://cdn.hackclub.com/api/v4/upload";
@@ -18,10 +24,60 @@ const MODERATION_URL: &str = "https://api.openai.com/v1/moderations";
 const MAX_BYTES: usize = 150_000;
 const MAX_SIDE: u32 = 1920;
 const MAX_UPLOAD_SIDE: u32 = 4000;
+const UPLOADS_PER_HOUR: usize = 30;
+const HOUR: Duration = Duration::from_secs(60 * 60);
 
 static COMPRESSING: LazyLock<Semaphore> = LazyLock::new(|| {
     Semaphore::new(thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).max(1)))
 });
+
+#[derive(Default)]
+struct Budget {
+    active: HashSet<i32>,
+    recent: HashMap<i32, Vec<Instant>>,
+}
+
+static BUDGET: LazyLock<Mutex<Budget>> = LazyLock::new(Default::default);
+
+pub struct Slot(i32);
+
+pub fn reserve(user_id: i32) -> Result<Slot, ApiError> {
+    let mut budget = BUDGET.lock().unwrap_or_else(PoisonError::into_inner);
+    let now = Instant::now();
+    budget.recent.retain(|_, times| {
+        times.retain(|time| now.duration_since(*time) < HOUR);
+        !times.is_empty()
+    });
+    if budget.active.contains(&user_id) {
+        return Err(reject_with(StatusCode::CONFLICT, "Another image is still uploading"));
+    }
+    let times = budget.recent.entry(user_id).or_default();
+    if times.len() >= UPLOADS_PER_HOUR {
+        return Err(reject_with(
+            StatusCode::TOO_MANY_REQUESTS,
+            "You've uploaded a lot of images recently. Try again later",
+        ));
+    }
+    times.push(now);
+    budget.active.insert(user_id);
+    Ok(Slot(user_id))
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        BUDGET
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .active
+            .remove(&self.0);
+    }
+}
+
+pub fn warn_unconfigured() {
+    if env::var("OPENAI_API_KEY").is_none() {
+        log::warn!("OPENAI_API_KEY not set, image uploads and snapshots will fail");
+    }
+}
 
 pub fn ensure_image(bytes: &[u8]) -> Result<(), ApiError> {
     const INVALID: &str = "Please choose a PNG, JPEG or WebP image";
@@ -59,7 +115,8 @@ struct ModerationResult {
     flagged: bool,
 }
 
-pub async fn upload(bytes: &[u8]) -> Result<String, ApiError> {
+pub async fn upload(_slot: &Slot, bytes: &[u8]) -> Result<String, ApiError> {
+    let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
     let bytes = bytes.to_vec();
     let permit = COMPRESSING.acquire().await.map_err(anyhow::Error::from)?;
     let webp = web::block(move || {
@@ -68,7 +125,11 @@ pub async fn upload(bytes: &[u8]) -> Result<String, ApiError> {
     })
     .await
     .map_err(anyhow::Error::from)??;
-    let flagged = moderate(&webp).await.map_err(|e| {
+    let input = json!([{
+        "type": "image_url",
+        "image_url": { "url": format!("data:image/webp;base64,{}", STANDARD.encode(&webp)) },
+    }]);
+    let flagged = moderate(&key, input).await.map_err(|e| {
         log::warn!("Image moderation failed: {e:#}");
         reject("Couldn't check your image. Please try again")
     })?;
@@ -78,19 +139,28 @@ pub async fn upload(bytes: &[u8]) -> Result<String, ApiError> {
     Ok(store(webp).await?)
 }
 
-async fn moderate(webp: &[u8]) -> anyhow::Result<bool> {
+pub async fn ensure_text_allowed(texts: &[&str]) -> Result<(), ApiError> {
     let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
+    let input = texts
+        .iter()
+        .map(|text| json!({ "type": "text", "text": text }))
+        .collect();
+    let flagged = moderate(&key, Value::Array(input)).await.map_err(|e| {
+        log::warn!("Text moderation failed: {e:#}");
+        reject("Couldn't check your text. Please try again")
+    })?;
+    if flagged {
+        return Err(reject("This text isn't allowed"));
+    }
+    Ok(())
+}
+
+async fn moderate(key: &str, input: Value) -> anyhow::Result<bool> {
     let response = http::CLIENT
         .post(MODERATION_URL)
         .bearer_auth(key)
         .timeout(Duration::from_secs(30))
-        .json(&json!({
-            "model": "omni-moderation-latest",
-            "input": [{
-                "type": "image_url",
-                "image_url": { "url": format!("data:image/webp;base64,{}", STANDARD.encode(webp)) },
-            }],
-        }))
+        .json(&json!({ "model": "omni-moderation-latest", "input": input }))
         .send()
         .await?;
     let status = response.status();

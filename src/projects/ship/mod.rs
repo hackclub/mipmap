@@ -1,4 +1,4 @@
-use super::{review, unknown_project};
+use super::{ensure_owned, review, unknown_project};
 use crate::{
     accounts::session::User,
     dashboard,
@@ -31,6 +31,8 @@ struct Draft {
     hackatime: Vec<String>,
     reviewing: bool,
 }
+
+const FAILED: &str = "Fix the failed checks and try again";
 
 static SHIPPING: LazyLock<Mutex<HashSet<i32>>> = LazyLock::new(Default::default);
 
@@ -122,6 +124,7 @@ pub async fn ship_project(
 ) -> Result<HttpResponse, ApiError> {
     let table = review::table()
         .ok_or_else(|| reject_with(StatusCode::SERVICE_UNAVAILABLE, "Shipping isn't open yet"))?;
+    ensure_owned(&pool, user_id, *id).await?;
     let shipping = Shipping::start(*id)
         .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is already being shipped"))?;
     let project: Draft = sqlx::query_as(
@@ -182,6 +185,9 @@ async fn run(
     let hackatime = events
         .check("hackatime", "Hackatime", checks::hackatime(pool, user_id, project))
         .await;
+    if account.is_none() || hackatime.is_none() {
+        return Err(FAILED);
+    }
     let repo = events
         .advise(
             "readme",
@@ -201,10 +207,10 @@ async fn run(
         .check("demo", "Demo link works", checks::demo(&project.demo))
         .await;
 
-    let (Some(()), Some(hca_token), Some(hackatime), Some(repo), Some(()), Some(())) =
+    let (Some(()), Some(hca_token), Some(hackatime), Some(repo), Some(_claim), Some(())) =
         (details, account, hackatime, repo, unique, demo)
     else {
-        return Err("Fix the failed checks and try again");
+        return Err(FAILED);
     };
 
     events

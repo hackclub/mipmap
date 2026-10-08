@@ -2,7 +2,10 @@
     import { tiers } from "$lib/projects/tiers";
     import type { Tier } from "$lib/projects/types";
 
-    let { value = $bindable() }: { value: Tier | null } = $props();
+    let {
+        value = $bindable(),
+        disabled = false,
+    }: { value: Tier | null; disabled?: boolean } = $props();
 
     const uid = $props.id();
     const options: { id: Tier | null; name: string; description?: string }[] = [
@@ -81,6 +84,7 @@
         aria-expanded={open}
         aria-controls={open ? `${uid}-list` : undefined}
         aria-labelledby="{uid}-label {uid}-value"
+        {disabled}
         onclick={() => (open = !open)}
         onkeydown={(e) => {
             if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -154,13 +158,18 @@
             color 0.3s;
     }
 
-    .trigger:hover,
+    .trigger:hover:not(:disabled),
     .trigger:focus-visible,
     .options li:hover,
     .options li:focus-visible,
     .options li[aria-selected="true"] {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    .trigger:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .arrow {

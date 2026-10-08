@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     io::Cursor,
     sync::{
-        Arc, LazyLock, RwLock,
+        Arc, LazyLock, PoisonError, RwLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -23,6 +23,7 @@ const RAMP: f32 = 4.0;
 const MAX_DOWNLOAD: usize = 20_000_000;
 const MAX_OUTPUT: usize = 100_000;
 const WHITE: u8 = 0xf0;
+const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 #[derive(Deserialize)]
 struct Meta {
@@ -32,7 +33,7 @@ struct Meta {
 #[derive(Clone)]
 struct Stored {
     content_type: String,
-    bytes: Vec<u8>,
+    bytes: web::Bytes,
 }
 
 static IMAGES: LazyLock<RwLock<HashMap<u32, Stored>>> = LazyLock::new(Default::default);
@@ -61,12 +62,12 @@ pub fn spawn() {
         .flatten()
         .collect();
         {
-            let mut images = IMAGES.write().expect("image lock");
+            let mut images = IMAGES.write().unwrap_or_else(PoisonError::into_inner);
             for (id, stored) in &downloaded {
                 images.insert(*id, stored.clone());
             }
         }
-        let pending: Vec<(u32, Vec<u8>)> = downloaded
+        let pending: Vec<(u32, web::Bytes)> = downloaded
             .into_iter()
             .map(|(id, stored)| (id, stored.bytes))
             .collect();
@@ -82,7 +83,7 @@ pub fn spawn() {
                         {
                             match cut_out(&model, bytes) {
                                 Ok(Some(stored)) => {
-                                    IMAGES.write().expect("image lock").insert(*id, stored);
+                                    IMAGES.write().unwrap_or_else(PoisonError::into_inner).insert(*id, stored);
                                 }
                                 Ok(None) => {}
                                 Err(e) => {
@@ -116,18 +117,28 @@ fn load_model() -> anyhow::Result<Model> {
 }
 
 async fn download(url: &str) -> anyhow::Result<Stored> {
-    let response = http::CLIENT.get(url).send().await?.error_for_status()?;
+    let mut response = http::CLIENT.get(url).send().await?.error_for_status()?;
     let content_type = response
         .headers()
         .get("content-type")
         .and_then(|value| value.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    let bytes = response.bytes().await?;
-    if bytes.len() > MAX_DOWNLOAD {
+        .and_then(|value| value.split(';').next())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    if !IMAGE_TYPES.contains(&content_type.as_str()) {
+        anyhow::bail!("unsupported content type {content_type:?}");
+    }
+    if response.content_length().is_some_and(|length| length > MAX_DOWNLOAD as u64) {
         anyhow::bail!("image is too large");
     }
-    Ok(Stored { content_type, bytes: bytes.to_vec() })
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > MAX_DOWNLOAD {
+            anyhow::bail!("image is too large");
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(Stored { content_type, bytes: bytes.into() })
 }
 
 fn is_white(pixel: &Rgba<u8>) -> bool {
@@ -136,6 +147,9 @@ fn is_white(pixel: &Rgba<u8>) -> bool {
 
 fn mostly_white_edge(image: &RgbaImage) -> bool {
     let (width, height) = image.dimensions();
+    if width == 0 || height == 0 {
+        return false;
+    }
     let edge: Vec<&Rgba<u8>> = (0..width)
         .flat_map(|x| [(x, 0), (x, height - 1)])
         .chain((1..height.saturating_sub(1)).flat_map(|y| [(0, y), (width - 1, y)]))
@@ -157,7 +171,7 @@ fn cut_out(model: &Model, bytes: &[u8]) -> anyhow::Result<Option<Stored>> {
     for (pixel, alpha) in rgba.pixels_mut().zip(mask.pixels()) {
         pixel.0[3] = alpha.0[0];
     }
-    Ok(Some(Stored { content_type: "image/webp".into(), bytes: compress(rgba) }))
+    Ok(Some(Stored { content_type: "image/webp".into(), bytes: compress(rgba).into() }))
 }
 
 fn matte(model: &Model, image: &DynamicImage) -> anyhow::Result<GrayImage> {
@@ -197,9 +211,9 @@ fn compress(image: RgbaImage) -> Vec<u8> {
     }
 }
 
-#[get("/dashboard/item-images/{id}")]
+#[get("/{id}")]
 pub async fn item_image(id: web::Path<u32>) -> HttpResponse {
-    let images = IMAGES.read().expect("image lock");
+    let images = IMAGES.read().unwrap_or_else(PoisonError::into_inner);
     match images.get(&id.into_inner()) {
         Some(stored) => HttpResponse::Ok()
             .content_type(stored.content_type.as_str())

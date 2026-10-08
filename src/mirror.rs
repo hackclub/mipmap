@@ -159,7 +159,12 @@ fn flatten(row: Map<String, Value>) -> Map<String, Value> {
 
 async fn sync(pool: &PgPool, token: &str, base_id: &str, source: &Source) -> anyhow::Result<()> {
     let Source { name, table, changed } = source;
-    let started: String = sqlx::query_scalar("SELECT now()::text")
+    let started: String = sqlx::query_scalar(
+        "SELECT LEAST(now(), GREATEST(now() - interval '15 minutes', (
+             SELECT min(xact_start) FROM pg_stat_activity
+             WHERE datname = current_database() AND backend_type = 'client backend'
+         )))::text",
+    )
         .fetch_one(pool)
         .await?;
     let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(

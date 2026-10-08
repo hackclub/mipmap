@@ -52,6 +52,7 @@ pub struct Project {
     pub hackatime: Vec<String>,
     screenshot: Option<String>,
     status: String,
+    locked: bool,
     shipped_at: Option<DateTime<Utc>>,
     mips_awarded: i32,
     #[serde(skip)]
@@ -67,6 +68,15 @@ struct ProjectFields {
     repo: String,
     demo: String,
     tier: Option<Tier>,
+    hackatime: Vec<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct Reviewed {
+    description: String,
+    repo: String,
+    demo: String,
+    tier: Option<String>,
     hackatime: Vec<String>,
 }
 
@@ -103,6 +113,8 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
                   WHEN latest.rejected THEN 'rejected'
                   WHEN latest.review_status = $2 THEN 'approved'
                   ELSE 'shipped' END AS status,
+             EXISTS (SELECT 1 FROM submission WHERE project_id = p.id AND deleted_at IS NULL AND NOT rejected)
+                 AS locked,
              latest.created_at AS shipped_at,
              (SELECT COALESCE(sum(mips), 0)::int FROM submission WHERE project_id = p.id)
                  AS mips_awarded,
@@ -118,6 +130,32 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
     .bind(user_id)
     .bind(review::APPROVED)
     .fetch_all(pool)
+    .await
+}
+
+async fn ensure_owned(pool: &PgPool, user_id: i32, project_id: i32) -> Result<(), ApiError> {
+    let owned: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM project WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    if !owned {
+        return Err(unknown_project());
+    }
+    Ok(())
+}
+
+async fn reviewing(pool: &PgPool, project_id: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        "SELECT COALESCE((SELECT NOT rejected AND review_status IS DISTINCT FROM $2 FROM submission
+                          WHERE project_id = $1 AND deleted_at IS NULL
+                          ORDER BY created_at DESC, id DESC LIMIT 1), false)",
+    )
+    .bind(project_id)
+    .bind(review::APPROVED)
+    .fetch_one(pool)
     .await
 }
 
@@ -191,6 +229,11 @@ async fn create_project(
     body: web::Json<CreateRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let name = required_name(&body.name)?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM \"user\" WHERE id = $1 FOR UPDATE")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     let inserted = sqlx::query(
         "INSERT INTO project (user_id, name)
          SELECT $1, $2
@@ -199,11 +242,12 @@ async fn create_project(
     .bind(user_id)
     .bind(name)
     .bind(PROJECT_LIMIT)
-    .execute(pool.get_ref())
+    .execute(&mut *tx)
     .await?;
     if inserted.rows_affected() == 0 {
         return Err(reject(format!("You can have at most {PROJECT_LIMIT} projects")));
     }
+    tx.commit().await?;
     dashboard::respond(&pool, user_id).await
 }
 
@@ -214,6 +258,7 @@ async fn update_project(
     id: web::Path<i32>,
     body: web::Json<ProjectFields>,
 ) -> Result<HttpResponse, ApiError> {
+    ensure_owned(&pool, user_id, *id).await?;
     let _shipping = ship::Shipping::start(*id)
         .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
     let fields = body.into_inner();
@@ -230,20 +275,49 @@ async fn update_project(
     if hackatime.iter().any(|name| name.chars().count() > LINK_LIMIT) {
         return Err(reject("Hackatime project name is too long"));
     }
-    ensure_hackatime_free(&pool, user_id, *id, &hackatime).await?;
-    let shipped: Vec<String> = sqlx::query_scalar(
-        "SELECT unnest(p.hackatime_projects) FROM project p
-         WHERE p.id = $1 AND p.user_id = $2 AND EXISTS (
-             SELECT 1 FROM submission s
-             WHERE s.project_id = p.id AND s.deleted_at IS NULL AND NOT s.rejected
-         )",
+    let mut current: Reviewed = sqlx::query_as(
+        "SELECT description, COALESCE(repo_url, '') AS repo, COALESCE(demo_url, '') AS demo, tier,
+             hackatime_projects AS hackatime
+         FROM project WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
     .bind(*id)
     .bind(user_id)
-    .fetch_all(pool.get_ref())
+    .fetch_optional(pool.get_ref())
+    .await?
+    .ok_or_else(unknown_project)?;
+    current.hackatime.sort();
+    current.hackatime.dedup();
+    let unchanged = current.description == description
+        && current.repo == repo
+        && current.demo == demo
+        && current.tier.as_deref() == fields.tier.map(Tier::name)
+        && current.hackatime == hackatime;
+    if !unchanged && reviewing(&pool, *id).await? {
+        return Err(reject_with(
+            StatusCode::CONFLICT,
+            "This project is being reviewed, so only its name can change",
+        ));
+    }
+    ensure_hackatime_free(&pool, user_id, *id, &hackatime).await?;
+    let shipped: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM submission
+             WHERE project_id = $1 AND deleted_at IS NULL AND NOT rejected
+         )",
+    )
+    .bind(*id)
+    .fetch_one(pool.get_ref())
     .await?;
-    if let Some(name) = shipped.iter().find(|name| !hackatime.contains(name)) {
-        return Err(reject(format!("{name} can't be unlinked from a shipped project")));
+    if shipped {
+        if current.repo != repo {
+            return Err(reject("A shipped project's repo link can't change"));
+        }
+        if current.tier.as_deref() != fields.tier.map(Tier::name) {
+            return Err(reject("A shipped project's tier can't change"));
+        }
+        if let Some(name) = current.hackatime.iter().find(|name| !hackatime.contains(name)) {
+            return Err(reject(format!("{name} can't be unlinked from a shipped project")));
+        }
     }
     let updated = sqlx::query(
         "UPDATE project SET name = $3, description = $4, repo_url = NULLIF($5, ''),
@@ -274,17 +348,17 @@ async fn upload_screenshot(
     body: web::Bytes,
 ) -> Result<HttpResponse, ApiError> {
     uploads::ensure_image(&body)?;
-    let owned: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM project WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(*id)
-    .bind(user_id)
-    .fetch_one(pool.get_ref())
-    .await?;
-    if !owned {
-        return Err(unknown_project());
+    ensure_owned(&pool, user_id, *id).await?;
+    let _shipping = ship::Shipping::start(*id)
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+    if reviewing(&pool, *id).await? {
+        return Err(reject_with(
+            StatusCode::CONFLICT,
+            "This project is being reviewed, so its screenshot can't change",
+        ));
     }
-    let url = uploads::upload(&body).await?;
+    let slot = uploads::reserve(user_id)?;
+    let url = uploads::upload(&slot, &body).await?;
     sqlx::query("UPDATE project SET screenshot_url = $2 WHERE id = $1")
         .bind(*id)
         .bind(url)

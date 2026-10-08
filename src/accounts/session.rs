@@ -7,7 +7,7 @@ use actix_web::{
     post, web,
 };
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::{PgExecutor, PgPool};
 use std::{future::Future, pin::Pin};
 
 const COOKIE: &str = "session";
@@ -16,14 +16,14 @@ fn hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
-pub async fn create(pool: &PgPool, user_id: i32) -> anyhow::Result<Cookie<'static>> {
+pub async fn create(executor: impl PgExecutor<'_>, user_id: i32) -> anyhow::Result<Cookie<'static>> {
     let token = hex::encode(rand::random::<[u8; 32]>());
     sqlx::query(
         "INSERT INTO session (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '30 days')",
     )
     .bind(user_id)
     .bind(hash(&token))
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(Cookie::build(COOKIE, token)
         .path("/")

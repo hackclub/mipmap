@@ -10,9 +10,9 @@ export async function request(
     location.href = "/login";
     return new Promise(() => {});
   }
-  if (response.status === 429 && retries > 0) {
-    const seconds = Number(response.headers.get("retry-after"));
-    await wait((Number.isFinite(seconds) && seconds > 0 ? seconds : 1) * 1000);
+  const retry_after = Number(response.headers.get("retry-after"));
+  if (response.status === 429 && retry_after > 0 && retries > 0) {
+    await wait(Math.min(retry_after, 30) * 1000);
     return request(input, init, retries - 1);
   }
   return response;
@@ -40,7 +40,7 @@ export const image_types = "image/png,image/jpeg,image/webp";
 export const image_error = (file: File) =>
   !image_types.split(",").includes(file.type)
     ? "Please choose a PNG, JPEG or WebP image"
-    : file.size > 10 * 1024 * 1024
+    : file.size > 10_000_000
       ? "Images must be 10 MB or smaller"
       : "";
 

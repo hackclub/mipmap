@@ -37,7 +37,7 @@ struct Status {
 }
 
 pub fn multiplier(shared: i64) -> f64 {
-    (100 + shared.clamp(0, 25)) as f64 / 100.0
+    (100 + shared.clamp(0, 32)) as f64 / 100.0
 }
 
 #[derive(Serialize)]
@@ -152,6 +152,7 @@ pub async fn create_snapshot(
     }
     uploads::ensure_image(&form.image.data)?;
 
+    let slot = uploads::reserve(user_id)?;
     let Some(hackatime) = hackatime::summaries(&pool, user_id).await else {
         return Err(reject("Link Hackatime first"));
     };
@@ -165,7 +166,8 @@ pub async fn create_snapshot(
         return Err(reject("You haven't tracked enough time yet"));
     }
 
-    let url = uploads::upload(&form.image.data).await?;
+    uploads::ensure_text_allowed(&[display_name, caption]).await?;
+    let url = uploads::upload(&slot, &form.image.data).await?;
     let mut tx = pool.begin().await?;
     let sent_today: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM snapshot

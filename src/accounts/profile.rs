@@ -1,6 +1,7 @@
 use super::tokens::{self, Provider};
+use chrono::NaiveDate;
 use hc_helper::auth::data::{Address, AuthData, get_auth_data_with_token};
-use sqlx::PgPool;
+use sqlx::{PgExecutor, PgPool};
 
 pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club account";
 
@@ -8,9 +9,15 @@ pub fn address(data: &AuthData) -> Option<Address> {
     data.primary_address().or_else(|| data.addresses.first().cloned())
 }
 
-pub async fn sync(pool: &PgPool, data: &AuthData) -> anyhow::Result<i32> {
+pub async fn sync(executor: impl PgExecutor<'_>, data: &AuthData) -> anyhow::Result<i32> {
     anyhow::ensure!(!data.id.is_empty(), "HCA returned a profile without an id");
     let address = address(data).unwrap_or_default();
+    let birthday = match data.birthday.trim() {
+        "" => None,
+        birthday => NaiveDate::parse_from_str(birthday, "%Y-%m-%d")
+            .inspect_err(|e| log::warn!("HCA birthday of {} isn't a date: {e}", data.id))
+            .ok(),
+    };
     let id = sqlx::query_scalar(
         "INSERT INTO \"user\" (
              hca_id, first_name, last_name, email, verification_status, ysws_eligible,
@@ -19,7 +26,7 @@ pub async fn sync(pool: &PgPool, data: &AuthData) -> anyhow::Result<i32> {
              address_state, address_postal_code, address_country, address_phone_number
          ) VALUES (
              $1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6,
-             NULLIF($7, '')::date, NULLIF($8, ''), NULLIF($9, ''),
+             $7, NULLIF($8, ''), NULLIF($9, ''),
              NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''),
              NULLIF($15, ''), NULLIF($16, ''), NULLIF($17, ''), NULLIF($18, '')
          )
@@ -49,7 +56,7 @@ pub async fn sync(pool: &PgPool, data: &AuthData) -> anyhow::Result<i32> {
     .bind(&data.primary_email)
     .bind(&data.verification_status)
     .bind(data.ysws_eligible)
-    .bind(&data.birthday)
+    .bind(birthday)
     .bind(&data.phone_number)
     .bind(&data.slack_id)
     .bind(&address.first_name)
@@ -61,7 +68,7 @@ pub async fn sync(pool: &PgPool, data: &AuthData) -> anyhow::Result<i32> {
     .bind(&address.postal_code)
     .bind(&address.country)
     .bind(&address.phone_number)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
     Ok(id)
 }
@@ -74,12 +81,23 @@ pub async fn refresh(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn blocked_reason(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
+pub fn shop_blocked(verification_status: Option<&str>) -> Option<&'static str> {
     match verification_status {
-        Some("verified") if ysws_eligible => None,
-        Some("verified") => Some("Your Hack Club account isn't eligible for YSWS prizes"),
+        Some("verified" | "verified_eligible" | "verified_but_over_18") => None,
         Some("pending") => Some("Your identity verification is still pending"),
         Some("rejected") => Some("Your identity verification was rejected"),
         _ => Some("Verify your identity to unlock and purchase items"),
+    }
+}
+
+pub fn ship_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
+    match verification_status {
+        Some("verified" | "verified_eligible") if ysws_eligible => None,
+        Some("verified" | "verified_eligible" | "verified_but_over_18") => {
+            Some("Your Hack Club account isn't eligible for YSWS prizes")
+        }
+        Some("pending") => Some("Your identity verification is still pending"),
+        Some("rejected") => Some("Your identity verification was rejected"),
+        _ => Some("Verify your identity to ship projects"),
     }
 }

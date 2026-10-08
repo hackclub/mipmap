@@ -12,11 +12,8 @@
 		rel="stylesheet"
 		href="https://fonts.googleapis.com/css2?family=Phudu:wght@300..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
 	/>
+	<script src="/plausible-init.js"></script>
 	<script async src="https://plausible.io/js/pa-aEdCG4qC19phBoTKKs0Wx.js"></script>
-	<script>
-		window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-		plausible.init()
-	</script>
 </svelte:head>
 
 {@render children()}

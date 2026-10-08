@@ -59,7 +59,7 @@ pub async fn start(req: HttpRequest) -> HttpResponse {
         read: true,
         admin: false,
     };
-    login::handle_login(&req, scopes, callback_url(&req, CALLBACK), true).await
+    login::handle_login(&req, scopes, callback_url(CALLBACK), true).await
 }
 
 #[get("/hackatime/callback")]
@@ -76,7 +76,7 @@ pub async fn callback(
     let response = login::handle_callback(
         &req,
         query,
-        callback_url(&req, CALLBACK),
+        callback_url(CALLBACK),
         "/dashboard".to_string(),
         Some(sink),
         false,

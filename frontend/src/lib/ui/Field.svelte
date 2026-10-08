@@ -76,6 +76,12 @@
         opacity: 0.6;
     }
 
+    input:disabled,
+    textarea:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     input:focus-visible,
     textarea:focus-visible {
         outline: 2px solid #ead7c2;

@@ -9,7 +9,7 @@ use crate::{
     projects::{ensure_hackatime_free, review},
 };
 use hc_helper::{
-    airtable::{AirtableTable, get_records},
+    airtable::AirtableTable,
     auth::data::get_auth_data_with_token,
     hackatime::data::{
         HackatimeUser, get_hackatime_project_summaries_with_token, get_hackatime_user_with_token,
@@ -18,6 +18,20 @@ use hc_helper::{
 };
 use reqwest::Url;
 use sqlx::PgPool;
+use std::{
+    collections::HashSet,
+    sync::{LazyLock, Mutex, PoisonError},
+};
+
+static CLAIMED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+
+pub struct RepoClaim(String);
+
+impl Drop for RepoClaim {
+    fn drop(&mut self) {
+        CLAIMED.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.0);
+    }
+}
 
 pub fn details(project: &Draft) -> Result<(), ApiError> {
     let missing: Vec<&str> = [
@@ -48,7 +62,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
         sign_in()
     })?;
     profile::sync(pool, &data).await?;
-    if let Some(reason) = profile::blocked_reason(Some(&data.verification_status), data.ysws_eligible) {
+    if let Some(reason) = profile::ship_blocked(Some(&data.verification_status), data.ysws_eligible) {
         return Err(reject(reason));
     }
     if !profile::address(&data).is_some_and(|address| {
@@ -67,7 +81,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
 pub struct Hackatime {
     token: String,
     user: HackatimeUser,
-    seconds: f64,
+    hours: f64,
 }
 
 pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<Hackatime, ApiError> {
@@ -100,12 +114,24 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
     if !missing.is_empty() {
         return Err(reject(format!("Hackatime has no project called {}", missing.join(", "))));
     }
-    let seconds = projects
+    let seconds: f64 = projects
         .iter()
         .filter(|project| names.contains(&project.name))
         .map(|project| project.total_duration_seconds)
         .sum();
-    Ok(Hackatime { token, user, seconds })
+    let hours = (seconds / 36.0).round() / 100.0;
+    let approved: Option<f64> = sqlx::query_scalar(
+        "SELECT max(hours) FROM submission
+         WHERE project_id = $1 AND deleted_at IS NULL AND NOT rejected AND review_status = $2",
+    )
+    .bind(project.id)
+    .bind(review::APPROVED)
+    .fetch_one(pool)
+    .await?;
+    if approved.is_some_and(|approved| hours <= approved) {
+        return Err(reject("Log more time on this project since its last approved ship first"));
+    }
+    Ok(Hackatime { token, user, hours })
 }
 
 pub async fn readme(link: &str) -> Result<(Repo, bool), ApiError> {
@@ -120,13 +146,17 @@ pub async fn readme(link: &str) -> Result<(Repo, bool), ApiError> {
     Ok((repo, found))
 }
 
-pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(), ApiError> {
+pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<RepoClaim, ApiError> {
     let key = repos::parse(link)
         .map_err(|_| reject("Fix the repository link first"))?
         .key();
+    if !CLAIMED.lock().unwrap_or_else(PoisonError::into_inner).insert(key.clone()) {
+        return Err(reject("Another project is shipping this repository right now"));
+    }
+    let claim = RepoClaim(key.clone());
     let others: Vec<String> = sqlx::query_scalar(
         "SELECT code_url FROM submission
-         WHERE project_id <> $1 AND deleted_at IS NULL AND strpos(lower(code_url), $2) > 0",
+         WHERE project_id <> $1 AND deleted_at IS NULL AND NOT rejected AND strpos(lower(code_url), $2) > 0",
     )
     .bind(project_id)
     .bind(&key)
@@ -138,7 +168,7 @@ pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<(
     {
         return Err(reject("Another project has already shipped this repository"));
     }
-    Ok(())
+    Ok(claim)
 }
 
 pub async fn demo(link: &str) -> Result<(), ApiError> {
@@ -176,32 +206,35 @@ pub async fn submit(
     let record_id = create_unified_with_token(
         hca_token,
         &hackatime.token,
-        table.clone(),
+        table,
         code_url.clone(),
         project.demo.trim().to_string(),
         project.screenshot.clone().unwrap_or_default(),
         project.description.trim().to_string(),
         project.hackatime.clone(),
         review::Extras {
-            hours: (hackatime.seconds / 36.0).round() / 100.0,
+            hours: hackatime.hours,
             hackatime_id: hackatime.user.user_id.to_string(),
             github_username: hackatime.user.github_username.filter(|name| !name.is_empty()),
         },
     )
     .await?;
-    let found = get_records::<serde::de::IgnoredAny>(table, std::slice::from_ref(&record_id)).await?;
-    if !found.iter().any(|(id, _)| *id == record_id) {
-        return Err(anyhow::anyhow!("review record {record_id} is missing after creating it").into());
-    }
-    sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url)
          VALUES ($1, $2, $3, $4)",
     )
     .bind(project.id)
-    .bind(record_id)
+    .bind(&record_id)
     .bind(mips_per_hour)
     .bind(code_url)
     .execute(pool)
-    .await?;
+    .await
+    {
+        log::error!(
+            "Review record {record_id} was created for project {} but saving the submission failed",
+            project.id
+        );
+        return Err(e.into());
+    }
     Ok(())
 }

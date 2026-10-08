@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, web};
+use actix_web::{HttpResponse, web};
 use std::{cell::Cell, rc::Rc};
 
 pub mod hackatime;
@@ -19,12 +19,17 @@ pub fn redirect(location: &str) -> HttpResponse {
         .finish()
 }
 
-fn callback_url(req: &HttpRequest, path: &str) -> String {
-    format!(
-        "{}://{}{path}",
-        req.connection_info().scheme(),
-        hc_helper::keys::base_url()
-    )
+fn callback_url(path: &str) -> String {
+    let base_url = hc_helper::keys::base_url();
+    let host = match base_url.rsplit_once(':') {
+        Some((host, port)) if port.bytes().all(|byte| byte.is_ascii_digit()) => host,
+        _ => &base_url,
+    };
+    let scheme = match host {
+        "localhost" | "127.0.0.1" | "[::1]" => "http",
+        _ => "https",
+    };
+    format!("{scheme}://{base_url}{path}")
 }
 
 fn token_sink() -> (Rc<Cell<Option<String>>>, impl AsyncFnOnce(String)) {

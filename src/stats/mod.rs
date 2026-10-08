@@ -18,6 +18,7 @@ pub use sync::spawn;
 const CACHE_FOR: Duration = Duration::from_secs(60 * 60);
 
 const VISITS_PER_IP: u32 = 50;
+const VISITOR_IPS: usize = 100_000;
 
 static CACHE: LazyLock<Mutex<Option<(Instant, Bytes)>>> = LazyLock::new(Default::default);
 static VISITS: LazyLock<std::sync::Mutex<(NaiveDate, HashMap<IpAddr, u32>)>> =
@@ -151,6 +152,9 @@ fn allow_visit(ip: IpAddr) -> bool {
     let mut visits = VISITS.lock().unwrap_or_else(PoisonError::into_inner);
     if visits.0 != today {
         *visits = (today, HashMap::new());
+    }
+    if visits.1.len() >= VISITOR_IPS && !visits.1.contains_key(&ip) {
+        return false;
     }
     let count = visits.1.entry(ip).or_default();
     *count = count.saturating_add(1);

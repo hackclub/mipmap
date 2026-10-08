@@ -77,8 +77,8 @@
 {#snippet account()}
     <p>
         Here's where you can see you account information and your referral link.
-        Having a friend ship a project after having signed up with your link
-        gets you 100 <span class="mip">Mips</span> and your friend 20
+        Having a friend get a project approved after having signed up with your
+        link gets you 100 <span class="mip">Mips</span> and your friend 20
         <span class="mip">Mips</span> to start out with!
     </p>
 {/snippet}

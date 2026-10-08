@@ -16,7 +16,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn pages(cfg: &mut web::ServiceConfig) {
-    cfg.service((page, tree_json, layout_json, tree::item_image));
+    cfg.service((page, tree_json, layout_json));
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -28,8 +28,6 @@ struct UserInfo {
     blocked: Option<&'static str>,
     #[serde(skip)]
     verification_status: Option<String>,
-    #[serde(skip)]
-    ysws_eligible: bool,
     hackatime_linked: bool,
     guides_seen: bool,
 }
@@ -63,14 +61,14 @@ pub struct Dashboard {
 
 pub async fn build(pool: &PgPool, user_id: i32) -> anyhow::Result<Dashboard> {
     let mut user: UserInfo = sqlx::query_as(
-        "SELECT first_name, mips, referral_code, verification_status, ysws_eligible,
+        "SELECT first_name, mips, referral_code, verification_status,
              hackatime_user_id IS NOT NULL AS hackatime_linked, guides_seen
          FROM \"user\" WHERE id = $1",
     )
     .bind(user_id)
     .fetch_one(pool)
     .await?;
-    user.blocked = profile::blocked_reason(user.verification_status.as_deref(), user.ysws_eligible);
+    user.blocked = profile::shop_blocked(user.verification_status.as_deref());
 
     let mut hackatime = hackatime::summaries(pool, user_id).await;
     let totals = hackatime.as_deref().map(hackatime::totals);

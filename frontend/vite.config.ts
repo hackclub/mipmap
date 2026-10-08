@@ -12,6 +12,10 @@ export default defineConfig({
       },
 
       adapter: adapter(),
+      csp: {
+        mode: "hash",
+        directives: { "script-src": ["self", "https://plausible.io"] },
+      },
     }),
   ],
   server: {

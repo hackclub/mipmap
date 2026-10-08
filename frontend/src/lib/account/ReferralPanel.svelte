@@ -17,6 +17,7 @@
     let copy_state = $state<keyof typeof labels>("idle");
     let row = $state<HTMLElement>();
     let timer: ReturnType<typeof setTimeout>;
+    $effect(() => () => clearTimeout(timer));
 
     async function copy() {
         clearTimeout(timer);
@@ -36,8 +37,7 @@
 <Section title="Referral" {bounds} zoom={3} padded>
     <p>
         Here's your referral link. If someone signs up with it and
-        gets a project approved, you get 100 Mips and they get 20 to start out
-        with!
+        gets a project approved, you get 100 Mips and they get 20 bonus Mips!
     </p>
     <div class="row" bind:this={row}>
         <Field

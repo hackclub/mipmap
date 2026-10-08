@@ -85,7 +85,7 @@
         type="button"
         class="shot"
         aria-label="Upload screenshot for {project.name}"
-        disabled={upload.pending}
+        disabled={upload.pending || project.status === "shipped"}
         onclick={() => picker?.click()}
     >
         {#if project.screenshot}

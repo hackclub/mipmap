@@ -71,7 +71,8 @@ pub fn is_public(ip: IpAddr) -> bool {
                 || a >= 240
                 || (a == 100 && (64..128).contains(&b))
                 || (a == 198 && (18..20).contains(&b))
-                || (a == 192 && b == 0 && c == 0))
+                || (a == 192 && b == 0 && c == 0)
+                || (a == 192 && b == 88 && c == 99))
         }
         IpAddr::V6(ip) => match ip.to_ipv4() {
             Some(ip) => is_public(IpAddr::V4(ip)),
@@ -81,7 +82,9 @@ pub fn is_public(ip: IpAddr) -> bool {
                     || ip.is_unique_local()
                     || ip.is_unicast_link_local()
                     || segments[..2] == [0x2001, 0xdb8]
-                    || segments[..2] == [0x2001, 0]
+                    || (segments[0] == 0x2001 && segments[1] < 0x200)
+                    || segments[0] & 0xffc0 == 0xfec0
+                    || segments[..4] == [0x100, 0, 0, 0]
                     || segments[..2] == [0x64, 0xff9b]
                     || segments[0] == 0x2002)
             }

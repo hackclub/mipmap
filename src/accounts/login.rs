@@ -28,7 +28,7 @@ pub async fn start(req: HttpRequest) -> HttpResponse {
         addresses: true,
         phone_number: true,
     };
-    login::handle_login(&req, scopes, callback_url(&req, CALLBACK)).await
+    login::handle_login(&req, scopes, callback_url(CALLBACK)).await
 }
 
 #[get("/callback")]
@@ -41,7 +41,7 @@ pub async fn callback(
     let mut response = login::handle_callback(
         &req,
         query,
-        callback_url(&req, CALLBACK),
+        callback_url(CALLBACK),
         "/dashboard".to_string(),
         Some(sink),
         false,
@@ -51,20 +51,24 @@ pub async fn callback(
         return response;
     };
     let referral = req.cookie(REFERRAL_COOKIE).map(|cookie| cookie.value().to_string());
-    match sign_in(&pool, &token, referral.as_deref()).await {
-        Ok(None) => HttpResponse::Forbidden().body("This account has been deleted"),
+    let mut failure = match sign_in(&pool, &token, referral.as_deref()).await {
         Ok(Some(cookie)) => {
             let _ = response.add_cookie(&cookie);
             if referral.is_some() {
                 let _ = response.add_removal_cookie(&Cookie::build(REFERRAL_COOKIE, "").path("/").finish());
             }
-            response
+            return response;
         }
+        Ok(None) => HttpResponse::Forbidden().body("This account has been deleted"),
         Err(e) => {
             log::error!("sign in failed: {e:#}");
             HttpResponse::InternalServerError().body("Couldn't sign you in, please try again")
         }
+    };
+    for cookie in response.cookies() {
+        let _ = failure.add_cookie(&cookie);
     }
+    failure
 }
 
 async fn sign_in(
@@ -82,7 +86,8 @@ async fn sign_in(
         return Ok(None);
     }
     let existing = deleted.is_some();
-    let user_id = profile::sync(pool, &data).await?;
+    let mut tx = pool.begin().await?;
+    let user_id = profile::sync(&mut *tx, &data).await?;
     if let (false, Some(code)) = (existing, referral) {
         sqlx::query(
             "UPDATE \"user\" SET referred_by = referrer.id FROM \"user\" referrer
@@ -91,13 +96,15 @@ async fn sign_in(
         )
         .bind(user_id)
         .bind(code)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     }
     sqlx::query("UPDATE \"user\" SET last_login_at = now() WHERE id = $1")
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
-    tokens::store(pool, user_id, Provider::Hca, token).await?;
-    session::create(pool, user_id).await.map(Some)
+    tokens::store(&mut *tx, user_id, Provider::Hca, token).await?;
+    let cookie = session::create(&mut *tx, user_id).await?;
+    tx.commit().await?;
+    Ok(Some(cookie))
 }

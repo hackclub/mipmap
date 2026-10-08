@@ -25,6 +25,8 @@
     const { id, screenshot, ...initial } = untrack(() =>
         $state.snapshot(project),
     );
+    const reviewing = untrack(() => project.status === "shipped");
+    const locked = untrack(() => project.locked);
     let fields = $state<ProjectFields>(initial);
     let search = $state("");
 
@@ -53,12 +55,16 @@
     onsubmit={() => update_project(id, $state.snapshot(fields))}
     {onclose}
 >
+    {#if reviewing}
+        <p class="note">This project is in review, so only its name can change.</p>
+    {/if}
     <Field label="Name" bind:value={fields.name} maxlength={100} />
     <Field
         label="Description"
         bind:value={fields.description}
         multiline
         maxlength={5000}
+        disabled={reviewing}
     />
     <div class="row">
         <Field
@@ -67,6 +73,7 @@
             bind:value={fields.repo}
             placeholder="https://"
             maxlength={500}
+            disabled={reviewing || locked}
         />
         <Field
             label="Demo"
@@ -74,9 +81,10 @@
             bind:value={fields.demo}
             placeholder="https://"
             maxlength={500}
+            disabled={reviewing}
         />
     </div>
-    <TierSelect bind:value={fields.tier} />
+    <TierSelect bind:value={fields.tier} disabled={reviewing || locked} />
 
     <section class="hackatime" aria-labelledby="{uid}-hackatime">
         <h3 id="{uid}-hackatime">Hackatime projects</h3>
@@ -85,6 +93,7 @@
             aria-label="Search Hackatime projects"
             placeholder="Search"
             bind:value={search}
+            disabled={reviewing}
             onkeydown={(e) => e.key === "Enter" && e.preventDefault()}
         />
         <ul>
@@ -96,6 +105,7 @@
                         <input
                             type="checkbox"
                             checked={fields.hackatime.includes(entry.name)}
+                            disabled={reviewing}
                             onchange={(e) =>
                                 toggle(entry.name, e.currentTarget.checked)}
                         />
@@ -109,6 +119,11 @@
 </FormDialog>
 
 <style>
+    .note {
+        margin: 0;
+        font-size: 0.85em;
+    }
+
     .row {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -154,6 +169,11 @@
         cursor: pointer;
     }
 
+    label:has(:disabled) {
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+
     .name {
         flex: 1;
         min-width: 0;
@@ -169,6 +189,10 @@
         appearance: none;
         background: #4f2f1f;
         cursor: pointer;
+    }
+
+    input[type="checkbox"]:disabled {
+        cursor: not-allowed;
     }
 
     input[type="checkbox"]:checked {

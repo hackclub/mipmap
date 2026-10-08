@@ -13,6 +13,7 @@ export interface Project extends ProjectFields {
   id: number;
   screenshot: string | null;
   status: "draft" | "shipped" | "approved" | "rejected";
+  locked: boolean;
   shipped_at: string | null;
   mips_awarded: number;
 }

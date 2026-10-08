@@ -25,6 +25,10 @@ mod uploads;
 
 const FRONTEND_DIR: &str = "frontend/build";
 const UPLOAD_LIMIT: usize = 10 * 1024 * 1024;
+const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline' https://plausible.io; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; \
+    img-src 'self' data: blob: https:; connect-src 'self' https://plausible.io; object-src 'none'; \
+    base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 async fn html(req: &HttpRequest, page: &str) -> HttpResponse {
     match NamedFile::open_async(format!("{FRONTEND_DIR}/{page}.html")).await {
@@ -50,11 +54,15 @@ async fn main() -> std::io::Result<()> {
         .await
         .map_err(std::io::Error::other)?;
     log::info!("PostgreSQL ready");
+    tree::backfill_prices(&database_pool)
+        .await
+        .map_err(std::io::Error::other)?;
     hc_helper::airtable::spawn_airtable_queue_handler().map_err(std::io::Error::other)?;
     mirror::spawn(database_pool.clone());
     projects::review::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
     tree::spawn_images();
+    uploads::warn_unconfigured();
     let database_pool = web::Data::new(database_pool);
 
     log::info!("listening on http://0.0.0.0:8080");
@@ -84,7 +92,8 @@ async fn main() -> std::io::Result<()> {
                 DefaultHeaders::new()
                     .add(("X-Content-Type-Options", "nosniff"))
                     .add(("X-Frame-Options", "DENY"))
-                    .add(("Content-Security-Policy", "frame-ancestors 'none'"))
+                    .add(("Content-Security-Policy", CSP))
+                    .add(("Permissions-Policy", "camera=(), microphone=(), geolocation=()"))
                     .add(("Referrer-Policy", "strict-origin-when-cross-origin"))
                     .add(("Strict-Transport-Security", "max-age=31536000")),
             )
@@ -110,7 +119,20 @@ async fn main() -> std::io::Result<()> {
                     .wrap(Governor::new(&rate_limit))
                     .configure(accounts::routes),
             )
-            .configure(dashboard::pages)
+            .service(
+                web::scope("/dashboard/item-images")
+                    .wrap(Governor::new(&rate_limit))
+                    .service(tree::item_image),
+            )
+            .service(
+                web::scope("")
+                    .guard(guard::fn_guard(|ctx| {
+                        let path = ctx.head().uri.path();
+                        path == "/dashboard" || path.starts_with("/dashboard/")
+                    }))
+                    .wrap(Governor::new(&rate_limit))
+                    .configure(dashboard::pages),
+            )
             .configure(stats::pages)
             .service(docs)
             .service(Files::new("/", FRONTEND_DIR).index_file("index.html"))
