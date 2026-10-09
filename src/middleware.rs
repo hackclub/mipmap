@@ -8,7 +8,14 @@ use actix_web::{
     middleware::Next,
 };
 use reqwest::Url;
-use std::net::{IpAddr, Ipv6Addr};
+use std::{
+    net::{IpAddr, Ipv6Addr},
+    sync::LazyLock,
+};
+
+static CLOUDFLARE_ONLY: LazyLock<bool> = LazyLock::new(|| {
+    !crate::env::var("CLOUDFLARE_ONLY").is_some_and(|value| value.eq_ignore_ascii_case("N"))
+});
 
 const CLOUDFLARE_RANGES: [&str; 22] = [
     "173.245.48.0/20",
@@ -97,7 +104,7 @@ pub async fn cloudflare_only(
     req: ServiceRequest,
     next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
-    if edge_ip(req.request()).is_some_and(|ip| !is_cloudflare(ip)) {
+    if *CLOUDFLARE_ONLY && edge_ip(req.request()).is_some_and(|ip| !is_cloudflare(ip)) {
         return Err(ErrorForbidden("Forbidden"));
     }
     next.call(req).await
