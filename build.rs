@@ -13,10 +13,12 @@ fn main() {
         "frontend/tsconfig.json",
         "frontend/vite.config.ts",
         "migrations",
+        ".env",
     ] {
         println!("cargo:rerun-if-changed={path}");
     }
     println!("cargo:rerun-if-env-changed=VITE_SITE_URL");
+    println!("cargo:rerun-if-env-changed=VITE_DOCS_VIDEO_URL");
 
     let status = Command::new("npm")
         .args(["run", "build"])

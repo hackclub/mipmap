@@ -28,7 +28,7 @@ const UPLOAD_LIMIT: usize = 10 * 1024 * 1024;
 const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline' https://plausible.io; \
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; \
     img-src 'self' data: blob: https:; connect-src 'self' https://plausible.io; object-src 'none'; \
-    base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+    base-uri 'self'; form-action 'self'; frame-ancestors 'none'; frame-src https://www.youtube-nocookie.com";
 
 async fn html(req: &HttpRequest, page: &str) -> HttpResponse {
     match NamedFile::open_async(format!("{FRONTEND_DIR}/{page}.html")).await {
