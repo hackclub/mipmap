@@ -54,8 +54,15 @@ pub fn spawn(pool: PgPool) {
                     }
                 }
             }
+            let started = match cutoff(&pool).await {
+                Ok(started) => started,
+                Err(e) => {
+                    log::error!("Finding the Airtable mirror cutoff failed: {e:#}");
+                    continue;
+                }
+            };
             for source in SOURCES {
-                if let Err(e) = sync(&pool, token, base_id, source).await {
+                if let Err(e) = sync(&pool, token, base_id, source, &started).await {
                     log::error!("Airtable mirror sync of {} failed: {e:#}", source.name);
                 }
             }
@@ -157,16 +164,28 @@ fn flatten(row: Map<String, Value>) -> Map<String, Value> {
         .collect()
 }
 
-async fn sync(pool: &PgPool, token: &str, base_id: &str, source: &Source) -> anyhow::Result<()> {
-    let Source { name, table, changed } = source;
-    let started: String = sqlx::query_scalar(
-        "SELECT LEAST(now(), GREATEST(now() - interval '15 minutes', (
-             SELECT min(xact_start) FROM pg_stat_activity
-             WHERE datname = current_database() AND backend_type = 'client backend'
-         )))::text",
+async fn cutoff(pool: &PgPool) -> sqlx::Result<String> {
+    let (started, stalled): (String, bool) = sqlx::query_as(
+        "SELECT LEAST(now(), oldest)::text, COALESCE(oldest < now() - interval '15 minutes', false)
+         FROM (SELECT min(xact_start) AS oldest FROM pg_stat_activity
+               WHERE datname = current_database() AND backend_type = 'client backend') t",
     )
-        .fetch_one(pool)
-        .await?;
+    .fetch_one(pool)
+    .await?;
+    if stalled {
+        log::warn!("A database transaction has been open for over 15 minutes, holding back the Airtable mirror");
+    }
+    Ok(started)
+}
+
+async fn sync(
+    pool: &PgPool,
+    token: &str,
+    base_id: &str,
+    source: &Source,
+    started: &str,
+) -> anyhow::Result<()> {
+    let Source { name, table, changed } = source;
     let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
         "SELECT (to_jsonb(t) - 'changed_at')::text FROM \"{name}\" t
          WHERE t.{changed} > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'

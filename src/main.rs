@@ -57,6 +57,9 @@ async fn main() -> std::io::Result<()> {
     tree::backfill_prices(&database_pool)
         .await
         .map_err(std::io::Error::other)?;
+    snapshots::backfill_name_keys(&database_pool)
+        .await
+        .map_err(std::io::Error::other)?;
     hc_helper::airtable::spawn_airtable_queue_handler().map_err(std::io::Error::other)?;
     mirror::spawn(database_pool.clone());
     projects::review::spawn(database_pool.clone());

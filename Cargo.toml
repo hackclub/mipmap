@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-actix-web = "4"
+actix-web = { version = "4", default-features = false, features = ["macros", "cookies", "unicode", "compat"] }
 actix-files = "0.6"
 actix-governor = "0.10"
 serde = { version = "1", features = ["derive"] }
@@ -28,6 +28,10 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 webp = { version = "0.3.1", default-features = false }
 tract-onnx = "0.23.8"
 base64 = "0.22"
+rustrict = "0.7.39"
+unicode-security = "0.1.2"
+unicode-normalization = "0.1.25"
+unicode-properties = "0.1.4"
 
 [profile.dev.package."*"]
 opt-level = 3

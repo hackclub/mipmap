@@ -1,8 +1,11 @@
 use super::tokens::{self, Provider};
+use crate::http;
 use chrono::NaiveDate;
-use hc_helper::auth::data::{Address, AuthData, get_auth_data_with_token};
+use hc_helper::auth::data::{Address, AuthData, forget_auth_token, get_auth_data_with_token};
+use serde::Deserialize;
 use sqlx::{PgExecutor, PgPool};
 
+pub const INELIGIBLE: &str = "Your Hack Club account isn't eligible for YSWS prizes";
 pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club account";
 
 pub fn address(data: &AuthData) -> Option<Address> {
@@ -77,27 +80,48 @@ pub async fn refresh(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
     let Some(token) = tokens::load(pool, user_id, Provider::Hca).await? else {
         return Ok(());
     };
+    forget_auth_token(&token);
     sync(pool, &get_auth_data_with_token(&token).await?).await?;
     Ok(())
 }
 
-pub fn shop_blocked(verification_status: Option<&str>) -> Option<&'static str> {
-    match verification_status {
-        Some("verified" | "verified_eligible" | "verified_but_over_18") => None,
-        Some("pending") => Some("Your identity verification is still pending"),
-        Some("rejected") => Some("Your identity verification was rejected"),
-        _ => Some("Verify your identity to unlock and purchase items"),
-    }
+#[derive(Deserialize)]
+struct Check {
+    result: String,
+}
+
+pub async fn ysws_eligible(hca_id: &str) -> anyhow::Result<bool> {
+    let check: Check = http::CLIENT
+        .get("https://auth.hackclub.com/api/external/check")
+        .query(&[("idv_id", hca_id)])
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(check.result == "verified_eligible")
+}
+
+pub fn shop_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
+    blocked(verification_status, ysws_eligible, "Verify your identity to unlock and purchase items")
 }
 
 pub fn ship_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
+    blocked(verification_status, ysws_eligible, "Verify your identity to ship projects")
+}
+
+fn blocked(
+    verification_status: Option<&str>,
+    ysws_eligible: bool,
+    unverified: &'static str,
+) -> Option<&'static str> {
     match verification_status {
         Some("verified" | "verified_eligible") if ysws_eligible => None,
         Some("verified" | "verified_eligible" | "verified_but_over_18") => {
-            Some("Your Hack Club account isn't eligible for YSWS prizes")
+            Some(INELIGIBLE)
         }
         Some("pending") => Some("Your identity verification is still pending"),
         Some("rejected") => Some("Your identity verification was rejected"),
-        _ => Some("Verify your identity to ship projects"),
+        _ => Some(unverified),
     }
 }

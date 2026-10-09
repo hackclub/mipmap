@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use std::{
     collections::HashSet,
     convert::Infallible,
-    sync::{LazyLock, Mutex},
+    sync::{LazyLock, Mutex, PoisonError},
 };
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -42,7 +42,7 @@ impl Shipping {
     pub fn start(project_id: i32) -> Option<Self> {
         SHIPPING
             .lock()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .insert(project_id)
             .then_some(Shipping(project_id))
     }
@@ -50,7 +50,10 @@ impl Shipping {
 
 impl Drop for Shipping {
     fn drop(&mut self) {
-        SHIPPING.lock().unwrap().remove(&self.0);
+        SHIPPING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&self.0);
     }
 }
 
@@ -151,7 +154,7 @@ pub async fn ship_project(
         let _shipping = shipping;
         let events = Events(tx);
         let line = match run(&pool, user_id, &project, table, &events).await {
-            Ok(()) => match dashboard::build(&pool, user_id).await {
+            Ok(()) => match dashboard::build(&pool, user_id, false).await {
                 Ok(dashboard) => json!({ "dashboard": dashboard }),
                 Err(e) => {
                     log::error!("building dashboard after ship failed: {e:#}");

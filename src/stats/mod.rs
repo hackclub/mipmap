@@ -98,9 +98,9 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
              (SELECT count(DISTINCT project_id) FROM submission WHERE deleted_at IS NULL)
                  AS projects_shipped,
              (SELECT COALESCE(sum(hours), 0) FROM (
-                  SELECT max(hours) AS hours FROM submission
-                  WHERE deleted_at IS NULL AND NOT rejected AND review_status = $1
-                  GROUP BY project_id
+                  SELECT CASE WHEN bool_or(tracked_hours IS NULL) THEN max(hours) ELSE sum(hours) END AS hours
+                  FROM submission WHERE deleted_at IS NULL AND NOT rejected AND review_status = $1
+                  GROUP BY project_id, tracked_hours IS NULL
               ) approved) AS hours_approved,
              (SELECT COALESCE(sum(mips), 0) FROM submission)
                  + (SELECT count(*) FROM \"user\" WHERE referral_paid) * $2 AS mips_awarded,

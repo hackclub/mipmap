@@ -21,7 +21,7 @@ async fn sync(pool: &PgPool) -> sqlx::Result<()> {
     .fetch_all(pool)
     .await?;
     for user_id in users {
-        if let Some(hackatime) = hackatime::summaries(pool, user_id).await {
+        if let Some(hackatime) = hackatime::summaries(pool, user_id, false).await {
             projects::record_time(pool, &projects::list(pool, user_id).await?, &hackatime).await?;
         }
     }

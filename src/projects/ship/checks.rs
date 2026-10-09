@@ -7,12 +7,14 @@ use crate::{
     error::{ApiError, reject},
     http,
     projects::{ensure_hackatime_free, review},
+    snapshots,
 };
 use hc_helper::{
     airtable::AirtableTable,
-    auth::data::get_auth_data_with_token,
+    auth::data::{forget_auth_token, get_auth_data_with_token},
     hackatime::data::{
-        HackatimeUser, get_hackatime_project_summaries_with_token, get_hackatime_user_with_token,
+        HackatimeUser, forget_hackatime_token, get_hackatime_project_summaries_with_token,
+        get_hackatime_user_with_token,
     },
     submission::create_unified_with_token,
 };
@@ -57,6 +59,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
     let token = tokens::load(pool, user_id, Provider::Hca)
         .await?
         .ok_or_else(sign_in)?;
+    forget_auth_token(&token);
     let data = get_auth_data_with_token(&token).await.map_err(|e| {
         log::warn!("loading HCA profile for ship failed: {e:#}");
         sign_in()
@@ -81,6 +84,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
 pub struct Hackatime {
     token: String,
     user: HackatimeUser,
+    tracked: f64,
     hours: f64,
 }
 
@@ -94,6 +98,7 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         log::warn!("Hackatime lookup for ship failed: {e:#}");
         reject("Couldn't reach Hackatime. Please try again")
     };
+    forget_hackatime_token(&token);
     let user = get_hackatime_user_with_token(&token).await.map_err(unreachable)?;
     sqlx::query("UPDATE \"user\" SET hackatime_trust_level = $2 WHERE id = $1")
         .bind(user_id)
@@ -119,19 +124,20 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         .filter(|project| names.contains(&project.name))
         .map(|project| project.total_duration_seconds)
         .sum();
-    let hours = (seconds / 36.0).round() / 100.0;
+    let tracked = (seconds / 36.0).round() / 100.0;
     let approved: Option<f64> = sqlx::query_scalar(
-        "SELECT max(hours) FROM submission
+        "SELECT max(COALESCE(tracked_hours, hours)) FROM submission
          WHERE project_id = $1 AND deleted_at IS NULL AND NOT rejected AND review_status = $2",
     )
     .bind(project.id)
     .bind(review::APPROVED)
     .fetch_one(pool)
     .await?;
-    if approved.is_some_and(|approved| hours <= approved) {
+    let hours = ((tracked - approved.unwrap_or(0.0)) * 100.0).round() / 100.0;
+    if hours <= 0.0 {
         return Err(reject("Log more time on this project since its last approved ship first"));
     }
-    Ok(Hackatime { token, user, hours })
+    Ok(Hackatime { token, user, tracked, hours })
 }
 
 pub async fn readme(link: &str) -> Result<(Repo, bool), ApiError> {
@@ -147,24 +153,23 @@ pub async fn readme(link: &str) -> Result<(Repo, bool), ApiError> {
 }
 
 pub async fn not_shipped(pool: &PgPool, project_id: i32, link: &str) -> Result<RepoClaim, ApiError> {
-    let key = repos::parse(link)
-        .map_err(|_| reject("Fix the repository link first"))?
-        .key();
-    if !CLAIMED.lock().unwrap_or_else(PoisonError::into_inner).insert(key.clone()) {
+    let repo = repos::parse(link).map_err(|_| reject("Fix the repository link first"))?;
+    let root = repo.root();
+    if !CLAIMED.lock().unwrap_or_else(PoisonError::into_inner).insert(root.clone()) {
         return Err(reject("Another project is shipping this repository right now"));
     }
-    let claim = RepoClaim(key.clone());
+    let claim = RepoClaim(root.clone());
     let others: Vec<String> = sqlx::query_scalar(
         "SELECT code_url FROM submission
          WHERE project_id <> $1 AND deleted_at IS NULL AND NOT rejected AND strpos(lower(code_url), $2) > 0",
     )
     .bind(project_id)
-    .bind(&key)
+    .bind(&root)
     .fetch_all(pool)
     .await?;
     if others
         .iter()
-        .any(|other| repos::parse(other).is_ok_and(|other| other.key() == key))
+        .any(|other| repos::parse(other).is_ok_and(|other| other.overlaps(&repo)))
     {
         return Err(reject("Another project has already shipped this repository"));
     }
@@ -201,7 +206,15 @@ pub async fn submit(
     hca_token: &str,
     hackatime: Hackatime,
 ) -> Result<(), ApiError> {
-    let mips_per_hour = review::mips_per_hour(project.tier.as_deref())?;
+    let tier = project.tier.as_deref().unwrap_or_default();
+    let mips_per_hour = review::mips_per_hour(Some(tier))?;
+    let shared: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM snapshot s JOIN project p ON p.user_id = s.user_id
+         WHERE p.id = $1 AND s.deleted_at IS NULL",
+    )
+    .bind(project.id)
+    .fetch_one(pool)
+    .await?;
     let code_url = repo.url();
     let record_id = create_unified_with_token(
         hca_token,
@@ -216,17 +229,21 @@ pub async fn submit(
             hours: hackatime.hours,
             hackatime_id: hackatime.user.user_id.to_string(),
             github_username: hackatime.user.github_username.filter(|name| !name.is_empty()),
+            tier: review::tier_label(tier)?,
         },
     )
     .await?;
     if let Err(e) = sqlx::query(
-        "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url)
-         VALUES ($1, $2, $3, $4)",
+        "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url, tier, multiplier, tracked_hours)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(project.id)
     .bind(&record_id)
     .bind(mips_per_hour)
     .bind(code_url)
+    .bind(tier)
+    .bind(snapshots::multiplier(shared))
+    .bind(hackatime.tracked)
     .execute(pool)
     .await
     {

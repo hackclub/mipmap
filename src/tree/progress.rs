@@ -23,16 +23,31 @@ pub async fn unlocked(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<Vec
 }
 
 async fn lock_user(conn: &mut PgConnection, user_id: i32) -> Result<i32, ApiError> {
-    let (mips, status): (i32, Option<String>) = sqlx::query_as(
-        "SELECT mips, verification_status FROM \"user\" WHERE id = $1 FOR UPDATE",
+    let (mips, status, eligible): (i32, Option<String>, bool) = sqlx::query_as(
+        "SELECT mips, verification_status, ysws_eligible FROM \"user\" WHERE id = $1 FOR UPDATE",
     )
     .bind(user_id)
     .fetch_one(conn)
     .await?;
-    match profile::shop_blocked(status.as_deref()) {
+    match profile::shop_blocked(status.as_deref(), eligible) {
         Some(reason) => Err(reject(reason)),
         None => Ok(mips),
     }
+}
+
+async fn ensure_eligible(pool: &PgPool, user_id: i32) -> Result<(), ApiError> {
+    let hca_id: String = sqlx::query_scalar("SELECT hca_id FROM \"user\" WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
+    let eligible = profile::ysws_eligible(&hca_id).await.map_err(|e| {
+        log::warn!("Checking user {user_id}'s YSWS eligibility failed: {e:#}");
+        reject("Couldn't reach Hack Club Auth. Please try again")
+    })?;
+    if !eligible {
+        return Err(reject(profile::INELIGIBLE));
+    }
+    Ok(())
 }
 
 #[post("/unlock-item")]
@@ -45,6 +60,7 @@ pub async fn unlock_item(
         .node(body.id)
         .filter(|node| node.kind != Kind::Origin)
         .ok_or_else(|| reject("unknown node"))?;
+    ensure_eligible(&pool, user_id).await?;
     let mut tx = pool.begin().await?;
     let mips = lock_user(&mut tx, user_id).await?;
     let unlocked = unlocked(&mut *tx, user_id).await?;
@@ -90,6 +106,7 @@ pub async fn purchase_item(
         .node(body.id)
         .filter(|node| node.kind == Kind::Item)
         .ok_or_else(|| reject("unknown item"))?;
+    ensure_eligible(&pool, user_id).await?;
     let mut tx = pool.begin().await?;
     if lock_user(&mut tx, user_id).await? < 0 {
         return Err(reject(format!("Your {} balance is negative", TREE.currency)));
@@ -205,44 +222,52 @@ pub async fn refund(conn: &mut PgConnection, user_id: i32) -> anyhow::Result<()>
     let mut cancelled = Vec::new();
     let mut owed = -mips;
     let mut refunded = 0;
-    for (id, price) in unlocks {
-        if owed <= 0 {
-            break;
-        }
-        if orders.iter().any(|&(_, node, fulfilled)| node == id && fulfilled) {
-            continue;
-        }
-        let rest: Vec<i32> = kept.iter().copied().filter(|&node| node != id).collect();
-        let after = reached(&rest);
-        if reached(&kept).iter().any(|node| *node != id && !after.contains(node)) {
-            continue;
-        }
-        let mut dropped: Vec<i32> = orders
-            .iter()
-            .filter(|&&(_, node, _)| node == id)
-            .map(|&(order, ..)| order)
-            .collect();
-        if TREE.is(id as u32, Kind::Token) {
-            let tokens = rest.iter().filter(|&&node| TREE.is(node as u32, Kind::Token)).count();
-            let excess = (orders.len() - dropped.len()).saturating_sub(tokens);
-            let spare: Vec<i32> = orders
-                .iter()
-                .filter(|&&(order, _, fulfilled)| !fulfilled && !dropped.contains(&order))
-                .take(excess)
-                .map(|&(order, ..)| order)
-                .collect();
-            if spare.len() < excess {
+    let mut progressed = true;
+    while owed > 0 && progressed {
+        progressed = false;
+        for &(id, price) in &unlocks {
+            if owed <= 0 {
+                break;
+            }
+            if undone.contains(&id) {
                 continue;
             }
-            dropped.extend(spare);
+            if orders.iter().any(|&(_, node, fulfilled)| node == id && fulfilled) {
+                continue;
+            }
+            let rest: Vec<i32> = kept.iter().copied().filter(|&node| node != id).collect();
+            let after = reached(&rest);
+            if reached(&kept).iter().any(|node| *node != id && !after.contains(node)) {
+                continue;
+            }
+            let mut dropped: Vec<i32> = orders
+                .iter()
+                .filter(|&&(_, node, _)| node == id)
+                .map(|&(order, ..)| order)
+                .collect();
+            if TREE.is(id as u32, Kind::Token) {
+                let tokens = rest.iter().filter(|&&node| TREE.is(node as u32, Kind::Token)).count();
+                let excess = (orders.len() - dropped.len()).saturating_sub(tokens);
+                let spare: Vec<i32> = orders
+                    .iter()
+                    .filter(|&&(order, _, fulfilled)| !fulfilled && !dropped.contains(&order))
+                    .take(excess)
+                    .map(|&(order, ..)| order)
+                    .collect();
+                if spare.len() < excess {
+                    continue;
+                }
+                dropped.extend(spare);
+            }
+            orders.retain(|(order, ..)| !dropped.contains(order));
+            cancelled.extend(dropped);
+            kept = rest;
+            undone.push(id);
+            let price = price.or_else(|| TREE.node(id as u32).map(|node| node.price)).unwrap_or(0);
+            owed -= price;
+            refunded += price;
+            progressed = true;
         }
-        orders.retain(|(order, ..)| !dropped.contains(order));
-        cancelled.extend(dropped);
-        kept = rest;
-        undone.push(id);
-        let price = price.or_else(|| TREE.node(id as u32).map(|node| node.price)).unwrap_or(0);
-        owed -= price;
-        refunded += price;
     }
     sqlx::query("UPDATE \"order\" SET deleted_at = now() WHERE id = ANY($1)")
         .bind(&cancelled)

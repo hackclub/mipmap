@@ -168,6 +168,7 @@ async fn moderate(key: &str, input: Value) -> anyhow::Result<bool> {
         anyhow::bail!("moderation returned {status}: {}", response.text().await?);
     }
     let moderation: Moderation = response.json().await?;
+    anyhow::ensure!(!moderation.results.is_empty(), "moderation returned no results");
     Ok(moderation.results.iter().any(|result| result.flagged))
 }
 

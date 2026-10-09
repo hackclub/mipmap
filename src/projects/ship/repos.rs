@@ -38,6 +38,16 @@ impl Repo {
     pub fn key(&self) -> String {
         format!("{}/{}", self.host.domain(), self.path).to_lowercase()
     }
+
+    pub fn root(&self) -> String {
+        let owner_and_name: Vec<&str> = self.path.splitn(3, '/').take(2).collect();
+        format!("{}/{}", self.host.domain(), owner_and_name.join("/")).to_lowercase()
+    }
+
+    pub fn overlaps(&self, other: &Repo) -> bool {
+        let (key, other) = (self.key(), other.key());
+        key == other || key.starts_with(&format!("{other}/")) || other.starts_with(&format!("{key}/"))
+    }
 }
 
 pub fn parse(link: &str) -> Result<Repo, ApiError> {
@@ -67,7 +77,12 @@ pub fn parse(link: &str) -> Result<Repo, ApiError> {
         }
         _ => segments.truncate(2),
     }
-    if segments.len() < 2 {
+    let valid = |segment: &str| {
+        segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    if segments.len() < 2 || !segments.iter().all(|segment| valid(segment)) {
         return Err(reject("The repository link should point at a repository"));
     }
     if let Some(last) = segments.last_mut() {
@@ -125,4 +140,27 @@ pub async fn has_readme(repo: &Repo) -> anyhow::Result<bool> {
                 .any(|entry| entry.name.to_lowercase().starts_with("readme"))
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repo(link: &str) -> Repo {
+        parse(link).ok().unwrap()
+    }
+
+    #[test]
+    fn overlaps() {
+        let base = repo("https://gitlab.com/a/b");
+        for same in ["gitlab.com/a/b/tree/main", "https://gitlab.com/A/B/x", "gitlab.com/a/b/-/blob/main/x", "gitlab.com/a/b.git"] {
+            assert!(repo(same).overlaps(&base), "{same}");
+            assert!(base.overlaps(&repo(same)), "{same}");
+        }
+        for other in ["gitlab.com/a/bc", "gitlab.com/a/c", "github.com/a/b"] {
+            assert!(!repo(other).overlaps(&base), "{other}");
+        }
+        assert_eq!(repo("gitlab.com/a/b/c").root(), "gitlab.com/a/b");
+        assert!(repo("github.com/a/b/tree/main").overlaps(&repo("https://github.com/A/B")));
+    }
 }

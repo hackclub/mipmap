@@ -34,7 +34,7 @@ pub fn client_ip(req: &HttpRequest) -> Option<IpAddr> {
                 .and_then(|addr| addr.trim().parse::<IpAddr>().ok())
         })
         .or(peer)
-        .map(|ip| match ip {
+        .map(|ip| match ip.to_canonical() {
             IpAddr::V6(ip) => IpAddr::V6(Ipv6Addr::from(u128::from(ip) & !0 << 64)),
             ip => ip,
         })
@@ -56,7 +56,7 @@ pub async fn same_origin(
                         Some(port) => format!("{host}:{port}"),
                         None => host.to_string(),
                     };
-                    host != req.connection_info().host()
+                    !host.eq_ignore_ascii_case(&hc_helper::keys::base_url())
                 })
         });
     if cross_site {

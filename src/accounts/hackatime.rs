@@ -7,7 +7,10 @@ use actix_web::{
     web::{self, Query},
 };
 use hc_helper::hackatime::{
-    data::{Project, get_hackatime_project_summaries_with_token, get_hackatime_user_with_token},
+    data::{
+        Project, forget_hackatime_token, get_hackatime_project_summaries_with_token,
+        get_hackatime_user_with_token,
+    },
     login::{self, CallbackArgs, Scopes},
 };
 use sqlx::{PgPool, types::Json};
@@ -24,7 +27,7 @@ pub fn totals(projects: &[Project]) -> Totals {
         .collect()
 }
 
-pub async fn summaries(pool: &PgPool, user_id: i32) -> Option<Vec<Project>> {
+pub async fn summaries(pool: &PgPool, user_id: i32, fresh: bool) -> Option<Vec<Project>> {
     let token = match tokens::load(pool, user_id, Provider::Hackatime).await {
         Ok(token) => token?,
         Err(e) => {
@@ -32,6 +35,9 @@ pub async fn summaries(pool: &PgPool, user_id: i32) -> Option<Vec<Project>> {
             return None;
         }
     };
+    if fresh {
+        forget_hackatime_token(&token);
+    }
     match get_hackatime_project_summaries_with_token(&token).await {
         Ok(projects) => Some(projects),
         Err(e) => {

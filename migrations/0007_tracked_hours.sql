@@ -1,0 +1,1 @@
+ALTER TABLE submission ADD COLUMN tracked_hours DOUBLE PRECISION;

@@ -3,13 +3,22 @@ use crate::{
         hackatime, profile, redirect,
         session::{self, User},
     },
-    error::ApiError,
+    error::{ApiError, reject_with},
     projects, snapshots, tree,
 };
-use actix_web::{HttpRequest, HttpResponse, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, get, http::StatusCode, post, web};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
+
+const REFRESH_EVERY: Duration = Duration::from_secs(30);
+
+static REFRESHED: LazyLock<Mutex<HashMap<i32, Instant>>> = LazyLock::new(Default::default);
 
 pub fn api(cfg: &mut web::ServiceConfig) {
     cfg.service((get_dashboard, see_guides));
@@ -28,6 +37,8 @@ struct UserInfo {
     blocked: Option<&'static str>,
     #[serde(skip)]
     verification_status: Option<String>,
+    #[serde(skip)]
+    ysws_eligible: bool,
     hackatime_linked: bool,
     guides_seen: bool,
 }
@@ -59,18 +70,18 @@ pub struct Dashboard {
     snapshots: snapshots::Overview,
 }
 
-pub async fn build(pool: &PgPool, user_id: i32) -> anyhow::Result<Dashboard> {
+pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<Dashboard> {
     let mut user: UserInfo = sqlx::query_as(
-        "SELECT first_name, mips, referral_code, verification_status,
+        "SELECT first_name, mips, referral_code, verification_status, ysws_eligible,
              hackatime_user_id IS NOT NULL AS hackatime_linked, guides_seen
          FROM \"user\" WHERE id = $1",
     )
     .bind(user_id)
     .fetch_one(pool)
     .await?;
-    user.blocked = profile::shop_blocked(user.verification_status.as_deref());
+    user.blocked = profile::shop_blocked(user.verification_status.as_deref(), user.ysws_eligible);
 
-    let mut hackatime = hackatime::summaries(pool, user_id).await;
+    let mut hackatime = hackatime::summaries(pool, user_id, fresh).await;
     let totals = hackatime.as_deref().map(hackatime::totals);
     let projects = projects::list(pool, user_id).await?;
     if let Some(hackatime) = &hackatime {
@@ -108,8 +119,15 @@ pub async fn build(pool: &PgPool, user_id: i32) -> anyhow::Result<Dashboard> {
     })
 }
 
+fn refresh_due(user_id: i32) -> bool {
+    let mut refreshed = REFRESHED.lock().unwrap_or_else(PoisonError::into_inner);
+    let now = Instant::now();
+    refreshed.retain(|_, at| now.duration_since(*at) < REFRESH_EVERY);
+    refreshed.insert(user_id, now).is_none()
+}
+
 pub async fn respond(pool: &PgPool, user_id: i32) -> Result<HttpResponse, ApiError> {
-    Ok(HttpResponse::Ok().json(build(pool, user_id).await?))
+    Ok(HttpResponse::Ok().json(build(pool, user_id, false).await?))
 }
 
 #[get("/dashboard")]
@@ -117,10 +135,22 @@ async fn get_dashboard(
     User(user_id): User,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, ApiError> {
-    if let Err(e) = profile::refresh(&pool, user_id).await {
+    let fresh = refresh_due(user_id);
+    if fresh && let Err(e) = profile::refresh(&pool, user_id).await {
+        let expired = e
+            .downcast_ref::<reqwest::Error>()
+            .and_then(reqwest::Error::status)
+            == Some(reqwest::StatusCode::UNAUTHORIZED);
+        if expired {
+            sqlx::query("DELETE FROM session WHERE user_id = $1")
+                .bind(user_id)
+                .execute(pool.get_ref())
+                .await?;
+            return Err(reject_with(StatusCode::UNAUTHORIZED, "Please sign in again"));
+        }
         log::warn!("refreshing HCA profile failed: {e:#}");
     }
-    respond(&pool, user_id).await
+    Ok(HttpResponse::Ok().json(build(&pool, user_id, fresh).await?))
 }
 
 #[post("/guides/seen")]
