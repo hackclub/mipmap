@@ -87,10 +87,10 @@ pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<Session>> {
     Ok(row.map(|(user_id, banned)| Session { user_id, banned }))
 }
 
-pub async fn lookup_page(req: &HttpRequest) -> Result<Option<Session>, HttpResponse> {
+pub async fn lookup_page(req: &HttpRequest) -> Result<Option<Session>, Box<HttpResponse>> {
     lookup(req).await.map_err(|e| {
         log::error!("session lookup failed: {e:#}");
-        HttpResponse::InternalServerError().finish()
+        Box::new(HttpResponse::InternalServerError().finish())
     })
 }
 

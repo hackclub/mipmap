@@ -170,7 +170,7 @@ async fn page(req: HttpRequest) -> HttpResponse {
     match session::lookup_page(&req).await {
         Ok(Some(_)) => {}
         Ok(None) => return redirect("/login"),
-        Err(response) => return response,
+        Err(response) => return *response,
     }
     crate::html(&req, "dashboard").await
 }

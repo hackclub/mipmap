@@ -47,18 +47,18 @@ pub async fn summaries(pool: &PgPool, user_id: i32, fresh: bool) -> Option<Vec<P
     }
 }
 
-async fn signed_in(req: &HttpRequest) -> Result<i32, HttpResponse> {
+async fn signed_in(req: &HttpRequest) -> Result<i32, Box<HttpResponse>> {
     match session::lookup_page(req).await? {
         Some(session) if !session.banned => Ok(session.user_id),
-        Some(_) => Err(redirect("/dashboard")),
-        None => Err(redirect("/login")),
+        Some(_) => Err(Box::new(redirect("/dashboard"))),
+        None => Err(Box::new(redirect("/login"))),
     }
 }
 
 #[get("/hackatime/login")]
 pub async fn start(req: HttpRequest) -> HttpResponse {
     if let Err(response) = signed_in(&req).await {
-        return response;
+        return *response;
     }
     let scopes = Scopes {
         profile: true,
@@ -76,7 +76,7 @@ pub async fn callback(
 ) -> HttpResponse {
     let user_id = match signed_in(&req).await {
         Ok(user_id) => user_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let (token, sink) = token_sink();
     let response = login::handle_callback(

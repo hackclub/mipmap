@@ -1,12 +1,10 @@
 use actix_files::{Files, NamedFile};
-use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_multipart::form::MultipartFormConfig;
 use actix_web::{
-    App, HttpRequest, HttpResponse, HttpServer, get, guard,
+    App, HttpRequest, HttpResponse, HttpServer, get,
     middleware::{DefaultHeaders, from_fn},
     web,
 };
-use std::time::Duration;
 
 mod accounts;
 mod dashboard;
@@ -70,27 +68,10 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("listening on http://0.0.0.0:8080");
 
-    let rate_limit = GovernorConfigBuilder::default()
-        .key_extractor(middleware::ClientIpKeyExtractor)
-        .requests_per_second(8)
-        .burst_size(25)
-        .use_headers()
-        .finish()
-        .expect("rate limit configuration must be valid");
-
-    let limiter = rate_limit.limiter();
-    actix_web::rt::spawn(async move {
-        let mut interval = actix_web::rt::time::interval(Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            limiter.retain_recent();
-            limiter.shrink_to_fit();
-        }
-    });
-
     HttpServer::new(move || {
         App::new()
             .app_data(database_pool.clone())
+            .wrap(from_fn(middleware::cloudflare_only))
             .wrap(
                 DefaultHeaders::new()
                     .add(("X-Content-Type-Options", "nosniff"))
@@ -104,7 +85,6 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api")
                     .app_data(web::PayloadConfig::new(UPLOAD_LIMIT))
                     .app_data(MultipartFormConfig::default().memory_limit(UPLOAD_LIMIT))
-                    .wrap(Governor::new(&rate_limit))
                     .wrap(from_fn(middleware::same_origin))
                     .configure(dashboard::api)
                     .configure(tree::routes)
@@ -114,28 +94,9 @@ async fn main() -> std::io::Result<()> {
                     .service(feedback::create_feedback)
                     .service(accounts::session::logout),
             )
-            .service(
-                web::scope("")
-                    .guard(guard::fn_guard(|ctx| {
-                        accounts::PATHS.contains(&ctx.head().uri.path())
-                    }))
-                    .wrap(Governor::new(&rate_limit))
-                    .configure(accounts::routes),
-            )
-            .service(
-                web::scope("/dashboard/item-images")
-                    .wrap(Governor::new(&rate_limit))
-                    .service(tree::item_image),
-            )
-            .service(
-                web::scope("")
-                    .guard(guard::fn_guard(|ctx| {
-                        let path = ctx.head().uri.path();
-                        path == "/dashboard" || path.starts_with("/dashboard/")
-                    }))
-                    .wrap(Governor::new(&rate_limit))
-                    .configure(dashboard::pages),
-            )
+            .configure(accounts::routes)
+            .service(web::scope("/dashboard/item-images").service(tree::item_image))
+            .configure(dashboard::pages)
             .configure(stats::pages)
             .service(docs)
             .service(Files::new("/", FRONTEND_DIR).index_file("index.html"))

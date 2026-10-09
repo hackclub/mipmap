@@ -83,10 +83,10 @@
     <div>
         Yep! <span class="mipmap">Hack Club Mipmap</span> is a free online
         program where you track time towards engine-less games to accumulate
-        <span class="mip">Mips</span>, which you can then put towards
-        unlocking prizes in your <span class="tech-tree">Tech Tree</span>. You
-        can get things like video games, books, monitors, tools, and a bunch of
-        other goodies thrown in there. You can also boost how many
+        <span class="mip">Mips</span>, which you can then put towards unlocking
+        prizes in your <span class="tech-tree">Tech Tree</span>. You can get
+        things like video games, books, monitors, tools, and a bunch of other
+        goodies thrown in there. You can also boost how many
         <span class="mip">Mips</span> you get through a bunch of means.
     </div>
 {/snippet}
@@ -127,8 +127,8 @@
                 <h5><span class="tier">Tier Sierra</span></h5>
                 <p>
                     Projects in this tier use trickier graphics technologies and
-                    get a bit of a <span class="mip">Mip</span> boost
-                    compared to projects in
+                    get a bit of a <span class="mip">Mip</span> boost compared
+                    to projects in
                     <span class="tier">Tier Romeo</span>. The only projects that
                     qualify are those that meet one of the following criteria:
                 </p>
@@ -188,16 +188,17 @@
         </p>
         <p>
             So here's the rule. You may use as much or as little AI as you feel
-            is necessary, but <b
-                >any time spent AI coding will not be tracked for <span
-                    class="mip">Mips</span
-                ></b
-            >. Note that Hackatime and the <span class="mipmap">Mipmap</span> dashboard
-            will show all of your time by default, AI and all.
+            is necessary, but time spent AI coding will count for less than time
+            spent coding by hand. Note that Hackatime and the <span
+                class="mipmap">Mipmap</span
+            > dashboard will show all of your time by default, AI and all.
         </p>
         <p>
-            Simply retyping the code of an entire project that an LLM put out
-            isn't allowed.
+            You are welcome and encouraged to use these powerful new tools in
+            order to help you understand tricky concepts. Graphics programming
+            is indeed hard, and AI can be great for explaining concepts in the
+            way that clicks best with your brain. However, simply retyping the
+            code of an entire project that an LLM put out isn't allowed.
         </p>
     </div>
 {/snippet}

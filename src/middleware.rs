@@ -1,31 +1,72 @@
 use crate::{error::reject, http};
-use actix_governor::{KeyExtractor, SimpleKeyExtractionError};
 use actix_web::{
     HttpRequest,
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
+    error::ErrorForbidden,
     http::{Method, header},
     middleware::Next,
 };
 use reqwest::Url;
 use std::net::{IpAddr, Ipv6Addr};
 
-#[derive(Clone)]
-pub struct ClientIpKeyExtractor;
+const CLOUDFLARE_RANGES: [&str; 22] = [
+    "173.245.48.0/20",
+    "103.21.244.0/22",
+    "103.22.200.0/22",
+    "103.31.4.0/22",
+    "141.101.64.0/18",
+    "108.162.192.0/18",
+    "190.93.240.0/20",
+    "188.114.96.0/20",
+    "197.234.240.0/22",
+    "198.41.128.0/17",
+    "162.158.0.0/15",
+    "104.16.0.0/13",
+    "104.24.0.0/14",
+    "172.64.0.0/13",
+    "131.0.72.0/22",
+    "2400:cb00::/32",
+    "2606:4700::/32",
+    "2803:f800::/32",
+    "2405:b500::/32",
+    "2405:8100::/32",
+    "2a06:98c0::/29",
+    "2c0f:f248::/32",
+];
 
-impl KeyExtractor for ClientIpKeyExtractor {
-    type Key = IpAddr;
-    type KeyExtractionError = SimpleKeyExtractionError<&'static str>;
-
-    fn extract(&self, req: &ServiceRequest) -> Result<Self::Key, Self::KeyExtractionError> {
-        client_ip(req.request())
-            .ok_or_else(|| SimpleKeyExtractionError::new("Could not extract client IP address"))
+fn in_range(ip: IpAddr, range: &str) -> bool {
+    let Some((net, len)) = range.split_once('/') else {
+        return false;
+    };
+    let Ok(len) = len.parse::<u32>() else {
+        return false;
+    };
+    match (ip.to_canonical(), net.parse()) {
+        (IpAddr::V4(ip), Ok(IpAddr::V4(net))) => {
+            (u32::from(ip) ^ u32::from(net))
+                .checked_shr(32 - len)
+                .unwrap_or(0)
+                == 0
+        }
+        (IpAddr::V6(ip), Ok(IpAddr::V6(net))) => {
+            (u128::from(ip) ^ u128::from(net))
+                .checked_shr(128 - len)
+                .unwrap_or(0)
+                == 0
+        }
+        _ => false,
     }
 }
 
-pub fn client_ip(req: &HttpRequest) -> Option<IpAddr> {
-    let peer = req.peer_addr().map(|addr| addr.ip());
-    peer.filter(|ip| http::is_public(*ip))
+fn is_cloudflare(ip: IpAddr) -> bool {
+    CLOUDFLARE_RANGES.iter().any(|range| in_range(ip, range))
+}
+
+fn edge_ip(req: &HttpRequest) -> Option<IpAddr> {
+    req.peer_addr()
+        .map(|addr| addr.ip())
+        .filter(|ip| http::is_public(*ip))
         .or_else(|| {
             req.headers()
                 .get("x-forwarded-for")
@@ -33,11 +74,33 @@ pub fn client_ip(req: &HttpRequest) -> Option<IpAddr> {
                 .and_then(|list| list.rsplit(',').next())
                 .and_then(|addr| addr.trim().parse::<IpAddr>().ok())
         })
-        .or(peer)
+}
+
+pub fn client_ip(req: &HttpRequest) -> Option<IpAddr> {
+    let edge = edge_ip(req);
+    edge.filter(|ip| is_cloudflare(*ip))
+        .and_then(|_| {
+            req.headers()
+                .get("cf-connecting-ip")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|addr| addr.trim().parse::<IpAddr>().ok())
+        })
+        .or(edge)
+        .or_else(|| req.peer_addr().map(|addr| addr.ip()))
         .map(|ip| match ip.to_canonical() {
             IpAddr::V6(ip) => IpAddr::V6(Ipv6Addr::from(u128::from(ip) & !0 << 64)),
             ip => ip,
         })
+}
+
+pub async fn cloudflare_only(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    if edge_ip(req.request()).is_some_and(|ip| !is_cloudflare(ip)) {
+        return Err(ErrorForbidden("Forbidden"));
+    }
+    next.call(req).await
 }
 
 pub async fn same_origin(
@@ -68,82 +131,56 @@ pub async fn same_origin(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_governor::{Governor, GovernorConfigBuilder};
     use actix_web::{App, HttpResponse, http::StatusCode, test, web};
     use std::net::{Ipv4Addr, SocketAddr};
 
     #[actix_web::test]
-    async fn rate_limit_rejects_requests_after_burst_is_exhausted() {
-        let rate_limit = GovernorConfigBuilder::default()
-            .key_extractor(ClientIpKeyExtractor)
-            .seconds_per_request(60)
-            .burst_size(2)
-            .use_headers()
-            .finish()
-            .unwrap();
+    async fn only_cloudflare_edges_are_allowed() {
         let app = test::init_service(
-            App::new().service(
-                web::scope("/api")
-                    .wrap(Governor::new(&rate_limit))
-                    .route("/hello", web::get().to(HttpResponse::Ok)),
-            ),
-        )
-        .await;
-        let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
-
-        for _ in 0..2 {
-            let request = test::TestRequest::get()
-                .uri("/api/hello")
-                .peer_addr(peer)
-                .to_request();
-            let response = test::call_service(&app, request).await;
-            assert_eq!(response.status(), StatusCode::OK);
-        }
-
-        let request = test::TestRequest::get()
-            .uri("/api/hello")
-            .peer_addr(peer)
-            .to_request();
-        let response = test::call_service(&app, request).await;
-
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-        assert!(response.headers().contains_key("retry-after"));
-    }
-
-    #[actix_web::test]
-    async fn rate_limit_is_tracked_per_forwarded_client() {
-        let rate_limit = GovernorConfigBuilder::default()
-            .key_extractor(ClientIpKeyExtractor)
-            .seconds_per_request(60)
-            .burst_size(1)
-            .finish()
-            .unwrap();
-        let app = test::init_service(
-            App::new().service(
-                web::scope("/api")
-                    .wrap(Governor::new(&rate_limit))
-                    .route("/hello", web::get().to(HttpResponse::Ok)),
-            ),
+            App::new()
+                .wrap(actix_web::middleware::from_fn(cloudflare_only))
+                .route("/", web::get().to(HttpResponse::Ok)),
         )
         .await;
         let proxy = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
 
-        for (headers, expected) in [
-            (vec![("x-forwarded-for", "203.0.113.1")], StatusCode::OK),
-            (vec![("x-forwarded-for", "203.0.113.2")], StatusCode::OK),
-            (vec![("x-forwarded-for", "198.51.100.7, 203.0.113.1")], StatusCode::TOO_MANY_REQUESTS),
-            (
-                vec![("cf-connecting-ip", "203.0.113.3"), ("x-forwarded-for", "203.0.113.1")],
-                StatusCode::TOO_MANY_REQUESTS,
-            ),
+        for (forwarded, expected) in [
+            (None, StatusCode::OK),
+            (Some("203.0.113.1, 162.158.1.2"), StatusCode::OK),
+            (Some("2606:4700::1"), StatusCode::OK),
+            (Some("203.0.113.1"), StatusCode::FORBIDDEN),
+            (Some("162.158.1.2, 203.0.113.1"), StatusCode::FORBIDDEN),
         ] {
-            let mut request = test::TestRequest::get().uri("/api/hello").peer_addr(proxy);
-            for header in headers {
-                request = request.insert_header(header);
+            let mut request = test::TestRequest::get().uri("/").peer_addr(proxy);
+            if let Some(forwarded) = forwarded {
+                request = request.insert_header(("x-forwarded-for", forwarded));
             }
-            let request = request.to_request();
-            let response = test::call_service(&app, request).await;
-            assert_eq!(response.status(), expected);
+            let status = match test::try_call_service(&app, request.to_request()).await {
+                Ok(response) => response.status(),
+                Err(e) => e.as_response_error().status_code(),
+            };
+            assert_eq!(status, expected, "{forwarded:?}");
         }
+    }
+
+    #[actix_web::test]
+    async fn client_ip_trusts_cf_connecting_ip_only_from_cloudflare() {
+        let proxy = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
+        let request = |forwarded| {
+            test::TestRequest::get()
+                .peer_addr(proxy)
+                .insert_header(("x-forwarded-for", forwarded))
+                .insert_header(("cf-connecting-ip", "198.51.100.7"))
+                .to_http_request()
+        };
+
+        assert_eq!(
+            client_ip(&request("162.158.1.2")),
+            "198.51.100.7".parse().ok()
+        );
+        assert_eq!(
+            client_ip(&request("203.0.113.1")),
+            "203.0.113.1".parse().ok()
+        );
     }
 }
