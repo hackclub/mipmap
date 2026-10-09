@@ -1,0 +1,13 @@
+target
+.git
+.env
+.direnv
+.idea
+.junie
+.claude
+.codex
+.agents
+REVIEW.md
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit
