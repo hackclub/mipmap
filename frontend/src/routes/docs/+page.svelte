@@ -97,6 +97,13 @@
             ],
         },
     ];
+
+    const misc = [
+        {
+            text: "Calculate normal of a single triangle in 3D space",
+            href: "https://stackoverflow.com/questions/19350792/calculate-normal-of-a-single-triangle-in-3d-space",
+        },
+    ];
 </script>
 
 <SiteHead
@@ -141,6 +148,18 @@
             </section>
         {/each}
     </div>
+    <header class="card section">
+        <h2>Misc</h2>
+    </header>
+    <section class="card wide">
+        <ul>
+            {#each misc as { text, href }}
+                <li>
+                    <a {href} target="_blank" rel="noopener">{text}</a>
+                </li>
+            {/each}
+        </ul>
+    </section>
 </main>
 
 <style>
@@ -179,6 +198,10 @@
         width: 100%;
     }
 
+    h3 + ul {
+        margin-top: 0.5rem;
+    }
+
     h3 {
         margin: 0;
         font-size: 1.25rem;
@@ -186,7 +209,7 @@
     }
 
     ul {
-        margin: 0.5rem 0 0;
+        margin: 0;
         padding-left: 1.25rem;
     }
 
