@@ -22,6 +22,7 @@ const SOURCES: &[Source] = &[
     table("submission"),
     table("feedback"),
     Source { name: "user_loops", table: "user", changed: "changed_at" },
+    Source { name: "project_hackatime", table: "project", changed: "changed_at" },
 ];
 
 fn table_name(table: &str) -> String {

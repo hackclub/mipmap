@@ -112,6 +112,8 @@
     path="/docs"
 />
 
+<a class="home" href="/">Home</a>
+
 <main>
     <header class="card">
         <h1>Mipmap Docs</h1>
@@ -170,8 +172,28 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
-        padding: 3rem 1rem;
+        padding: 4.5rem 1rem 3rem;
         color: #ead7c2;
+    }
+
+    .home {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: #4f2f1f;
+        color: #ead7c2;
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .home:hover,
+    .home:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
     }
 
     .card {
