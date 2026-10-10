@@ -1,9 +1,5 @@
 <script lang="ts">
-    let {
-        values,
-        start,
-        end,
-    }: { values: number[]; start: string; end: string } = $props();
+    let { values, labels }: { values: number[]; labels: string[] } = $props();
 
     const width = 100;
     const height = 100;
@@ -37,6 +33,15 @@
             .map((p) => `${p.x},${p.y}`)
             .join(" "),
     );
+
+    let hovered = $state<number>();
+    const point = $derived(hovered === undefined ? undefined : points[hovered]);
+
+    function hover(event: PointerEvent) {
+        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+        hovered = Math.round(ratio * (values.length - 1));
+    }
 </script>
 
 <div class="chart">
@@ -48,23 +53,48 @@
         {/each}
         <span class="sizer">{top.toLocaleString()}</span>
     </div>
-    <div class="plot">
-    <svg
-        viewBox="0 0 {width} {height}"
-        preserveAspectRatio="none"
-        aria-hidden="true"
+    <div
+        class="plot"
+        role="presentation"
+        onpointermove={hover}
+        onpointerdown={hover}
+        onpointerleave={() => (hovered = undefined)}
     >
-        <polygon class="area" points="0,{height} {line} {width},{height}" />
-        {#each ticks as tick (tick)}
-            {@const y = height - (tick / top) * height}
-            <line class="grid" x1="0" x2={width} y1={y} y2={y} />
-        {/each}
-        <polyline class="line" points={line} />
-    </svg>
+        <svg
+            viewBox="0 0 {width} {height}"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+        >
+            <polygon class="area" points="0,{height} {line} {width},{height}" />
+            {#each ticks as tick (tick)}
+                {@const y = height - (tick / top) * height}
+                <line class="grid" x1="0" x2={width} y1={y} y2={y} />
+            {/each}
+            <polyline class="line" points={line} />
+        </svg>
+        {#if hovered !== undefined && point}
+            <div class="cursor" style:left="{point.x}%" aria-hidden="true"></div>
+            <div
+                class="dot"
+                style:left="{point.x}%"
+                style:top="{point.y}%"
+                aria-hidden="true"
+            ></div>
+            <div
+                class="tip"
+                class:low={point.y < 50}
+                style:left="{point.x}%"
+                style:transform="translateX(-{point.x}%)"
+                aria-hidden="true"
+            >
+                <strong>{values[hovered].toLocaleString()}</strong>
+                <span>{labels[hovered]}</span>
+            </div>
+        {/if}
     </div>
     <div class="dates">
-        <span>{start}</span>
-        <span>{end}</span>
+        <span>{labels[0]}</span>
+        <span>{labels[labels.length - 1]}</span>
     </div>
 </div>
 
@@ -99,6 +129,58 @@
 
     .plot {
         position: relative;
+        touch-action: pan-y;
+    }
+
+    .cursor {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: #ead7c2;
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    .dot {
+        position: absolute;
+        box-sizing: border-box;
+        width: 0.85rem;
+        height: 0.85rem;
+        background: #ead7c2;
+        border: 3px solid #4f2f1f;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+
+    .tip {
+        position: absolute;
+        top: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 0.3rem 0.5rem;
+        background: #3d3029;
+        border: 2px solid #4f2f1f;
+        border-radius: 5px;
+        white-space: nowrap;
+        font-size: 0.8rem;
+        line-height: 1.3;
+        pointer-events: none;
+    }
+
+    .tip.low {
+        top: auto;
+        bottom: 0;
+    }
+
+    .tip strong {
+        color: #ead7c2;
+        font-size: 1rem;
+    }
+
+    .tip span {
+        color: #d6ab70;
     }
 
     svg {

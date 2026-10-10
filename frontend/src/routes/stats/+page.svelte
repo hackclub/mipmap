@@ -22,6 +22,7 @@
     ];
     let range = $state(24 * 7);
     const hours = $derived(data?.hours.slice(-range) ?? []);
+    const hour_labels = $derived(hours.map((hour) => short_time(hour.hour)));
     const quick = $derived(
         data && [
             [
@@ -133,8 +134,7 @@
                     <div class="big">{now.signed_up.toLocaleString()}</div>
                     <LineChart
                         values={hours.map((hour) => hour.signed_up)}
-                        start={short_time(hours[0].hour)}
-                        end={short_time(now.hour)}
+                        labels={hour_labels}
                     />
                 </div>
                 <div class="half">
@@ -144,8 +144,7 @@
                     </div>
                     <LineChart
                         values={hours.map((hour) => hour.logged_in)}
-                        start={short_time(hours[0].hour)}
-                        end={short_time(now.hour)}
+                        labels={hour_labels}
                     />
                 </div>
             </section>
@@ -154,8 +153,7 @@
                 <div class="big">{today.active.toLocaleString()}</div>
                 <LineChart
                     values={data.days.map((day) => day.active)}
-                    start={short_date(data.days[0].date)}
-                    end={short_date(today.date)}
+                    labels={data.days.map((day) => short_date(day.date))}
                 />
             </section>
         </div>
