@@ -54,7 +54,7 @@
             name: "Vulkan",
             description: "Low-level cross-platform graphics library",
             links: [
-                { text: "Vulkan Tutorial", href: "https://vulkan-tutorial.com/" },
+                { text: "How to Vulkan", href: "https://howtovulkan.com/" },
                 { text: "Vulkan Guide", href: "https://vkguide.dev/" },
                 { text: "Official Vulkan documentation", href: "https://docs.vulkan.org/" },
             ],
