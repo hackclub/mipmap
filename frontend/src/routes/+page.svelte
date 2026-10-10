@@ -335,12 +335,10 @@
         top: 0;
         left: 0;
         width: 100%;
-        filter: drop-shadow(4px 6px 6px rgba(0, 0, 0, 0.45));
     }
 
     .logo {
         position: absolute;
-        filter: drop-shadow(4px 6px 6px rgba(0, 0, 0, 0.45));
     }
 
     .actions {

@@ -1,7 +1,6 @@
 <script lang="ts">
-	import Cog from '$lib/ui/Cog.svelte';
-	import large_cog from '$lib/assets/large-cog.svg';
 	import { cog_size, large_cog_size, hub_radius } from '$lib/cog_layout';
+	import { belt_shadow, cog_image, cog_shadow, shadow_pad, shadow_x, shadow_y } from '$lib/landing/cog_images';
 	import type { Blocked, FieldCog } from '$lib/landing/cog_field';
 
 	let {
@@ -92,8 +91,25 @@
 			`A ${belt_radius} ${belt_radius} 0 0 0 ${from.x + nx} ${from.y + ny}`,
 			'Z'
 		].join(' ');
+		const extent = belt_radius + belt_thickness / 2;
+		const left = Math.min(from.x, cog.x) - extent - shadow_pad;
+		const top = Math.min(from.y, cog.y) - extent - shadow_pad;
+		const width = Math.abs(dx) + 2 * extent + 2 * shadow_pad + shadow_x;
+		const height = Math.abs(dy) + 2 * extent + 2 * shadow_pad + shadow_y;
+		const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 		return {
 			path,
+			shadow: {
+				src: belt_shadow(path, belt_thickness, [left, top, width, height]),
+				left,
+				top,
+				width,
+				height
+			},
+			runs: [
+				{ x: from.x + nx, y: from.y + ny, angle },
+				{ x: cog.x - nx, y: cog.y - ny, angle: angle + 180 }
+			],
 			perimeter: 2 * distance + 2 * Math.PI * belt_radius,
 			mid_x: (from.x + cog.x) / 2,
 			mid_y: (from.y + cog.y) / 2,
@@ -142,20 +158,69 @@
 	});
 </script>
 
+{#each visible_belts as belt (belt)}
+	<img
+		class="belt-shadow"
+		src={belt.shadow.src}
+		style:left="{belt.shadow.left}px"
+		style:top="{belt.shadow.top}px"
+		width={belt.shadow.width}
+		height={belt.shadow.height}
+		alt=""
+	/>
+{/each}
+
+{#each visible_cogs as cog (cog)}
+	<div
+		class="cog"
+		style:left="{cog.x - cog.size / 2 - shadow_pad + shadow_x}px"
+		style:top="{cog.y - cog.size / 2 - shadow_pad + shadow_y}px"
+		style:--spin-duration="{12 * cog.size / cog_size}s"
+	>
+		<div style:transform="rotate({cog.offset}deg)">
+			<div class={cog.parity === 1 ? 'cw' : 'ccw'}>
+				<img src={cog_shadow(cog.size)} width={cog.size + 2 * shadow_pad} height={cog.size + 2 * shadow_pad} alt="" />
+			</div>
+		</div>
+	</div>
+{/each}
+
 <svg class="belts" aria-hidden="true">
 	{#each visible_belts as belt (belt)}
 		<path class="belt" d={belt.path} stroke-width={belt_thickness} />
-		<path
-			class="stripe"
-			class:clockwise={belt.clockwise}
-			d={belt.path}
-			stroke-width={belt_thickness}
-			stroke-dasharray={`${stripe_length} ${belt.perimeter / 2 - stripe_length}`}
-			style:--travel="{belt.perimeter}px"
-			style:--duration="{belt.perimeter / belt_speed}s"
-		/>
 	{/each}
 </svg>
+
+{#each visible_belts as belt (belt)}
+	{#each belt.runs as run}
+		<div
+			class="run"
+			style:left="{run.x}px"
+			style:top="{run.y - belt_thickness / 2}px"
+			style:width="{belt.distance}px"
+			style:height="{belt_thickness}px"
+			style:transform="rotate({run.angle}deg)"
+		>
+			<div
+				class="track"
+				class:clockwise={belt.clockwise}
+				style:width="{belt.perimeter}px"
+				style:--duration="{belt.perimeter / 2 / belt_speed}s"
+			>
+				<span
+					style:left="0"
+					style:width="{stripe_length + belt_thickness}px"
+					style:margin-left="{-belt_thickness / 2}px"
+				></span>
+				<span
+					style:left="50%"
+					style:width="{stripe_length + belt_thickness}px"
+					style:margin-left="{-belt_thickness / 2}px"
+				></span>
+			</div>
+		</div>
+	{/each}
+{/each}
 
 {#each visible_cogs as cog (cog)}
 	<div
@@ -163,15 +228,10 @@
 		style:left="{cog.x - cog.size / 2}px"
 		style:top="{cog.y - cog.size / 2}px"
 		style:--spin-duration="{12 * cog.size / cog_size}s"
-		style:filter="brightness({brightness_for(cog)})"
 	>
 		<div style:transform="rotate({cog.offset}deg)">
 			<div class={cog.parity === 1 ? 'cw' : 'ccw'}>
-				{#if cog.size === large_cog_size}
-					<img src={large_cog} width={cog.size} height={cog.size} alt="" />
-				{:else}
-					<Cog size={cog.size} />
-				{/if}
+				<img src={cog_image(cog.size, brightness_for(cog))} width={cog.size} height={cog.size} alt="" />
 			</div>
 		</div>
 	</div>
@@ -187,31 +247,47 @@
 		pointer-events: none;
 	}
 
-	.belt,
-	.stripe {
-		fill: none;
-		stroke-linecap: round;
-	}
-
 	.belt {
+		fill: none;
 		stroke: #4f2f1f;
 	}
 
-	.stripe {
-		stroke: #a87958;
+	.belt-shadow {
+		position: absolute;
+		pointer-events: none;
+	}
+
+	.run {
+		position: absolute;
+		overflow: hidden;
+		transform-origin: 0 50%;
+		pointer-events: none;
+	}
+
+	.track {
+		position: absolute;
+		inset: 0 auto 0 0;
 		animation: belt-travel var(--duration) linear infinite;
 	}
 
-	.stripe.clockwise {
+	.track.clockwise {
 		animation-direction: reverse;
+	}
+
+	.track span {
+		position: absolute;
+		top: 0;
+		height: 100%;
+		border-radius: 999px;
+		background: #a87958;
 	}
 
 	@keyframes belt-travel {
 		from {
-			stroke-dashoffset: 0;
+			transform: translateX(-50%);
 		}
 		to {
-			stroke-dashoffset: calc(-1 * var(--travel));
+			transform: translateX(0);
 		}
 	}
 
@@ -238,7 +314,7 @@
 	@media (prefers-reduced-motion: reduce) {
 		.cw,
 		.ccw,
-		.stripe {
+		.track {
 			animation: none;
 		}
 	}
