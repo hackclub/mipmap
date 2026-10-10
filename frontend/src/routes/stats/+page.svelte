@@ -7,20 +7,40 @@
     import Funnel from "$lib/stats/Funnel.svelte";
     import LineChart from "$lib/stats/LineChart.svelte";
     import type { Stats } from "$lib/stats/types";
+    import { duration, short_date, short_time } from "$lib/format";
 
     const stats = new Load(() => get_json<Stats>("/api/stats"));
 
     const data = $derived(stats.data);
     const today = $derived(data?.days[data.days.length - 1]);
+    const now = $derived(data?.hours[data.hours.length - 1]);
+
+    const ranges: [string, number][] = [
+        ["24h", 24],
+        ["7d", 24 * 7],
+        ["All", Infinity],
+    ];
+    let range = $state(24 * 7);
+    const hours = $derived(data?.hours.slice(-range) ?? []);
     const quick = $derived(
         data && [
-            ["Hours spent building", Math.round(data.totals.hours_building)],
-            ["Projects shipped", data.totals.projects_shipped],
-            ["Hours approved", Math.round(data.totals.hours_approved)],
-            ["Mips awarded", data.totals.mips_awarded],
-            ["Snapshots shared", data.totals.snapshots_shared],
-            ["Successful referrals", data.totals.successful_referrals],
-            ["Orders placed", data.totals.orders_placed],
+            [
+                ["Projects created", data.totals.projects_created.toLocaleString()],
+                ["Hours spent building", Math.round(data.totals.hours_building).toLocaleString()],
+                ["Projects shipped", data.totals.projects_shipped.toLocaleString()],
+                ["Hours approved", Math.round(data.totals.hours_approved).toLocaleString()],
+            ],
+            [
+                ["Mips awarded", data.totals.mips_awarded.toLocaleString()],
+                ["Snapshots shared", data.totals.snapshots_shared.toLocaleString()],
+                ["Successful referrals", data.totals.successful_referrals.toLocaleString()],
+                ["Orders placed", data.totals.orders_placed.toLocaleString()],
+            ],
+            [
+                ["Awaiting review", data.totals.awaiting_review.toLocaleString()],
+                ["Average wait in queue", duration(data.totals.average_wait_hours)],
+                ["Average time to approve", duration(data.totals.average_approval_hours)],
+            ],
         ],
     );
     const steps = $derived(
@@ -28,14 +48,55 @@
             { label: "Visited", count: data.funnel.visited },
             { label: "Signed in", count: data.funnel.signed_in },
             { label: "Linked Hackatime", count: data.funnel.linked_hackatime },
+            { label: "Created a project", count: data.funnel.created_project },
             { label: "Logged time", count: data.funnel.logged_time },
             { label: "Shipped a project", count: data.funnel.shipped },
             { label: "Redeemed a prize", count: data.funnel.redeemed },
         ],
     );
 
-    onMount(stats.run);
+    const refresh_ms = 30_000;
+
+    let refreshing = $state(false);
+    let refreshed = $state(0);
+    let clock = $state(Date.now());
+    let attempted = 0;
+    let timer = 0;
+
+    const ago = $derived.by(() => {
+        const seconds = Math.max(0, Math.floor((clock - refreshed) / 1000));
+        return seconds < 60
+            ? `${seconds}s ago`
+            : `${Math.floor(seconds / 60)}m ${seconds % 60}s ago`;
+    });
+
+    function schedule() {
+        clearTimeout(timer);
+        if (document.hidden || refreshing) return;
+        timer = window.setTimeout(refresh, Math.max(0, attempted + refresh_ms - Date.now()));
+    }
+
+    async function refresh() {
+        clearTimeout(timer);
+        attempted = Date.now();
+        refreshing = true;
+        await stats.run();
+        refreshing = false;
+        if (!stats.error) refreshed = clock = Date.now();
+        schedule();
+    }
+
+    onMount(() => {
+        refresh();
+        const tick = setInterval(() => (clock = Date.now()), 1000);
+        return () => {
+            clearTimeout(timer);
+            clearInterval(tick);
+        };
+    });
 </script>
+
+<svelte:document onvisibilitychange={schedule} />
 
 <SiteHead
     title="Stats - Hack Club Mipmap"
@@ -43,31 +104,72 @@
     path="/stats"
 />
 
-{#if data && today && quick && steps}
+{#if data && today && now && quick && steps}
     <main>
-        <h1>Mipmap Stats</h1>
+        <header>
+            <h1>Mipmap Stats</h1>
+            <div class="refresh">
+                <span>Refreshed {ago}</span>
+                <button type="button" disabled={refreshing} onclick={refresh}
+                    >Refresh</button
+                >
+            </div>
+        </header>
 
         <div class="pair">
-            <section class="card">
-                <div class="label">Signed Up Users</div>
-                <div class="big">{today.signed_up.toLocaleString()}</div>
-                <LineChart days={data.days} value={(day) => day.signed_up} />
+            <section class="card split">
+                <div class="ranges">
+                    {#each ranges as [label, value] (label)}
+                        <button
+                            type="button"
+                            class:active={range === value}
+                            aria-pressed={range === value}
+                            onclick={() => (range = value)}>{label}</button
+                        >
+                    {/each}
+                </div>
+                <div class="half">
+                    <div class="label">Signed Up Users</div>
+                    <div class="big">{now.signed_up.toLocaleString()}</div>
+                    <LineChart
+                        values={hours.map((hour) => hour.signed_up)}
+                        start={short_time(hours[0].hour)}
+                        end={short_time(now.hour)}
+                    />
+                </div>
+                <div class="half">
+                    <div class="label">Logged In (last 24 hours)</div>
+                    <div class="big">
+                        {data.totals.logged_in_last_day.toLocaleString()}
+                    </div>
+                    <LineChart
+                        values={hours.map((hour) => hour.logged_in)}
+                        start={short_time(hours[0].hour)}
+                        end={short_time(now.hour)}
+                    />
+                </div>
             </section>
-            <section class="card">
+            <section class="card column">
                 <div class="label">Daily Active Users</div>
                 <div class="big">{today.active.toLocaleString()}</div>
-                <LineChart days={data.days} value={(day) => day.active} />
+                <LineChart
+                    values={data.days.map((day) => day.active)}
+                    start={short_date(data.days[0].date)}
+                    end={short_date(today.date)}
+                />
             </section>
         </div>
 
-        <section class="card quick">
-            {#each quick as [label, value] (label)}
-                <div>
-                    <div class="value">{value.toLocaleString()}</div>
-                    <div class="label small">{label}</div>
-                </div>
-            {/each}
-        </section>
+        {#each quick as row, i (i)}
+            <section class="card quick">
+                {#each row as [label, value] (label)}
+                    <div>
+                        <div class="value">{value}</div>
+                        <div class="label small">{label}</div>
+                    </div>
+                {/each}
+            </section>
+        {/each}
 
         <section class="card">
             <div class="label">Funnel</div>
@@ -92,6 +194,51 @@
         color: #ead7c2;
     }
 
+    header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+    }
+
+    .refresh {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: #d6ab70;
+        font-size: 0.9rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .refresh button,
+    .ranges button {
+        padding: 0.5rem 1rem;
+        background-color: #4f2f1f;
+        border: none;
+        color: #ead7c2;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .refresh button:hover:not(:disabled),
+    .refresh button:focus-visible,
+    .ranges button:hover,
+    .ranges button:focus-visible,
+    .ranges button.active {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    .refresh button:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
     h1 {
         margin: 0;
         font-size: 2rem;
@@ -111,6 +258,35 @@
         background: #74472a;
         border: 2px solid #4f2f1f;
         border-radius: 7px;
+    }
+
+    .column,
+    .half {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .split {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .ranges {
+        position: absolute;
+        top: 1.25rem;
+        right: 1.25rem;
+        display: flex;
+    }
+
+    .ranges button {
+        padding: 0.25rem 0.6rem;
+        font-size: 0.85rem;
+    }
+
+    .half {
+        flex: 1;
     }
 
     .label {

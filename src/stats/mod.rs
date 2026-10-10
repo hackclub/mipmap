@@ -1,6 +1,6 @@
 use crate::{error::ApiError, middleware, projects::review};
 use actix_web::{HttpRequest, HttpResponse, get, post, web, web::Bytes};
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{
@@ -15,7 +15,7 @@ mod sync;
 
 pub use sync::spawn;
 
-const CACHE_FOR: Duration = Duration::from_secs(60 * 60);
+const CACHE_FOR: Duration = Duration::from_secs(30);
 
 const VISITS_PER_IP: u32 = 50;
 const VISITOR_IPS: usize = 100_000;
@@ -40,14 +40,26 @@ struct Day {
 }
 
 #[derive(Serialize, sqlx::FromRow)]
+struct Hour {
+    hour: DateTime<Utc>,
+    signed_up: i64,
+    logged_in: i64,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
 struct Totals {
     hours_building: f64,
+    projects_created: i64,
     projects_shipped: i64,
     hours_approved: f64,
     mips_awarded: i64,
     snapshots_shared: i64,
     successful_referrals: i64,
     orders_placed: i64,
+    logged_in_last_day: i64,
+    awaiting_review: i64,
+    average_wait_hours: Option<f64>,
+    average_approval_hours: Option<f64>,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -55,6 +67,7 @@ struct Funnel {
     visited: i64,
     signed_in: i64,
     linked_hackatime: i64,
+    created_project: i64,
     logged_time: i64,
     shipped: i64,
     redeemed: i64,
@@ -63,6 +76,7 @@ struct Funnel {
 #[derive(Serialize)]
 struct Stats {
     days: Vec<Day>,
+    hours: Vec<Hour>,
     totals: Totals,
     funnel: Funnel,
 }
@@ -91,10 +105,37 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     )
     .fetch_all(pool)
     .await?;
+    let hours = sqlx::query_as(
+        "WITH signups AS (
+             SELECT date_trunc('hour', signup_at AT TIME ZONE 'UTC') AS hour, count(*) AS users
+             FROM \"user\" WHERE deleted_at IS NULL GROUP BY 1
+         ), logins AS (
+             SELECT date_trunc('hour', login.logged_in_at AT TIME ZONE 'UTC') AS hour,
+                 count(DISTINCT login.user_id) AS users
+             FROM login JOIN \"user\" ON \"user\".id = login.user_id
+             WHERE \"user\".deleted_at IS NULL GROUP BY 1
+         ), range AS (
+             SELECT generate_series(
+                 LEAST((SELECT min(hour) FROM signups), date_trunc('hour', now() AT TIME ZONE 'UTC')),
+                 date_trunc('hour', now() AT TIME ZONE 'UTC'),
+                 interval '1 hour'
+             ) AS hour
+         )
+         SELECT range.hour AT TIME ZONE 'UTC' AS hour,
+             (sum(COALESCE(signups.users, 0)) OVER (ORDER BY range.hour))::bigint AS signed_up,
+             COALESCE(logins.users, 0) AS logged_in
+         FROM range
+         LEFT JOIN signups USING (hour)
+         LEFT JOIN logins USING (hour)
+         ORDER BY range.hour",
+    )
+    .fetch_all(pool)
+    .await?;
     let totals = sqlx::query_as(
         "SELECT
              (SELECT COALESCE(sum(total_seconds), 0) FROM project WHERE deleted_at IS NULL)::float8
                  / 3600 AS hours_building,
+             (SELECT count(*) FROM project WHERE deleted_at IS NULL) AS projects_created,
              (SELECT count(DISTINCT project_id) FROM submission WHERE deleted_at IS NULL)
                  AS projects_shipped,
              (SELECT COALESCE(sum(hours), 0) FROM (
@@ -106,7 +147,19 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
                  + (SELECT count(*) FROM \"user\" WHERE referral_paid) * $2 AS mips_awarded,
              (SELECT count(*) FROM snapshot WHERE deleted_at IS NULL) AS snapshots_shared,
              (SELECT count(*) FROM \"user\" WHERE referral_paid) AS successful_referrals,
-             (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL) AS orders_placed",
+             (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL) AS orders_placed,
+             (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
+              WHERE \"user\".deleted_at IS NULL AND login.logged_in_at > now() - interval '1 day')
+                 AS logged_in_last_day,
+             (SELECT count(*) FROM submission
+              WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1)
+                 AS awaiting_review,
+             (SELECT extract(epoch FROM avg(now() - created_at))::float8 / 3600 FROM submission
+              WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1)
+                 AS average_wait_hours,
+             (SELECT extract(epoch FROM avg(approved_at - created_at))::float8 / 3600 FROM submission
+              WHERE deleted_at IS NULL AND approved_at IS NOT NULL)
+                 AS average_approval_hours",
     )
     .bind(review::APPROVED)
     .bind(review::REFERRER_MIPS + review::REFEREE_MIPS)
@@ -117,6 +170,9 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
              (SELECT count(*) FROM visitor) AS visited,
              count(*) AS signed_in,
              count(*) FILTER (WHERE hackatime_user_id IS NOT NULL) AS linked_hackatime,
+             count(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM project WHERE user_id = \"user\".id AND deleted_at IS NULL
+             )) AS created_project,
              count(*) FILTER (WHERE EXISTS (SELECT 1 FROM active_day WHERE user_id = \"user\".id))
                  AS logged_time,
              count(*) FILTER (WHERE EXISTS (
@@ -130,7 +186,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     )
     .fetch_one(pool)
     .await?;
-    Ok(serde_json::to_vec(&Stats { days, totals, funnel })?.into())
+    Ok(serde_json::to_vec(&Stats { days, hours, totals, funnel })?.into())
 }
 
 #[get("/stats")]

@@ -103,6 +103,10 @@ async fn sign_in(
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
+    sqlx::query("INSERT INTO login (user_id) VALUES ($1)")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     tokens::store(&mut *tx, user_id, Provider::Hca, token).await?;
     let cookie = session::create(&mut *tx, user_id).await?;
     tx.commit().await?;

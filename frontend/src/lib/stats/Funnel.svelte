@@ -14,7 +14,14 @@
             class="segment"
             style:clip-path="polygon({top}% 0, {100 - top}% 0, {100 - bottom}% 100%, {bottom}% 100%)"
         ></div>
-        <span class="count">{step.count.toLocaleString()}</span>
+        <span class="count">
+            {step.count.toLocaleString()}
+            {#if i > 0 && steps[i - 1].count > 0}
+                <span class="percent"
+                    >{Math.round((step.count / steps[i - 1].count) * 100)}%</span
+                >
+            {/if}
+        </span>
     {/each}
 </div>
 
@@ -34,5 +41,12 @@
     .count {
         text-align: right;
         font-variant-numeric: tabular-nums;
+    }
+
+    .percent {
+        display: inline-block;
+        min-width: 3.5ch;
+        margin-left: 0.5rem;
+        color: #d6ab70;
     }
 </style>
