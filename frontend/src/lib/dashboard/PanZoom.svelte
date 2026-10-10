@@ -47,9 +47,11 @@
     let scale = $state(1);
     let animating = $state(false);
     let dragging = $state(false);
-    let duration = $state(300);
-    let animation_timer = 0;
+    let tween = $state({ x: 0, y: 0, scale: 1 });
+    let frame = 0;
     let leave_timer = 0;
+
+    const shown = $derived(animating ? tween : { x, y, scale });
 
     const pointers = new Map<number, { x: number; y: number }>();
     let dragged = false;
@@ -96,16 +98,40 @@
         constrain();
     }
 
-    function animate(ms = 300) {
-        duration = ms;
+    function ease_in_out(p: number) {
+        const at = (a: number, b: number, s: number) =>
+            3 * a * s * (1 - s) ** 2 + 3 * b * s ** 2 * (1 - s) + s ** 3;
+        let [lo, hi] = [0, 1];
+        for (let i = 0; i < 20; i++) {
+            const mid = (lo + hi) / 2;
+            if (at(0.42, 0.58, mid) < p) lo = mid;
+            else hi = mid;
+        }
+        return at(0, 1, (lo + hi) / 2);
+    }
+
+    function animate(from: typeof tween, ms = 300) {
+        cancelAnimationFrame(frame);
+        const start = performance.now();
+        tween = from;
         animating = true;
-        clearTimeout(animation_timer);
-        animation_timer = window.setTimeout(() => (animating = false), ms);
+        const step = (now: number) => {
+            const t = Math.min(1, (now - start) / ms);
+            const e = ease_in_out(t);
+            tween = {
+                x: from.x + (x - from.x) * e,
+                y: from.y + (y - from.y) * e,
+                scale: from.scale + (scale - from.scale) * e,
+            };
+            if (t < 1) frame = requestAnimationFrame(step);
+            else animating = false;
+        };
+        frame = requestAnimationFrame(step);
     }
 
     function stop() {
         animating = false;
-        clearTimeout(animation_timer);
+        cancelAnimationFrame(frame);
     }
 
     const nudge = (start: number, size: number, view: number, pad: number) =>
@@ -138,6 +164,7 @@
         } = {},
     ) {
         if (!view_width || !view_height) return;
+        const from = { ...shown };
         const area_width = view_width - inset.left - inset.right;
         const area_height = view_height - inset.top - inset.bottom;
         const fit = Math.min(
@@ -160,12 +187,13 @@
             y += nudge(y + within.top * scale, within.height * scale, view_height, padding);
         }
         if (!free) constrain();
-        if (smooth) animate(ms);
+        if (smooth) animate(from, ms);
     }
 
     export function settle() {
+        const from = { ...shown };
         constrain();
-        animate();
+        animate(from);
     }
 
     function recenter(smooth = true) {
@@ -173,8 +201,9 @@
     }
 
     function zoom(factor: number) {
+        const from = { ...shown };
         zoom_at(factor, view_width / 2, view_height / 2);
-        animate();
+        animate(from);
     }
 
     $effect(() => {
@@ -374,16 +403,17 @@
                   ? view_height - pad - bottom
                   : 0;
         if (!dx && !dy) return;
+        const from = { ...shown };
         x += dx;
         y += dy;
         constrain();
-        animate();
+        animate(from);
     }
 
     const dot_spacing = $derived(
         grid *
-            scale *
-            2 ** Math.max(0, Math.ceil(Math.log2(16 / (grid * scale)))),
+            shown.scale *
+            2 ** Math.max(0, Math.ceil(Math.log2(16 / (grid * shown.scale)))),
     );
 </script>
 
@@ -393,12 +423,10 @@
     bind:clientWidth={view_width}
     bind:clientHeight={view_height}
     style:background-size="{dot_spacing}px {dot_spacing}px"
-    style:background-position="{x + (grid / 2) * scale - dot_spacing / 2}px {y +
-        (grid / 2) * scale -
-        dot_spacing / 2}px"
-    class:animating
+    style:background-position="{shown.x +
+        (grid / 2) * shown.scale -
+        dot_spacing / 2}px {shown.y + (grid / 2) * shown.scale - dot_spacing / 2}px"
     class:dragging
-    style:--duration="{duration}ms"
     inert={locked}
     {onpointerdown}
     {onpointermove}
@@ -412,9 +440,8 @@
 >
     <div
         class="world"
-        class:animating
         class:dragging
-        style:transform="translate({x}px, {y}px) scale({scale})"
+        style:transform="translate({shown.x}px, {shown.y}px) scale({shown.scale})"
     >
         {@render children()}
     </div>
@@ -472,19 +499,8 @@
         -webkit-user-select: none;
     }
 
-    .world.animating,
     .world.dragging {
         will-change: transform;
-    }
-
-    .viewport.animating {
-        transition:
-            background-position var(--duration) ease-in-out,
-            background-size var(--duration) ease-in-out;
-    }
-
-    .world.animating {
-        transition: transform var(--duration) ease-in-out;
     }
 
     .controls {

@@ -106,7 +106,7 @@
 	{#each cogs as cog}
 		{@const b = box(cog, pad)}
 		<div class="cog" style:left={b.left} style:top={b.top} style:width={b.width} style:translate="{shadow_x}px {shadow_y}px">
-			<img class="spin" class:reverse={cog.reverse} src={width ? shadow(cog) : undefined} alt="" />
+			<img decoding="sync" class="spin" class:reverse={cog.reverse} src={width ? shadow(cog) : undefined} alt="" />
 		</div>
 	{/each}
 	{#each cogs as cog}

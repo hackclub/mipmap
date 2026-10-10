@@ -9,6 +9,7 @@ export const shadow_pad = 4 * shadow_blur;
 
 const large_cog_path = large_cog_svg.match(/ d="([^"]+)"/)![1];
 const cache = new Map<string, string>();
+const decoded: HTMLImageElement[] = [];
 
 export function svg_url(svg: string) {
 	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
@@ -38,6 +39,12 @@ function cached(key: string, build: () => string) {
 	if (!url) {
 		url = svg_url(build());
 		cache.set(key, url);
+		if (typeof Image !== 'undefined') {
+			const image = new Image();
+			image.src = url;
+			image.decode().catch(() => {});
+			decoded.push(image);
+		}
 	}
 	return url;
 }
