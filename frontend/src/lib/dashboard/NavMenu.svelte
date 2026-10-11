@@ -10,6 +10,7 @@
     let toggle: HTMLButtonElement;
     let list = $state<HTMLUListElement>();
     let open = $state(false);
+    let armed = true;
     let pointer = "";
 
     function grow(node: HTMLElement) {
@@ -27,6 +28,7 @@
     function close() {
         if (list?.contains(document.activeElement)) toggle.focus();
         open = false;
+        armed = false;
     }
 
     function distance(e: PointerEvent) {
@@ -41,7 +43,8 @@
     onpointermove={(e) => {
         if (e.pointerType !== "mouse") return;
         const d = distance(e);
-        if (!open && d < reach()) open = true;
+        if (d >= reach()) armed = true;
+        if (!open && armed && d < reach()) open = true;
         else if (open && d > 2 * reach()) close();
     }}
     onpointerdown={(e) => {
@@ -65,7 +68,7 @@
         aria-expanded={open}
         onpointerdown={(e) => (pointer = e.pointerType)}
         onclick={() => {
-            if (pointer !== "mouse") open = !open;
+            open = pointer === "mouse" || !open;
             pointer = "";
         }}
     >
@@ -81,8 +84,12 @@
         <ul bind:this={list} transition:grow>
             {#each items as item (item.label)}
                 <li>
-                    <button type="button" onclick={item.onselect}
-                        >{item.label}</button
+                    <button
+                        type="button"
+                        onclick={() => {
+                            item.onselect();
+                            close();
+                        }}>{item.label}</button
                     >
                 </li>
             {/each}
