@@ -52,6 +52,8 @@
 
     const task = new Task();
 
+    let customs = $state(false);
+
     let footer: HTMLDivElement;
 
     async function act(action: () => Promise<void>) {
@@ -97,9 +99,14 @@
                     onconfirm={() => act(onunlock)}
                 />
             {:else if node.kind === "item" && !purchased}
+                <label class="customs">
+                    <input type="checkbox" bind:checked={customs} />
+                    I understand that Hack Club does not pay any customs or duties
+                    fees that I may be charged to receive this item
+                </label>
                 <HoldButton
                     label="Purchase with token ({tokens})"
-                    disabled={tokens === 0 || !!blocked || task.pending}
+                    disabled={tokens === 0 || !customs || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onpurchase)}
                 />
@@ -190,6 +197,35 @@
 
     .note {
         font-size: 0.85em;
+    }
+
+    .customs {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        max-width: 28rem;
+        font-size: 0.85em;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .customs input {
+        flex: none;
+        width: 1.25em;
+        height: 1.25em;
+        margin: 0;
+        appearance: none;
+        background: #4f2f1f;
+        cursor: pointer;
+    }
+
+    .customs input:checked {
+        background: #d6ab70;
+        box-shadow: inset 0 0 0 0.25em #4f2f1f;
+    }
+
+    .customs input:focus-visible {
+        outline: 2px solid #ead7c2;
     }
 
     @media (max-width: 560px) {
