@@ -241,8 +241,8 @@
         <p>&ThickSpace;</p>
         <p>
             Got no idea how to even get started? That's totally fine! Mipmap's
-            got a series of videos designed to get you up to speed with the
-            basics in one bingeable session. After that, you know exactly what
+            got a video designed to get you up to speed with the
+            basics in one sitting. After that, you know exactly what
             to look for when you're going through guides for the specific
             graphics library you're using. Just click the "Learn here!" button
             above!
