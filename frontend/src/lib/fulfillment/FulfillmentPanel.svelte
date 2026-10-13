@@ -6,7 +6,8 @@
 
     let { bounds }: { bounds: Bounds } = $props();
 
-    const rows: [keyof (typeof rounds)[number], string][] = [
+    const shown = rounds.slice(0, -2);
+    const columns: [keyof (typeof rounds)[number], string][] = [
         ["ship_by", "You ship a project by..."],
         ["review_by", "We'll get it reviewed by..."],
         ["fulfill_by", "After you claim prizes, they'll be shipped out by..."],
@@ -18,12 +19,18 @@
         You ship a project each of these dates, we'll make sure we review your
         project and fulfill claimed prizes by the specified dates.
     </p>
-    <table style:--count={rounds.length}>
+    <table>
+        <thead>
+            <tr>
+                {#each columns as [key, label] (key)}
+                    <th scope="col">{label}</th>
+                {/each}
+            </tr>
+        </thead>
         <tbody>
-            {#each rows as [key, label] (key)}
+            {#each shown as round}
                 <tr>
-                    <th scope="row">{label}</th>
-                    {#each rounds as round}
+                    {#each columns as [key] (key)}
                         <td>{long_date(round[key])}</td>
                     {/each}
                 </tr>
@@ -40,26 +47,27 @@
         border-spacing: 0;
         border: 2px solid #4f2f1f;
         border-radius: 7px;
+        overflow: hidden;
         font-size: 0.85em;
     }
 
     th,
     td {
         padding: 0.5rem 0.75rem;
-    }
-
-    th {
-        width: calc(200% / (var(--count) + 2));
-        text-align: left;
-        font-weight: 700;
-    }
-
-    td {
-        border-left: 2px solid #4f2f1f;
         text-align: center;
     }
 
-    tr + tr > :is(th, td) {
-        border-top: 2px solid #4f2f1f;
+    th {
+        font-weight: 700;
+        vertical-align: bottom;
+        border-bottom: 2px solid #4f2f1f;
+    }
+
+    :is(th, td) + :is(th, td) {
+        border-left: 2px solid #4f2f1f;
+    }
+
+    tbody tr:nth-child(odd) {
+        background: #5f4838;
     }
 </style>
