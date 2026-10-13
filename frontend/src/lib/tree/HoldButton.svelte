@@ -3,17 +3,18 @@
         label,
         disabled = false,
         autofocus = false,
+        duration = 1500,
         onconfirm,
     }: {
         label: string;
         disabled?: boolean;
         autofocus?: boolean;
+        duration?: number;
         onconfirm: () => void;
     } = $props();
 
     const uid = $props.id();
 
-    const duration = 1500;
     const drain_time = 300;
     const max_step = 100;
     const max_shake = 4;

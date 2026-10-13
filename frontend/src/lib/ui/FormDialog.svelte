@@ -12,6 +12,7 @@
         cancel = false,
         onsubmit,
         onclose,
+        extra,
         children,
     }: {
         title: string;
@@ -21,6 +22,7 @@
         cancel?: boolean;
         onsubmit: () => Promise<unknown>;
         onclose: () => void;
+        extra?: Snippet;
         children: Snippet;
     } = $props();
 
@@ -55,6 +57,7 @@
             <div class="error">{task.error}</div>
         {/if}
         <div class="actions" data-tour="actions">
+            {@render extra?.()}
             {#if cancel}
                 <MipmapButton type="button" onclick={close}>Cancel</MipmapButton>
             {/if}

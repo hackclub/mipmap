@@ -25,7 +25,11 @@
         </li>
         <li>
             <h3>Step 4</h3>
-            <p>Use a token to redeem a prize and get it shipped to your door!</p>
+            <p>
+                Use a <span class="tokens">token</span> to redeem a
+                <span class="prizes">prize</span> and get it shipped to your
+                door!
+            </p>
         </li>
     </ol>
 </Section>

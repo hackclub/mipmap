@@ -13,6 +13,9 @@ export const create_project = (name: string) =>
 export const update_project = (id: number, fields: ProjectFields) =>
   mutate(`/api/projects/${id}`, send_json("PUT", fields));
 
+export const delete_project = (id: number) =>
+  mutate(`/api/projects/${id}`, { method: "DELETE" });
+
 export const upload_screenshot = (id: number, file: File) =>
   mutate(`/api/projects/${id}/screenshot`, {
     method: "POST",

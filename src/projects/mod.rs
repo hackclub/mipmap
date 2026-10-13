@@ -4,7 +4,7 @@ use crate::{
     error::{ApiError, reject, reject_with},
     uploads,
 };
-use actix_web::{HttpResponse, http::StatusCode, post, put, web};
+use actix_web::{HttpResponse, delete, http::StatusCode, post, put, web};
 use chrono::{DateTime, Utc};
 use hc_helper::hackatime::data::Project as HackatimeProject;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,13 @@ const LINK_LIMIT: usize = 500;
 const HACKATIME_LIMIT: usize = 50;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service((create_project, upload_screenshot, update_project, ship::ship_project));
+    cfg.service((
+        create_project,
+        upload_screenshot,
+        update_project,
+        delete_project,
+        ship::ship_project,
+    ));
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -335,6 +341,41 @@ async fn update_project(
     .execute(pool.get_ref())
     .await?;
     if updated.rows_affected() == 0 {
+        return Err(unknown_project());
+    }
+    dashboard::respond(&pool, user_id).await
+}
+
+#[delete("/projects/{id}")]
+async fn delete_project(
+    User(user_id): User,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<HttpResponse, ApiError> {
+    ensure_owned(&pool, user_id, *id).await?;
+    let _shipping = ship::Shipping::start(*id)
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+    let shipped: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM submission
+             WHERE project_id = $1 AND deleted_at IS NULL AND NOT rejected
+         )",
+    )
+    .bind(*id)
+    .fetch_one(pool.get_ref())
+    .await?;
+    if shipped {
+        return Err(reject_with(StatusCode::CONFLICT, "A shipped project can't be deleted"));
+    }
+    let deleted = sqlx::query(
+        "UPDATE project SET deleted_at = now()
+         WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(*id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await?;
+    if deleted.rows_affected() == 0 {
         return Err(unknown_project());
     }
     dashboard::respond(&pool, user_id).await

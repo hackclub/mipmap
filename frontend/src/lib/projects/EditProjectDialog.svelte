@@ -3,7 +3,8 @@
     import FormDialog from "$lib/ui/FormDialog.svelte";
     import Field from "$lib/ui/Field.svelte";
     import TierSelect from "$lib/projects/TierSelect.svelte";
-    import { update_project } from "$lib/projects/api";
+    import HoldButton from "$lib/tree/HoldButton.svelte";
+    import { delete_project, update_project } from "$lib/projects/api";
     import { hours } from "$lib/format";
     import type {
         HackatimeProject,
@@ -29,6 +30,7 @@
     const locked = untrack(() => project.locked);
     let fields = $state<ProjectFields>(initial);
     let search = $state("");
+    let confirming = $state(false);
 
     const results = $derived(
         [
@@ -48,10 +50,21 @@
     }
 </script>
 
+{#snippet remove()}
+    {#if !locked}
+        <HoldButton
+            label="Delete"
+            duration={2000}
+            onconfirm={() => (confirming = true)}
+        />
+    {/if}
+{/snippet}
+
 <FormDialog
     title="Edit project"
     submit="Save"
     cancel
+    extra={remove}
     onsubmit={() => update_project(id, $state.snapshot(fields))}
     {onclose}
 >
@@ -140,6 +153,22 @@
         </ul>
     </section>
 </FormDialog>
+
+{#if confirming}
+    <FormDialog
+        title="Delete {project.name}?"
+        submit="Delete"
+        cancel
+        width="32rem"
+        onsubmit={async () => {
+            await delete_project(id);
+            onclose();
+        }}
+        onclose={() => (confirming = false)}
+    >
+        <p class="note">This can't be undone</p>
+    </FormDialog>
+{/if}
 
 <style>
     .note {

@@ -34,6 +34,25 @@
 		min-height: 100vh;
 	}
 
+	:global(*) {
+		scrollbar-width: thin;
+		scrollbar-color: rgb(214 171 112 / 0.45) transparent;
+	}
+
+	:global(::-webkit-scrollbar) {
+		width: 8px;
+		height: 8px;
+	}
+
+	:global(::-webkit-scrollbar-thumb) {
+		background: rgb(214 171 112 / 0.45);
+		border-radius: 4px;
+	}
+
+	:global(::-webkit-scrollbar-track) {
+		background: transparent;
+	}
+
 	:global(a),
 	:global(a:visited) {
 		color: #e8c58c;
