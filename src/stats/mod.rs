@@ -74,11 +74,46 @@ struct Funnel {
 }
 
 #[derive(Serialize)]
+struct Funnels {
+    day: Funnel,
+    week: Funnel,
+    all: Funnel,
+}
+
+#[derive(Serialize)]
 struct Stats {
     days: Vec<Day>,
     hours: Vec<Hour>,
     totals: Totals,
-    funnel: Funnel,
+    funnel: Funnels,
+}
+
+async fn funnel(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Funnel> {
+    sqlx::query_as(
+        "SELECT
+             (SELECT count(*) FROM visitor
+              WHERE $1::int IS NULL OR visited_at >= now() - make_interval(hours => $1)) AS visited,
+             count(*) AS signed_in,
+             count(*) FILTER (WHERE hackatime_user_id IS NOT NULL) AS linked_hackatime,
+             count(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM project WHERE user_id = \"user\".id AND deleted_at IS NULL
+             )) AS created_project,
+             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM active_day WHERE user_id = \"user\".id))
+                 AS logged_time,
+             count(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM submission JOIN project ON project.id = submission.project_id
+                 WHERE project.user_id = \"user\".id AND submission.deleted_at IS NULL
+             )) AS shipped,
+             count(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM \"order\" WHERE user_id = \"user\".id AND deleted_at IS NULL
+             )) AS redeemed
+         FROM \"user\"
+         WHERE deleted_at IS NULL
+             AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))",
+    )
+    .bind(hours)
+    .fetch_one(pool)
+    .await
 }
 
 async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
@@ -165,27 +200,11 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     .bind(review::REFERRER_MIPS + review::REFEREE_MIPS)
     .fetch_one(pool)
     .await?;
-    let funnel = sqlx::query_as(
-        "SELECT
-             (SELECT count(*) FROM visitor) AS visited,
-             count(*) AS signed_in,
-             count(*) FILTER (WHERE hackatime_user_id IS NOT NULL) AS linked_hackatime,
-             count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM project WHERE user_id = \"user\".id AND deleted_at IS NULL
-             )) AS created_project,
-             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM active_day WHERE user_id = \"user\".id))
-                 AS logged_time,
-             count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM submission JOIN project ON project.id = submission.project_id
-                 WHERE project.user_id = \"user\".id AND submission.deleted_at IS NULL
-             )) AS shipped,
-             count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM \"order\" WHERE user_id = \"user\".id AND deleted_at IS NULL
-             )) AS redeemed
-         FROM \"user\" WHERE deleted_at IS NULL",
-    )
-    .fetch_one(pool)
-    .await?;
+    let funnel = Funnels {
+        day: funnel(pool, Some(24)).await?,
+        week: funnel(pool, Some(24 * 7)).await?,
+        all: funnel(pool, None).await?,
+    };
     Ok(serde_json::to_vec(&Stats { days, hours, totals, funnel })?.into())
 }
 

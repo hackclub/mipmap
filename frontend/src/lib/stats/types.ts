@@ -27,13 +27,15 @@ export type Stats = {
     average_wait_hours: number | null;
     average_approval_hours: number | null;
   };
-  funnel: {
-    visited: number;
-    signed_in: number;
-    linked_hackatime: number;
-    created_project: number;
-    logged_time: number;
-    shipped: number;
-    redeemed: number;
-  };
+  funnel: Record<"day" | "week" | "all", Funnel>;
+};
+
+export type Funnel = {
+  visited: number;
+  signed_in: number;
+  linked_hackatime: number;
+  created_project: number;
+  logged_time: number;
+  shipped: number;
+  redeemed: number;
 };

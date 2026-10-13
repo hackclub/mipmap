@@ -15,13 +15,16 @@
     const today = $derived(data?.days[data.days.length - 1]);
     const now = $derived(data?.hours[data.hours.length - 1]);
 
-    const ranges: [string, number][] = [
-        ["24h", 24],
-        ["7d", 24 * 7],
-        ["All", Infinity],
+    const ranges: [string, number, "day" | "week" | "all"][] = [
+        ["24h", 24, "day"],
+        ["7d", 24 * 7, "week"],
+        ["All", Infinity, "all"],
     ];
     let range = $state(24 * 7);
     const hours = $derived(data?.hours.slice(-range) ?? []);
+    const funnel = $derived(
+        data?.funnel[ranges.find(([, value]) => value === range)?.[2] ?? "all"],
+    );
     const hour_labels = $derived(hours.map((hour) => short_time(hour.hour)));
     const quick = $derived(
         data && [
@@ -45,14 +48,14 @@
         ],
     );
     const steps = $derived(
-        data && [
-            { label: "Visited", count: data.funnel.visited },
-            { label: "Signed in", count: data.funnel.signed_in },
-            { label: "Linked Hackatime", count: data.funnel.linked_hackatime },
-            { label: "Created a project", count: data.funnel.created_project },
-            { label: "Logged time", count: data.funnel.logged_time },
-            { label: "Shipped a project", count: data.funnel.shipped },
-            { label: "Redeemed a prize", count: data.funnel.redeemed },
+        funnel && [
+            { label: "Visited", count: funnel.visited },
+            { label: "Signed in", count: funnel.signed_in },
+            { label: "Linked Hackatime", count: funnel.linked_hackatime },
+            { label: "Created a project", count: funnel.created_project },
+            { label: "Logged time", count: funnel.logged_time },
+            { label: "Shipped a project", count: funnel.shipped },
+            { label: "Redeemed a prize", count: funnel.redeemed },
         ],
     );
 
