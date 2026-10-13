@@ -1,3 +1,10 @@
+<script lang="ts" module>
+    export type ProjectDialog =
+        | { kind: "new" }
+        | { kind: "edit" | "ship"; id: number }
+        | null;
+</script>
+
 <script lang="ts">
     import Section from "$lib/dashboard/Section.svelte";
     import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
@@ -11,15 +18,13 @@
         bounds,
         projects,
         hackatime,
+        dialog = $bindable(null),
     }: {
         bounds: Bounds;
         projects: Project[];
         hackatime: HackatimeProject[];
+        dialog?: ProjectDialog;
     } = $props();
-
-    let dialog = $state<
-        { kind: "new" } | { kind: "edit" | "ship"; id: number } | null
-    >(null);
 
     const seconds = $derived(
         new Map(hackatime.map((entry) => [entry.name, entry.seconds])),
@@ -43,6 +48,7 @@
         <button
             type="button"
             aria-label="New project"
+            data-tour="new"
             onclick={() => (dialog = { kind: "new" })}>+</button
         >
     {/snippet}

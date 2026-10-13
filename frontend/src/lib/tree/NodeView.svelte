@@ -75,13 +75,19 @@
 {/snippet}
 
 {#if node.kind === "origin"}
-    <div class="node" style:left="{x}px" style:top="{y}px">
+    <div
+        class="node"
+        style:left="{x}px"
+        style:top="{y}px"
+        data-node={node.id}
+    >
         {@render cog(false)}
     </div>
 {:else}
     <button
         type="button"
         class="node interactive"
+        data-node={node.id}
         style:left="{x}px"
         style:top="{y}px"
         aria-label="{title}, {price}"

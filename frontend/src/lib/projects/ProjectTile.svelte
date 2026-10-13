@@ -65,6 +65,7 @@
             type="button"
             class="edit"
             aria-label="Edit {project.name}"
+            data-tour-edit={project.id}
             onclick={onedit}
         >
             <svg

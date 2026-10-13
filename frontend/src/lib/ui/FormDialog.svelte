@@ -54,7 +54,7 @@
         {#if task.error}
             <div class="error">{task.error}</div>
         {/if}
-        <div class="actions">
+        <div class="actions" data-tour="actions">
             {#if cancel}
                 <MipmapButton type="button" onclick={close}>Cancel</MipmapButton>
             {/if}

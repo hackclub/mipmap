@@ -18,7 +18,9 @@
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
     import SnapshotsPanel from "$lib/snapshots/SnapshotsPanel.svelte";
     import CogArt from "$lib/tree/CogArt.svelte";
-    import ProjectsPanel from "$lib/projects/ProjectsPanel.svelte";
+    import ProjectsPanel, {
+        type ProjectDialog,
+    } from "$lib/projects/ProjectsPanel.svelte";
     import ItemModal from "$lib/tree/ItemModal.svelte";
     import TechTree from "$lib/tree/TechTree.svelte";
     import item_metadata from "$lib/assets/item_metadata.json";
@@ -38,7 +40,9 @@
     let guide = $state<"welcome" | "help" | null>(null);
     let welcomed = $state(false);
     let touring = $state(false);
+    let replay = $state(false);
     let tour_step = $state(0);
+    let project_dialog = $state<ProjectDialog>(null);
 
     const structure = new Load(() =>
         Promise.all([fetch_tree(), fetch_layout()]),
@@ -50,18 +54,35 @@
     const tree = $derived(structure.data?.[0]);
     const layout = $derived(structure.data?.[1]);
     const sections = $derived(layout && arrange(layout));
-    const origin = $derived.by(() => {
+    const start = $derived.by(() => {
         const id = tree?.nodes.find((node) => node.kind === "origin")?.id;
-        const placed = layout?.nodes.find((node) => node.id === id);
-        if (!placed || !layout || !sections) return;
-        const size = layout.shapes.origin.cog;
-        return {
-            left: sections.tree.left + placed.x - size / 2,
-            top: sections.tree.top + placed.y - size / 2,
+        return layout?.nodes.find((node) => node.id === id);
+    });
+    const around = (at: { x: number; y: number }, size: number) =>
+        sections && {
+            left: sections.tree.left + at.x - size / 2,
+            top: sections.tree.top + at.y - size / 2,
             width: size,
             height: size,
         };
+    const origin = $derived(
+        start && layout && around(start, layout.shapes.origin.cog),
+    );
+    const nearest_token = $derived.by(() => {
+        if (!start || !layout) return;
+        return layout.nodes
+            .filter((node) => nodes.get(node.id)?.kind === "token")
+            .sort(
+                (a, b) =>
+                    Math.hypot(a.x - start.x, a.y - start.y) -
+                    Math.hypot(b.x - start.x, b.y - start.y),
+            )[0];
     });
+    const token = $derived(
+        nearest_token &&
+            layout &&
+            around(nearest_token, layout.shapes.token.cog * 4),
+    );
     const go = (bounds: Bounds) =>
         panzoom?.show(bounds, { ms: 700, padding: 24, cap: Infinity });
 
@@ -90,6 +111,7 @@
     });
 
     function start_tour() {
+        replay = guide === "help";
         guide = null;
         tour_step = 0;
         touring = true;
@@ -130,6 +152,7 @@
                 bounds={sections.projects}
                 projects={data.projects}
                 hackatime={data.hackatime_projects}
+                bind:dialog={project_dialog}
             />
         </div>
         <div class="part" class:faded={faded("tree")}>
@@ -228,9 +251,13 @@
 
     {#if touring}
         <Tour
-            {sections}
+            sections={{ ...sections, token: token ?? sections.tree }}
             {panzoom}
+            projects={data.projects}
+            token={nearest_token?.id}
+            {replay}
             bind:step={tour_step}
+            bind:dialog={project_dialog}
             onclose={() => {
                 touring = false;
                 panzoom?.settle();

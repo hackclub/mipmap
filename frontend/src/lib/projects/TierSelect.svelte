@@ -5,7 +5,8 @@
     let {
         value = $bindable(),
         disabled = false,
-    }: { value: Tier | null; disabled?: boolean } = $props();
+        hint,
+    }: { value: Tier | null; disabled?: boolean; hint?: string } = $props();
 
     const uid = $props.id();
     const options: { id: Tier | null; name: string; description?: string }[] = [
@@ -76,6 +77,9 @@
     }}
 >
     <span class="label" id="{uid}-label">Tier</span>
+    {#if hint}
+        <p class="hint" id="{uid}-hint">{hint}</p>
+    {/if}
     <button
         type="button"
         class="trigger"
@@ -84,6 +88,7 @@
         aria-expanded={open}
         aria-controls={open ? `${uid}-list` : undefined}
         aria-labelledby="{uid}-label {uid}-value"
+        aria-describedby={hint ? `${uid}-hint` : undefined}
         {disabled}
         onclick={() => (open = !open)}
         onkeydown={(e) => {
@@ -137,6 +142,12 @@
     .label {
         font-size: 0.85em;
         font-weight: 700;
+    }
+
+    .hint {
+        margin: 0;
+        font-size: 0.75em;
+        opacity: 0.75;
     }
 
     .trigger {

@@ -6,6 +6,7 @@
 
     let {
         label,
+        hint,
         value = $bindable(""),
         multiline = false,
         focus = false,
@@ -13,6 +14,7 @@
         ...rest
     }: {
         label?: string;
+        hint?: string;
         value?: string;
         multiline?: boolean;
         focus?: boolean;
@@ -26,16 +28,21 @@
     {#if label}
         <label for={uid}>{label}</label>
     {/if}
+    {#if hint}
+        <p class="hint" id="{uid}-hint">{hint}</p>
+    {/if}
     {#if multiline}
         <textarea
             id={uid}
             {rows}
+            aria-describedby={hint ? `${uid}-hint` : undefined}
             bind:value
             data-autofocus={focus || undefined}
             {...rest as HTMLTextareaAttributes}></textarea>
     {:else}
         <input
             id={uid}
+            aria-describedby={hint ? `${uid}-hint` : undefined}
             bind:value
             data-autofocus={focus || undefined}
             {...rest}
@@ -54,6 +61,16 @@
     label {
         font-size: 0.85em;
         font-weight: 700;
+    }
+
+    .hint {
+        margin: 0;
+        font-size: 0.75em;
+        opacity: 0.75;
+    }
+
+    input {
+        margin-top: auto;
     }
 
     input,

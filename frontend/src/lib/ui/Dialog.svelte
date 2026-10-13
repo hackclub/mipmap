@@ -216,13 +216,13 @@
         display: flex;
         overflow-y: auto;
         box-sizing: border-box;
-        padding: 5rem 1.5rem 2rem;
+        padding: 5rem 1.5rem calc(2rem + var(--tour-space, 0px));
         background-color: rgba(0, 0, 0, 0.45);
         animation: dim 0.4s ease-out;
     }
 
     .overlay.bottom-right {
-        padding: 2rem 1.5rem 5rem;
+        padding: 2rem 1.5rem calc(5rem + var(--tour-space, 0px));
     }
 
     .dialog {

@@ -15,5 +15,11 @@
     onsubmit={() => create_project(name.trim())}
     {onclose}
 >
-    <Field label="Name" bind:value={name} maxlength={100} focus />
+    <Field
+        label="Name"
+        bind:value={name}
+        maxlength={100}
+        focus
+        data-tour="name"
+    />
 </FormDialog>

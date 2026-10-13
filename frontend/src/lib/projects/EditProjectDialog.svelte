@@ -58,17 +58,24 @@
     {#if reviewing}
         <p class="note">This project is in review, so only its name can change.</p>
     {/if}
-    <Field label="Name" bind:value={fields.name} maxlength={100} />
+    <Field
+        label="Name"
+        hint="What your project is called"
+        bind:value={fields.name}
+        maxlength={100}
+    />
     <Field
         label="Description"
+        hint="A short summary of what you're making and how it works"
         bind:value={fields.description}
         multiline
         maxlength={5000}
         disabled={reviewing}
     />
-    <div class="row">
+    <div class="row" data-tour="links">
         <Field
             label="Repo"
+            hint="Your public code repository on GitHub, GitLab or Codeberg"
             type="url"
             bind:value={fields.repo}
             placeholder="https://"
@@ -77,6 +84,7 @@
         />
         <Field
             label="Demo"
+            hint="A public link where people can try your project, like a release page or a hosted build"
             type="url"
             bind:value={fields.demo}
             placeholder="https://"
@@ -84,10 +92,25 @@
             disabled={reviewing}
         />
     </div>
-    <TierSelect bind:value={fields.tier} disabled={reviewing || locked} />
+    <div data-tour="tier">
+        <TierSelect
+            bind:value={fields.tier}
+            disabled={reviewing || locked}
+            hint="How deep your project goes. Higher tiers earn Mips faster"
+        />
+    </div>
 
-    <section class="hackatime" aria-labelledby="{uid}-hackatime">
+    <section
+        class="hackatime"
+        aria-labelledby="{uid}-hackatime"
+        aria-describedby="{uid}-hackatime-hint"
+        data-tour="hackatime"
+    >
         <h3 id="{uid}-hackatime">Hackatime projects</h3>
+        <p class="hint" id="{uid}-hackatime-hint">
+            The Hackatime projects that track your time on this. Each one can
+            only belong to one project
+        </p>
         <Field
             type="search"
             aria-label="Search Hackatime projects"
@@ -134,6 +157,12 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .hint {
+        margin: 0;
+        font-size: 0.75em;
+        opacity: 0.75;
     }
 
     h3 {

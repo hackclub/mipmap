@@ -11,128 +11,164 @@
         | "snapshots"
         | "feedback";
 
-    export interface TourStep {
-        title: string;
+    export interface TourNote {
+        anchor: string;
+        side: "left" | "right";
+        title?: Snippet;
         body: Snippet;
-        focus?: Part[];
     }
 
+    export interface TourStep {
+        title?: Snippet;
+        body?: Snippet;
+        focus?: Part[];
+        frame?: (Part | "token")[];
+        center?: boolean;
+        spot?: "new" | "edit";
+        glow?: boolean;
+        dialog?: "new" | "edit";
+        notes?: TourNote[];
+    }
+
+    export const interactive = (step: TourStep) => !!(step.spot || step.dialog);
+
     export const steps: TourStep[] = [
-        { title: "Your dashboard", body: dashboard },
-        { title: "Projects", body: projects, focus: ["projects"] },
-        { title: "Tech tree", body: tree, focus: ["tree"] },
+        { title: welcome_title, body: welcome, center: true },
+        { title: tree_title, body: tree, focus: ["tree"] },
         {
-            title: "Orders and fulfillment rounds",
-            body: orders,
-            focus: ["orders", "fulfillment"],
+            title: token_title,
+            body: token,
+            focus: ["tree"],
+            frame: ["token"],
+            glow: true,
         },
         {
-            title: "Referrals and profile",
-            body: account,
-            focus: ["referral", "profile"],
+            title: project_title,
+            body: project,
+            focus: ["projects"],
+            spot: "new",
         },
-        { title: "Snapshots", body: snapshots, focus: ["snapshots"] },
-        { title: "Feedback", body: feedback, focus: ["feedback"] },
-        { title: "That's everything!", body: done },
+        {
+            focus: ["projects"],
+            dialog: "new",
+            notes: [
+                { anchor: "name", side: "left", title: name_title, body: name },
+            ],
+        },
+        { title: edit_title, focus: ["projects"], spot: "edit" },
+        {
+            focus: ["projects"],
+            dialog: "edit",
+            notes: [
+                { anchor: "links", side: "left", body: links },
+                { anchor: "tier", side: "right", body: tiers },
+                { anchor: "hackatime", side: "left", body: hackatime },
+                { anchor: "actions", side: "left", body: save },
+            ],
+        },
+        { title: snapshots_title, body: snapshots, focus: ["snapshots"] },
+        {
+            title: admin_title,
+            body: admin,
+            focus: ["fulfillment", "orders", "referral", "profile", "feedback"],
+        },
     ];
 </script>
 
-{#snippet dashboard()}
-    <p>
-        Welcome to <span class="mipmap">Hack Club Mipmap</span>! This is the
-        dashboard that you'll handle everything like shipping projects, claiming
-        prizes, and a whole lot more.
-    </p>
+{#snippet welcome_title()}
+    Welcome to <span class="mipmap">Mipmap</span>!
 {/snippet}
 
-{#snippet projects()}
-    <p>
-        This is the Projects panel, where you will manage creating new projects,
-        editing them to make sure they have everything they need, and finally
-        shipping them for review to get <span class="mip">Mips</span>!
-    </p>
+{#snippet welcome()}
+    <p>Looking forward to seeing what you create!</p>
+{/snippet}
+
+{#snippet tree_title()}
+    Here's the <span class="tech-tree">tech tree</span> with all your prizes!
 {/snippet}
 
 {#snippet tree()}
     <p>
-        Once you get your <span class="mip">Mips</span>, you can redeem them
-        here at the <span class="tech-tree">Tech Tree</span>. You only need one
-        prerequisite of an item in order to be able to unlock that item. For
-        actually claiming items, you'll notice Tokens spread throughout the
-        tree. After unlocked, they can be used to then claim <b>any one item</b> in
-        the tree, regardless of where it's situated.
+        Ship projects to earn <span class="mip">Mips</span> to unlock nodes down
+        the tree
     </p>
 {/snippet}
 
-{#snippet orders()}
+{#snippet token_title()}
+    This is a token
+{/snippet}
+
+{#snippet token()}
     <p>
-        After you claim an item, it'll show up here. Notice the fulfillment
-        rounds. These are when projects will be reviewed and prizes will be
-        fulfilled. No guarantees on review timelines exist outside these
-        fulfillment rounds, so you might want to make sure you get your project
-        in by each one.
+        After unlocking a node with <span class="mip">Mips</span>, you can
+        redeem that prize with one of these tokens also found in the tree. One
+        token can unlock any one prize
     </p>
 {/snippet}
 
-{#snippet account()}
+{#snippet project_title()}
+    Let's make a project to get <span class="mip">Mips</span>!
+{/snippet}
+
+{#snippet project()}
+    <p>Click on the '+' button to make a new project</p>
+{/snippet}
+
+{#snippet name_title()}
+    Give your project a name
+{/snippet}
+
+{#snippet name()}
+    <p><b>Everything can be changed later</b></p>
+{/snippet}
+
+{#snippet edit_title()}
+    Let's take a further look into this project
+{/snippet}
+
+{#snippet links()}
+    <p>You don't have to fill these now, you can do it later</p>
+{/snippet}
+
+{#snippet tiers()}
     <p>
-        Here's where you can see you account information and your referral link.
-        Having a friend get a project approved after having signed up with your
-        link gets you 100 <span class="mip">Mips</span> and your friend 20
-        <span class="mip">Mips</span> to start out with!
+        <span class="tier">Tier Quebec</span>: 2D games without an engine, maybe
+        in a JS canvas?
+    </p>
+    <p>
+        <span class="tier">Tier Romeo</span>: 3D games in most low level
+        graphics libraries
+    </p>
+    <p>
+        <span class="tier">Tier Sierra</span>: 3D game in either Vulkan, a
+        software renderer (no graphics libraries), or on bare metal
     </p>
 {/snippet}
 
-{#snippet feedback()}
-    <p>
-        Share your voice on how <span class="mipmap">Mipmap</span> is going! It would
-        be awesome if you could do this somewhat frequently, since this is your chance
-        to directly shape the future direction of the program to make it even more
-        awesome.
-    </p>
+{#snippet hackatime()}
+    <p>Once you start tracking your project with Hackatime, it'll show here!</p>
+{/snippet}
+
+{#snippet save()}
+    <p>Save your changes to continue</p>
+{/snippet}
+
+{#snippet snapshots_title()}
+    Share what you're up to!
 {/snippet}
 
 {#snippet snapshots()}
+    <p>Though you also get extra <span class="mip">Mips</span> for doing so...</p>
+{/snippet}
+
+{#snippet admin_title()}
+    And here's some administrative stuff
+{/snippet}
+
+{#snippet admin()}
     <p>
-        Here's the snapshots view! A snapshot is a screenshot plus a caption of
-        what you're working on (both successes and fails are welcome). The top
-        left is where you submit a snapshot, under that you can see you past
-        snapshots, and to the right you can see what everyone else in the
-        <span class="mipmap">Mipmap</span> community is up to!
-    </p>
-    <p>
-        Also, posting snapshots gets you more <span class="mip">Mips</span>!
-        Each one you share gives you an additional 1% towards all
-        <span class="mip">Mips</span> payouts, capping at 32%. You don't lose these
-        percentage points, but you can only post once per day so make sure you've
-        got your bonus up by the time you ship!
+        That's it for now, excited to see what you create for
+        <span class="mipmap">Mipmap</span>!
     </p>
 {/snippet}
 
-{#snippet done()}
-    <p>
-        And that's about it! Go make an awesome engineless video game. Looking
-        forward to see what you're capable of!
-    </p>
-    <p>
-        If anything pops up, stick it into the <a
-            href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
-            >#mipmap</a
-        >
-        or shoot <a href="mailto:brendan@hackclub.com">me</a> an email.
-    </p>
-{/snippet}
-
-<style>
-    .mip {
-        color: #ff9a3d;
-    }
-
-    .mipmap {
-        color: #8fcf6b;
-    }
-
-    .tech-tree {
-        color: #7cc4f0;
-    }
-</style>
