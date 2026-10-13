@@ -16,6 +16,7 @@
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
     import FeedbackPanel from "$lib/feedback/FeedbackPanel.svelte";
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
+    import StepsPanel from "$lib/dashboard/StepsPanel.svelte";
     import SnapshotsPanel from "$lib/snapshots/SnapshotsPanel.svelte";
     import CogArt from "$lib/tree/CogArt.svelte";
     import ProjectsPanel, {
@@ -154,6 +155,9 @@
                 hackatime={data.hackatime_projects}
                 bind:dialog={project_dialog}
             />
+        </div>
+        <div class="part" class:faded={faded("steps")}>
+            <StepsPanel bounds={sections.steps} />
         </div>
         <div class="part" class:faded={faded("tree")}>
             <TechTree

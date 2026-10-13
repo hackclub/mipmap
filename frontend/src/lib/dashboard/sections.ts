@@ -33,6 +33,12 @@ export function arrange(tree: { width: number; height: number }) {
     width: projects_width,
     height: panel_height,
   });
+  const steps = snap({
+    left: margin,
+    top: projects.top + projects.height + gap,
+    width: projects_width,
+    height: tree.height - gap - (projects.top + projects.height + gap),
+  });
   const tree_bounds: Bounds = {
     left: margin + projects_width,
     top: 0,
@@ -87,6 +93,7 @@ export function arrange(tree: { width: number; height: number }) {
   };
   return {
     projects,
+    steps,
     tree: tree_bounds,
     fulfillment,
     orders,

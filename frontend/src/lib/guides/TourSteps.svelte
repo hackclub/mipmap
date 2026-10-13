@@ -3,6 +3,7 @@
 
     export type Part =
         | "projects"
+        | "steps"
         | "tree"
         | "fulfillment"
         | "orders"
