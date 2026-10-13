@@ -14,6 +14,35 @@
 	];
 
 	let width = $state(0);
+	let root = $state<HTMLDivElement>();
+	let live = $state(false);
+
+	function phudu(cancelled: () => boolean) {
+		return new Promise<void>((resolve) => {
+			const check = () =>
+				document.fonts.load('500 16px Phudu').then(
+					(faces) => (faces.length || cancelled() ? resolve() : setTimeout(check, 100)),
+					() => resolve()
+				);
+			check();
+		});
+	}
+
+	$effect(() => {
+		if (!width || !root) return;
+		let cancelled = false;
+		const images = [...root.querySelectorAll('img.spin')].map((img) =>
+			(img as HTMLImageElement).decode().catch(() => {})
+		);
+		const font = phudu(() => cancelled);
+		const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+		Promise.race([Promise.all([...images, font]), timeout]).then(() => {
+			if (!cancelled) live = true;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
 	const blur = $derived(width ? shadow_blur * view_width / width : 0);
 	const pad = $derived(4 * blur);
 
@@ -99,7 +128,18 @@
 	</svg>
 {/snippet}
 
-<div class="logo" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width}>
+<div class="logo" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width} bind:this={root}>
+	<img
+		class="static"
+		class:hidden={live}
+		src="/logo.svg"
+		alt="Mipmap"
+		fetchpriority="high"
+		style:left="{(-2 / view_width) * 100}%"
+		style:top="{(-2 / view_height) * 100}%"
+		style:width="{((view_width + 4) / view_width) * 100}%"
+	/>
+	<div class="live" class:on={live} aria-hidden={!live}>
 	<div class="layer letter-shadow" aria-hidden="true">
 		{@render letters()}
 	</div>
@@ -118,12 +158,33 @@
 		</div>
 	{/each}
 	{@render letters()}
+	</div>
 </div>
 
 <style>
 	.logo {
 		position: relative;
 		width: 100%;
+	}
+
+	.static {
+		position: absolute;
+		display: block;
+		height: auto;
+	}
+
+	.static.hidden {
+		display: none;
+	}
+
+	.live {
+		position: absolute;
+		inset: 0;
+		visibility: hidden;
+	}
+
+	.live.on {
+		visibility: visible;
 	}
 
 	.layer {
@@ -148,6 +209,11 @@
 		width: 100%;
 		height: 100%;
 		animation: spin 12s linear infinite;
+		animation-play-state: paused;
+	}
+
+	.live.on .spin {
+		animation-play-state: running;
 	}
 
 	.reverse {

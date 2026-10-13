@@ -22,20 +22,16 @@
     let description_box_height = $state(0);
     let faq_height = $state(632);
     let ready = $state(false);
+    let field = $state(false);
+    let logo_width = $state(768);
 
     const logo_aspect = 84.666664 / 66.145827;
-    const phone = $derived(viewport_width <= 600);
     const logo_top = 24;
 
-    const logo = $derived.by(() => {
-        const w = viewport_width;
-        const v = viewport_height;
-        const width = Math.min((phone ? 0.9 : 0.75) * w, 0.7 * v * logo_aspect);
-        return {
-            left: (w - width) / 2,
-            width,
-            height: width / logo_aspect,
-        };
+    const logo = $derived({
+        left: (viewport_width - logo_width) / 2,
+        width: logo_width,
+        height: logo_width / logo_aspect,
     });
 
     const logo_blocked = $derived({
@@ -107,7 +103,7 @@
     });
 
     const cogs = $derived(
-        footer_width > 0 && footer_height > 0
+        field && footer_width > 0 && footer_height > 0
             ? grow_field(viewport_width, cog_field_height, [
                   logo_blocked,
                   footer_blocked,
@@ -133,9 +129,12 @@
             document.cookie = `ref=${code}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`;
         }
         measure();
-        const reveal = window.requestAnimationFrame(() =>
-            window.requestAnimationFrame(() => (ready = true)),
-        );
+        let reveal = window.requestAnimationFrame(() => {
+            reveal = window.requestAnimationFrame(() => {
+                ready = true;
+                reveal = window.requestAnimationFrame(() => (field = true));
+            });
+        });
         let scroll_frame = 0;
         const update_scroll = () => {
             if (scroll_frame) return;
@@ -155,6 +154,10 @@
 </script>
 
 <svelte:window onresize={measure} />
+
+<svelte:head>
+    <link rel="preload" as="image" href="/logo.svg" fetchpriority="high" />
+</svelte:head>
 
 <SiteHead
     title="Hack Club Mipmap - Build a Game Without an Engine"
@@ -286,8 +289,8 @@
 <div
     class="logo"
     style:top="{logo_top}px"
-    style:left="{logo.left}px"
-    style:width="{logo.width}px"
+    style:--aspect={logo_aspect}
+    bind:clientWidth={logo_width}
 >
     <MipmapLogo />
 </div>
@@ -339,6 +342,15 @@
 
     .logo {
         position: absolute;
+        width: min(75%, calc(70vh * var(--aspect)));
+        left: calc((100% - min(75%, calc(70vh * var(--aspect)))) / 2);
+    }
+
+    @media (max-width: 600px) {
+        .logo {
+            width: min(90%, calc(70vh * var(--aspect)));
+            left: calc((100% - min(90%, calc(70vh * var(--aspect)))) / 2);
+        }
     }
 
     .actions {
