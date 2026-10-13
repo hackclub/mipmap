@@ -18,6 +18,7 @@ export interface User {
   referral_code: string;
   blocked: string | null;
   hackatime_linked: boolean;
+  hackatime_revoked: boolean;
   guides_seen: boolean;
 }
 

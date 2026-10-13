@@ -2,11 +2,10 @@
     import Section from "$lib/dashboard/Section.svelte";
     import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
     import { long_date } from "$lib/format";
-    import rounds from "$lib/assets/fulfillment_rounds.json";
+    import { rounds } from "$lib/fulfillment/rounds";
 
     let { bounds }: { bounds: Bounds } = $props();
 
-    const shown = rounds.slice(0, -2);
     const columns: [keyof (typeof rounds)[number], string][] = [
         ["ship_by", "You ship a project by..."],
         ["review_by", "We'll get it reviewed by..."],
@@ -28,7 +27,7 @@
             </tr>
         </thead>
         <tbody>
-            {#each shown as round}
+            {#each rounds as round}
                 <tr>
                     {#each columns as [key] (key)}
                         <td>{long_date(round[key])}</td>
@@ -37,6 +36,7 @@
             {/each}
         </tbody>
     </table>
+    <p>Maybe more to come...</p>
 </Section>
 
 <style>
@@ -68,6 +68,6 @@
     }
 
     tbody tr:nth-child(odd) {
-        background: #5f4838;
+        background: rgb(79 47 31 / 0.4);
     }
 </style>

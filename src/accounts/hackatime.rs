@@ -27,23 +27,46 @@ pub fn totals(projects: &[Project]) -> Totals {
         .collect()
 }
 
-pub async fn summaries(pool: &PgPool, user_id: i32, fresh: bool) -> Option<Vec<Project>> {
+pub enum Summaries {
+    Projects(Vec<Project>),
+    Unlinked,
+    Revoked,
+    Failed,
+}
+
+pub async fn fetch(pool: &PgPool, user_id: i32, fresh: bool) -> Summaries {
     let token = match tokens::load(pool, user_id, Provider::Hackatime).await {
-        Ok(token) => token?,
+        Ok(Some(token)) => token,
+        Ok(None) => return Summaries::Unlinked,
         Err(e) => {
             log::error!("loading Hackatime token failed: {e:#}");
-            return None;
+            return Summaries::Failed;
         }
     };
     if fresh {
         forget_hackatime_token(&token);
     }
     match get_hackatime_project_summaries_with_token(&token).await {
-        Ok(projects) => Some(projects),
+        Ok(projects) => Summaries::Projects(projects),
         Err(e) => {
-            log::warn!("fetching Hackatime projects failed: {e:#}");
-            None
+            log::warn!("fetching Hackatime projects for user {user_id} failed: {e:#}");
+            let revoked = e
+                .downcast_ref::<reqwest::Error>()
+                .and_then(reqwest::Error::status)
+                == Some(reqwest::StatusCode::UNAUTHORIZED);
+            if revoked {
+                Summaries::Revoked
+            } else {
+                Summaries::Failed
+            }
         }
+    }
+}
+
+pub async fn summaries(pool: &PgPool, user_id: i32, fresh: bool) -> Option<Vec<Project>> {
+    match fetch(pool, user_id, fresh).await {
+        Summaries::Projects(projects) => Some(projects),
+        _ => None,
     }
 }
 

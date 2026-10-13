@@ -5,7 +5,7 @@
     import type { Project } from "$lib/projects/types";
     import { hours, short_date } from "$lib/format";
     import { Task } from "$lib/load.svelte";
-    import rounds from "$lib/assets/fulfillment_rounds.json";
+    import { rounds } from "$lib/fulfillment/rounds";
 
     let {
         project,
@@ -21,22 +21,21 @@
 
     const status_line = $derived.by(() => {
         if (project.status === "draft") return "";
-        const shipped = project.status === "shipped";
         const shipped_on = project.shipped_at?.slice(0, 10) ?? "";
-        if (project.status === "rejected") {
-            return `Shipped ${short_date(shipped_on)} · Rejected`;
-        }
-        const index = rounds.findIndex((round) => round.ship_by >= shipped_on);
-        let line = shipped
-            ? `Shipped ${short_date(shipped_on)} · In review`
-            : `Approved · ${project.mips_awarded} Mips earned`;
-        if (index !== -1) {
-            line += ` · Round ${index + 1}`;
-            if (shipped) {
-                line += ` · reviewed by ${short_date(rounds[index].review_by)}`;
+        const round = rounds.find((round) => round.ship_by >= shipped_on);
+        const parts =
+            project.status === "rejected"
+                ? ["Rejected"]
+                : project.status === "shipped"
+                  ? ["In review"]
+                  : ["Approved", `${project.mips_awarded} Mips earned`];
+        if (round) {
+            parts.unshift(`Round ${rounds.indexOf(round) + 1}`);
+            if (project.status === "shipped") {
+                parts.push(`reviewed by ${short_date(round.review_by)}`);
             }
         }
-        return line;
+        return parts.join(" · ");
     });
 
     let picker = $state<HTMLInputElement>();

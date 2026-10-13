@@ -235,6 +235,13 @@
                 <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
             </div>
         {/if}
+        {#if data.user.hackatime_revoked}
+            <div class="banner">
+                Mipmap lost access to your Hackatime account, so your hours
+                aren't being tracked
+                <a href="/hackatime/login">Relink Hackatime</a>
+            </div>
+        {/if}
         {#if dashboard.error}
             <div class="banner">
                 <LoadError

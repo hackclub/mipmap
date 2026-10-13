@@ -203,7 +203,16 @@
                     };
                     if (!same(next, spot_rect)) spot_rect = next;
                 }
-                if (now.glow) {
+                if (now.glow && now.spot) {
+                    const pad = 10;
+                    const next = spot_rect && {
+                        left: spot_rect.left - pad,
+                        top: spot_rect.top - pad,
+                        width: spot_rect.width + pad * 2,
+                        height: spot_rect.height + pad * 2,
+                    };
+                    if (!same(next, glow_rect)) glow_rect = next;
+                } else if (now.glow) {
                     const node = document.querySelector(`[data-node="${token}"]`);
                     const center = node?.getBoundingClientRect();
                     const cog = node?.firstElementChild?.getBoundingClientRect();
@@ -302,6 +311,7 @@
 {#if current.glow && glow_rect}
     <div
         class="glow"
+        class:round={!current.spot}
         style:left="{glow_rect.left}px"
         style:top="{glow_rect.top}px"
         style:width="{glow_rect.width}px"
@@ -515,7 +525,14 @@
     .glow {
         position: fixed;
         z-index: 950;
+        border-radius: 12px;
+    }
+
+    .glow.round {
         border-radius: 50%;
+    }
+
+    .glow {
         box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.6);
         pointer-events: none;
         animation: dim 0.4s ease-out;

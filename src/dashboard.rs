@@ -40,6 +40,8 @@ struct UserInfo {
     #[serde(skip)]
     ysws_eligible: bool,
     hackatime_linked: bool,
+    #[sqlx(skip)]
+    hackatime_revoked: bool,
     guides_seen: bool,
 }
 
@@ -81,7 +83,14 @@ pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<D
     .await?;
     user.blocked = profile::shop_blocked(user.verification_status.as_deref(), user.ysws_eligible);
 
-    let mut hackatime = hackatime::summaries(pool, user_id, fresh).await;
+    let mut hackatime = match hackatime::fetch(pool, user_id, fresh).await {
+        hackatime::Summaries::Projects(projects) => Some(projects),
+        hackatime::Summaries::Revoked => {
+            user.hackatime_revoked = true;
+            None
+        }
+        _ => None,
+    };
     let totals = hackatime.as_deref().map(hackatime::totals);
     let projects = projects::list(pool, user_id).await?;
     if let Some(hackatime) = &hackatime {

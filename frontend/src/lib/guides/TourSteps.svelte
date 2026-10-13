@@ -56,7 +56,7 @@
                 { anchor: "name", side: "left", title: name_title, body: name },
             ],
         },
-        { title: edit_title, focus: ["projects"], spot: "edit" },
+        { title: edit_title, focus: ["projects"], spot: "edit", glow: true },
         {
             focus: ["projects"],
             dialog: "edit",
