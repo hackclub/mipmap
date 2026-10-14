@@ -3,6 +3,8 @@
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import LibraryPicker, { type Library } from "$lib/docs/LibraryPicker.svelte";
 
+    let { data } = $props();
+
     function embedUrl(value: string | undefined) {
         try {
             const url = new URL(value ?? "");
@@ -215,57 +217,62 @@
 <a class="home" href="/">Home</a>
 
 <main>
-    <header class="card">
+    <header class="card title">
         <h1>Mipmap Docs</h1>
     </header>
-    <section class="card wide">
-        <h2>Video</h2>
-        <p>Overview of all the important graphics concepts</p>
-        {#if video}
-            <iframe
-                src={video}
-                title="Overview of all the important graphics concepts"
-                allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
-                referrerpolicy="strict-origin-when-cross-origin"
-                allowfullscreen
-            ></iframe>
-        {/if}
-    </section>
-    <div class="section">
-        <MipmapButton onclick={() => (picking = true)}>Which library to choose?</MipmapButton>
-    </div>
-    <header class="card">
-        <h2>More Specific Resources</h2>
-    </header>
-    <div class="libraries">
-        {#each libraries as { name, note, description, links }}
-            <section class="card">
-                <h3>{name}{#if note} ({note}){/if}</h3>
-                <p class="description">{description}</p>
-                {#if links.length}
-                    <ul>
-                        {#each links as { text, href }}
-                            <li>
-                                <a {href} target="_blank" rel="noopener">{text}</a>
-                            </li>
-                        {/each}
-                    </ul>
-                {/if}
-            </section>
-        {/each}
-    </div>
-    <header class="card section">
-        <h2>Misc</h2>
-    </header>
-    <section class="card wide">
-        <ul>
-            {#each misc as { text, href }}
-                <li>
-                    <a {href} target="_blank" rel="noopener">{text}</a>
-                </li>
+    <article class="card markdown">
+        {@html data.html}
+    </article>
+    <div class="resources">
+        <section class="card wide">
+            <h2>Video</h2>
+            <p>Overview of all the important graphics concepts</p>
+            {#if video}
+                <iframe
+                    src={video}
+                    title="Overview of all the important graphics concepts"
+                    allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    allowfullscreen
+                ></iframe>
+            {/if}
+        </section>
+        <div class="section">
+            <MipmapButton onclick={() => (picking = true)}>Which library to choose?</MipmapButton>
+        </div>
+        <header class="card">
+            <h2>More Specific Resources</h2>
+        </header>
+        <div class="libraries">
+            {#each libraries as { name, note, description, links }}
+                <section class="card">
+                    <h3>{name}{#if note} ({note}){/if}</h3>
+                    <p class="description">{description}</p>
+                    {#if links.length}
+                        <ul>
+                            {#each links as { text, href }}
+                                <li>
+                                    <a {href} target="_blank" rel="noopener">{text}</a>
+                                </li>
+                            {/each}
+                        </ul>
+                    {/if}
+                </section>
             {/each}
-        </ul>
-    </section>
+        </div>
+        <header class="card section">
+            <h2>Misc</h2>
+        </header>
+        <section class="card wide">
+            <ul>
+                {#each misc as { text, href }}
+                    <li>
+                        <a {href} target="_blank" rel="noopener">{text}</a>
+                    </li>
+                {/each}
+            </ul>
+        </section>
+    </div>
 </main>
 
 {#if picking}
@@ -274,14 +281,105 @@
 
 <style>
     main {
-        max-width: 48rem;
+        max-width: 100rem;
         margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+        gap: 1rem 2rem;
+        padding: 4.5rem 1rem 3rem;
+        color: #ead7c2;
+    }
+
+    .title {
+        grid-column: 1 / -1;
+    }
+
+    .resources {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
-        padding: 4.5rem 1rem 3rem;
-        color: #ead7c2;
+        min-width: 0;
+    }
+
+    .markdown {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .markdown > :global(:first-child) {
+        margin-top: 0;
+    }
+
+    .markdown > :global(:last-child) {
+        margin-bottom: 0;
+    }
+
+    .markdown :global(h1),
+    .markdown :global(h2),
+    .markdown :global(h3) {
+        margin: 1.5rem 0 0.5rem;
+        font-weight: 700;
+    }
+
+    .markdown :global(p),
+    .markdown :global(ul),
+    .markdown :global(ol),
+    .markdown :global(pre) {
+        margin: 0 0 1rem;
+    }
+
+    .markdown :global(ul),
+    .markdown :global(ol) {
+        padding-left: 1.25rem;
+    }
+
+    .markdown :global(code) {
+        padding: 0.1em 0.3em;
+        background: #4f2f1f;
+        border-radius: 4px;
+    }
+
+    .markdown :global(pre) {
+        overflow-x: auto;
+        padding: 0.75rem 1rem;
+        background: #4f2f1f;
+        border-radius: 7px;
+    }
+
+    .markdown :global(pre code) {
+        padding: 0;
+    }
+
+    .markdown :global(img) {
+        max-width: 100%;
+    }
+
+    .markdown :global(a) {
+        color: #e8c58c;
+    }
+
+    .markdown :global(.mip) {
+        color: #ff9a3d;
+    }
+
+    .markdown :global(.token) {
+        color: #c3a3e6;
+    }
+
+    .markdown :global(.prize) {
+        color: #f0788a;
+    }
+
+    .markdown :global(.tier) {
+        color: #ffe066;
+    }
+
+    @media (max-width: 900px) {
+        main {
+            grid-template-columns: minmax(0, 1fr);
+        }
     }
 
     .home {
