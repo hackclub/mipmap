@@ -3,7 +3,7 @@
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import { upload_screenshot } from "$lib/projects/api";
     import type { Project } from "$lib/projects/types";
-    import { hours, short_date } from "$lib/format";
+    import { days_left, hours } from "$lib/format";
     import { Task } from "$lib/load.svelte";
     import { rounds } from "$lib/fulfillment/rounds";
 
@@ -32,7 +32,10 @@
         if (round) {
             parts.unshift(`Round ${rounds.indexOf(round) + 1}`);
             if (project.status === "shipped") {
-                parts.push(`reviewed by ${short_date(round.review_by)}`);
+                const started = new Date().toISOString().slice(0, 10) >= round.ship_by;
+                parts.push(
+                    `reviewed in ${started ? days_left(round.review_by) : "--"}`,
+                );
             }
         }
         return parts.join(" · ");
@@ -57,7 +60,14 @@
         <p class="description">{project.description}</p>
     {/if}
     {#if status_line}
-        <p class="status">{status_line}</p>
+        <p class="status">
+            {status_line}
+            {#if project.status === "shipped"}
+                <span class="note">
+                    Reviews start once the round's ship-by date passes
+                </span>
+            {/if}
+        </p>
     {/if}
     <div class="footer">
         <button
@@ -153,6 +163,12 @@
         grid-area: description;
         margin: 0;
         font-size: 0.85em;
+    }
+
+    .note {
+        display: block;
+        font-size: 0.85em;
+        opacity: 0.75;
     }
 
     .status {

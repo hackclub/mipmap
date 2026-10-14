@@ -27,3 +27,8 @@ export const duration = (hours: number | null) =>
 
 export const hours = (seconds: number) =>
   `${(seconds / 3600).toFixed(1)} hours`;
+
+export const days_left = (date: string) => {
+  const days = Math.max(0, Math.ceil((Date.parse(date) - Date.now()) / 86400000));
+  return `${days} day${days === 1 ? "" : "s"}`;
+};
