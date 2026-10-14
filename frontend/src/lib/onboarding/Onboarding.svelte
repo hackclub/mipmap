@@ -26,7 +26,7 @@
         | "orders"
         | "referral"
         | "profile"
-        | "feedback";
+        | "help";
 
     type Shape = Bounds & { round: boolean; quiet?: boolean };
 
@@ -83,6 +83,7 @@
         "orders",
         "referral",
         "profile",
+        "help",
     ] as const;
 
     let at = $state(-1);

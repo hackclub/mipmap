@@ -13,6 +13,7 @@
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
     import StepsPanel from "$lib/dashboard/StepsPanel.svelte";
+    import HelpPanel from "$lib/dashboard/HelpPanel.svelte";
     import SnapshotsPanel from "$lib/snapshots/SnapshotsPanel.svelte";
     import CogArt from "$lib/tree/CogArt.svelte";
     import ProjectsPanel, {
@@ -191,20 +192,16 @@
             user={data.user}
             {tokens}
         />
+        <HelpPanel
+            bounds={sections.help}
+            disabled={!spots}
+            onreplay={() => (touring = "replay")}
+        />
         <SnapshotsPanel
             bounds={sections.snapshots}
             snapshots={data.snapshots}
         />
     </PanZoom>
-
-    <button
-        type="button"
-        class="help"
-        inert={!!touring}
-        disabled={!spots}
-        aria-label="Help"
-        onclick={() => (touring = "replay")}>?</button
-    >
 
     <div class="nav" inert={!!touring}>
         <NavMenu
@@ -217,6 +214,7 @@
                 { label: "Orders", onselect: () => go(sections.orders) },
                 { label: "Referrals", onselect: () => go(sections.referral) },
                 { label: "Profile", onselect: () => go(sections.profile) },
+                { label: "Help", onselect: () => go(sections.help) },
                 { label: "Snapshots", onselect: () => go(sections.snapshots) },
             ]}
         />
@@ -316,35 +314,6 @@
 {/snippet}
 
 <style>
-    .help {
-        position: fixed;
-        right: calc(1rem + 3rem + 4px + 0.5rem);
-        bottom: 1rem;
-        display: grid;
-        place-items: center;
-        width: calc(3rem + 4px);
-        height: calc(3rem + 4px);
-        padding: 0;
-        background: #74472a;
-        border: 2px solid #4f2f1f;
-        border-radius: 7px;
-        color: #ead7c2;
-        font: inherit;
-        font-size: clamp(1.25rem, 2vw, 1.75rem);
-        font-weight: 700;
-        cursor: pointer;
-        transition:
-            background-color 0.3s,
-            color 0.3s,
-            opacity 0.3s;
-    }
-
-    .help:hover,
-    .help:focus-visible {
-        background-color: #ead7c2;
-        color: #4f2f1f;
-    }
-
     .status {
         position: fixed;
         inset: 0;
