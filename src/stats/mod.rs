@@ -1,7 +1,7 @@
 use crate::{error::ApiError, middleware, projects::review, tree};
 use actix_web::{HttpRequest, HttpResponse, get, post, web, web::Bytes};
 use chrono::{DateTime, NaiveDate, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
@@ -21,6 +21,19 @@ const VISITS_PER_IP: u32 = 50;
 const VISITOR_IPS: usize = 100_000;
 
 static CACHE: LazyLock<Mutex<Option<(Instant, Bytes)>>> = LazyLock::new(Default::default);
+
+const ROUNDS_JSON: &str = include_str!("../../frontend/src/lib/assets/fulfillment_rounds.json");
+
+#[derive(Deserialize)]
+struct Round {
+    ship_by: NaiveDate,
+}
+
+static SHIP_BY: LazyLock<Vec<NaiveDate>> = LazyLock::new(|| {
+    let rounds: Vec<Round> = serde_json::from_str(ROUNDS_JSON).expect("rounds json must be valid");
+    rounds.into_iter().map(|round| round.ship_by).collect()
+});
+
 static VISITS: LazyLock<std::sync::Mutex<(NaiveDate, HashMap<IpAddr, u32>)>> =
     LazyLock::new(Default::default);
 
@@ -253,16 +266,28 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
              (SELECT count(*) FROM submission
               WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1)
                  AS awaiting_review,
-             (SELECT extract(epoch FROM avg(now() - created_at))::float8 / 3600 FROM submission
-              WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1)
+             (SELECT extract(epoch FROM avg(now() - start))::float8 / 3600
+              FROM (SELECT GREATEST(created_at, (
+                              SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
+                              FROM unnest($4::date[]) AS ship_by
+                              WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date
+                          )) AS start FROM submission
+                    WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1) queued
+              WHERE start <= now())
                  AS average_wait_hours,
-             (SELECT extract(epoch FROM avg(approved_at - created_at))::float8 / 3600 FROM submission
-              WHERE deleted_at IS NULL AND approved_at IS NOT NULL)
+             (SELECT extract(epoch FROM avg(GREATEST(approved_at - start, interval '0')))::float8 / 3600
+              FROM (SELECT approved_at, GREATEST(created_at, (
+                              SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
+                              FROM unnest($4::date[]) AS ship_by
+                              WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date
+                          )) AS start FROM submission
+                    WHERE deleted_at IS NULL AND approved_at IS NOT NULL) approved)
                  AS average_approval_hours",
     )
     .bind(review::APPROVED)
     .bind(review::REFERRER_MIPS + review::REFEREE_MIPS)
     .bind(tree::STICKER as i32)
+    .bind(&*SHIP_BY)
     .fetch_one(pool)
     .await?;
     let funnel = Funnels {
