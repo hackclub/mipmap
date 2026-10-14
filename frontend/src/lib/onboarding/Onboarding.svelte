@@ -98,6 +98,7 @@
     let guide_height = $state(0);
     let controls_height = $state(0);
     let controls: HTMLDivElement;
+    let text = $state<HTMLDivElement>();
     let picking = false;
     let shapes = $state<Shape[]>([]);
     let place = $state<Place>({
@@ -143,6 +144,16 @@
             ? Math.max(72, short * 0.12)
             : Math.min(column_width, Math.max(120, short * 0.26));
     });
+
+    const bubble_max = $derived(
+        Math.max(
+            120,
+            view_height -
+                2 * margin -
+                reserve -
+                (place.layout === "column" ? avatar_size + 14 : 0),
+        ),
+    );
 
     const outline = (s: Shape) => {
         if (s.round) {
@@ -302,7 +313,13 @@
                 layout: "column",
                 side: "center",
                 x: (view_width - column_width) / 2,
-                y: (view_height - guide_height) / 2,
+                y: Math.max(
+                    Math.min(
+                        (view_height - guide_height) / 2,
+                        view_height - guide_height - margin - reserve,
+                    ),
+                    margin,
+                ),
                 width: column_width,
             };
         const open = modal();
@@ -544,6 +561,7 @@
                 previous.center !== step.center;
             previous = step;
             selected = null;
+            if (text) text.scrollTop = 0;
             if (!replay && i > furthest) {
                 furthest = i;
                 save_step(step.key);
@@ -839,12 +857,28 @@
         style:width="{place.width}px"
         style:transform="translate({place.x}px, {place.y}px)"
     >
-        <div class="bubble" class:shown={talking} role="status">
+        <div
+            class="bubble"
+            class:shown={talking}
+            role="status"
+            style:max-height="{bubble_max}px"
+        >
             {#if current}
-                <p>{@render current.say()}</p>
-                {#if current.sub && (!current.sub_when || (!replay && current.sub_when(context())))}
-                    <p class="sub">{@render current.sub()}</p>
-                {/if}
+                <div
+                    class="text"
+                    bind:this={text}
+                    role="presentation"
+                    onpointerdown={() =>
+                        (picking = !!modal()?.querySelector('[aria-expanded="true"]'))}
+                    onclick={() => {
+                        if (!blocking && !picking) next();
+                    }}
+                >
+                    <p>{@render current.say()}</p>
+                    {#if current.sub && (!current.sub_when || (!replay && current.sub_when(context())))}
+                        <p class="sub">{@render current.sub()}</p>
+                    {/if}
+                </div>
                 {#if failure}
                     <p class="hint">
                         {failure.text}. {touch ? "Tap" : "Click"} to try again
@@ -996,6 +1030,22 @@
 
     .row .bubble {
         flex: 1;
+    }
+
+    .bubble {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .text {
+        flex: 0 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        pointer-events: auto;
+    }
+
+    .hint {
+        flex: none;
     }
 
     .controls {

@@ -2,13 +2,7 @@
     import type { Snippet } from "svelte";
 
     export type Frame =
-        | "projects"
-        | "tile"
-        | "tree"
-        | "start"
-        | "snapshots"
-        | "side"
-        | "home";
+        "projects" | "tile" | "tree" | "start" | "snapshots" | "side" | "home";
 
     export type Hole =
         | "projects"
@@ -76,7 +70,12 @@
             center: true,
             frame: "home",
         },
-        { key: "Projects", say: projects, frame: "projects", holes: ["projects"] },
+        {
+            key: "Projects",
+            say: projects,
+            frame: "projects",
+            holes: ["projects"],
+        },
         {
             key: "New project",
             say: plus,
@@ -132,7 +131,13 @@
             resume: "Edit",
             project: true,
         },
-        { key: "Ship", say: ship, frame: "tile", holes: ["ship"], project: true },
+        {
+            key: "Ship",
+            say: ship,
+            frame: "tile",
+            holes: ["ship"],
+            project: true,
+        },
         { key: "Tech Tree", say: tree, frame: "tree", holes: ["tree"] },
         { key: "Currencies", say: currencies, frame: "tree", holes: ["tree"] },
         { key: "Mips", say: mips, frame: "tree", holes: ["tree"], demo: true },
@@ -215,13 +220,13 @@
 {/snippet}
 
 {#snippet improved()}
-    New onboarding flow, make sure you're super familiar with Mipmap's
-    systems. Also, you get a sticker for it!
+    New onboarding flow, make sure you're super familiar with Mipmap's systems.
+    Also, you get a sticker for it!
 {/snippet}
 
 {#snippet projects()}
-    If you want to claim your time for <span class="prize">prizes</span>,
-    you've gotta first set up a project
+    If you want to claim your time for <span class="prize">prizes</span>, you've
+    gotta first set up a project
 {/snippet}
 
 {#snippet plus()}
@@ -229,7 +234,7 @@
 {/snippet}
 
 {#snippet name()}
-    Pick a snazzy name. You can always change this later
+    Pick a snazzy name for your project. You can always change this later
 {/snippet}
 
 {#snippet edit()}
@@ -278,8 +283,8 @@
 
 {#snippet tree()}
     Here's your <span class="tech-tree">Tech Tree</span> of
-    <span class="prize">prizes</span>! I know it's a bit scary, but don't
-    worry, I'll show you through it!
+    <span class="prize">prizes</span>! I know it's a bit scary, but don't worry,
+    I'll show you through it!
 {/snippet}
 
 {#snippet currencies()}
@@ -288,20 +293,22 @@
 {/snippet}
 
 {#snippet mips()}
-    You get <span class="mip">Mips</span> from shipping projects, and these let
-    you unlock nodes down the tree
+    You get <span class="mip">Mips</span> from shipping projects, and these let you
+    unlock nodes down the tree
 {/snippet}
 
 {#snippet tokens()}
     But to actually redeem <span class="prize">prizes</span> to your door,
-    you've gotta unlock one of these <span class="token">Tokens</span> scattered
-    through the tree
+    you've gotta unlock one of these <span class="token">Tokens</span> scattered through
+    the tree
 {/snippet}
 
 {#snippet token_use()}
     One <span class="token">Token</span> lets you redeem
-    <b>any single <span class="prize">prize</span> from a node you've unlocked
-        with <span class="mip">Mips</span></b>
+    <b
+        >any single <span class="prize">prize</span> from a node you've unlocked
+        with <span class="mip">Mips</span></b
+    >
 {/snippet}
 
 {#snippet practice()}
@@ -310,7 +317,8 @@
 
 {#snippet unlock_sticker()}
     First, unlock the <span class="mipmap">Mipmap</span> sticker with your
-    <span class="mip">Mips</span>! (click the cog to open)
+    <span class="mip">Mips</span>! (click the cog to open, then press and hold
+    on the button)
 {/snippet}
 
 {#snippet unlock_token()}
@@ -319,8 +327,8 @@
 {/snippet}
 
 {#snippet redeem()}
-    Alright, now go spend this <span class="token">Token</span> so we'll send a
-    free sticker to your door!
+    Alright, now go spend this <span class="token">Token</span> so we'll send a free
+    sticker to your door!
 {/snippet}
 
 {#snippet redeem_note()}
@@ -335,8 +343,7 @@
 
 {#snippet snapshots()}
     One last thing, I promise! Making games is a super visual activity, so you
-    can be sharing regular <span class="snapshot">Snapshots</span> with everyone
-    else
+    can be sharing regular <span class="snapshot">Snapshots</span> with everyone else
 {/snippet}
 
 {#snippet snapshot_info()}
@@ -346,8 +353,8 @@
 {/snippet}
 
 {#snippet snapshot_rules()}
-    You can only post a <span class="snapshot">Snapshot</span> once per day and
-    after having logged 15 minutes of new time on a project
+    You can only post a <span class="snapshot">Snapshot</span> once per day and after
+    having logged 15 minutes of new time on a project
 {/snippet}
 
 {#snippet side()}

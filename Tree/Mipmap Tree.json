@@ -355,7 +355,7 @@
       "category": "Knickknacks",
       "id": 9,
       "kind": "item",
-      "name": "Blahaj",
+      "name": "Blåhaj",
       "price": 150,
       "requires": [54],
       "with_token_mips": {

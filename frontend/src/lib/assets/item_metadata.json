@@ -20,7 +20,7 @@
     "image": "https://m.media-amazon.com/images/P/B093FKT9BF.01._SCLZZZZZZZ_.jpg"
   },
   "9": {
-    "title": "Blahaj",
+    "title": "Blåhaj",
     "description": "rawr",
     "image": "https://www.ikea.com/us/en/images/products/blahaj-soft-toy-shark__0710175_pe727378_s5.jpg"
   },
@@ -177,6 +177,6 @@
   "53": {
     "title": "Mipmap sticker",
     "description": "",
-    "image": "/mipmap-avatar.svg"
+    "image": "/logo.svg"
   }
 }
