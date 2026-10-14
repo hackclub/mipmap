@@ -7,6 +7,7 @@
     import Funnel from "$lib/stats/Funnel.svelte";
     import LineChart from "$lib/stats/LineChart.svelte";
     import type { Stats } from "$lib/stats/types";
+    import { index } from "$lib/onboarding/script.svelte";
     import { duration, short_date, short_time } from "$lib/format";
 
     const stats = new Load(() => get_json<Stats>("/api/stats"));
@@ -22,8 +23,45 @@
     ];
     let range = $state(24 * 7);
     const hours = $derived(data?.hours.slice(-range) ?? []);
-    const funnel = $derived(
-        data?.funnel[ranges.find(([, value]) => value === range)?.[2] ?? "all"],
+    const period = $derived(
+        ranges.find(([, value]) => value === range)?.[2] ?? "all",
+    );
+    const funnel = $derived(data?.funnel[period]);
+    const onboarding = $derived(data?.onboarding[period]);
+    const past = (key: string) =>
+        onboarding?.steps
+            .filter((entry) => index(entry.step) >= index(key))
+            .reduce((total, entry) => total + entry.users, 0) ?? 0;
+    const onboarding_steps = $derived(
+        onboarding && [
+            { label: "Started", count: onboarding.started },
+            { label: "Made a project", count: past("Edit") },
+            { label: "Reached the Tech Tree", count: past("Tech Tree") },
+            { label: "Unlocked the sticker", count: past("Unlock token") },
+            { label: "Redeemed the sticker", count: past("Sticker sent") },
+            { label: "Finished", count: onboarding.finished },
+        ],
+    );
+    const onboarding_quick = $derived(
+        onboarding && [
+            [
+                "Completion rate",
+                onboarding.started
+                    ? `${Math.round((onboarding.finished / onboarding.started) * 100)}%`
+                    : "–",
+            ],
+            [
+                "Median time to finish",
+                onboarding.median_minutes === null
+                    ? "–"
+                    : `${Math.round(onboarding.median_minutes)}m`,
+            ],
+            ["Stickers claimed", onboarding.stickers.toLocaleString()],
+            [
+                "Still onboarding",
+                (onboarding.started - onboarding.finished).toLocaleString(),
+            ],
+        ],
     );
     const hour_labels = $derived(hours.map((hour) => short_time(hour.hour)));
     const quick = $derived(
@@ -108,7 +146,7 @@
     path="/stats"
 />
 
-{#if data && today && now && quick && steps}
+{#if data && today && now && quick && steps && onboarding_steps && onboarding_quick}
     <main>
         <header>
             <h1>Mipmap Stats</h1>
@@ -175,6 +213,19 @@
         <section class="card">
             <div class="label">Funnel</div>
             <Funnel {steps} />
+        </section>
+
+        <section class="card onboarding">
+            <div class="label">Onboarding</div>
+            <div class="quick">
+                {#each onboarding_quick as [label, value] (label)}
+                    <div>
+                        <div class="value">{value}</div>
+                        <div class="label small">{label}</div>
+                    </div>
+                {/each}
+            </div>
+            <Funnel steps={onboarding_steps} />
         </section>
     </main>
 {:else if stats.error}
@@ -307,6 +358,16 @@
         grid-template-columns: repeat(auto-fit, minmax(7rem, max-content));
         justify-content: space-between;
         gap: 1rem 0.75rem;
+    }
+
+    .onboarding {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .onboarding > .label {
+        margin: 0;
     }
 
     .value {

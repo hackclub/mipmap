@@ -19,7 +19,11 @@ export interface User {
   blocked: string | null;
   hackatime_linked: boolean;
   hackatime_revoked: boolean;
-  guides_seen: boolean;
+  onboarding_step: string | null;
+  onboarding_granted: boolean;
+  onboarded: boolean;
+  saw_old_onboarding: boolean;
+  sticker_skipped: boolean;
 }
 
 export interface Dashboard {

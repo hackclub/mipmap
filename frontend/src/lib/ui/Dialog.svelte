@@ -109,7 +109,9 @@
             ),
         };
         const background = [...document.body.children].filter(
-            (el) => holds.has(el) || !el.hasAttribute("inert"),
+            (el) =>
+                !el.hasAttribute("data-above-dialogs") &&
+                (holds.has(el) || !el.hasAttribute("inert")),
         );
         document.body.appendChild(node);
         open.push(entry);

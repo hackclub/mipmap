@@ -1,9 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { request } from "$lib/api";
-    import GuidesDialog from "$lib/guides/GuidesDialog.svelte";
-    import Tour from "$lib/guides/Tour.svelte";
-    import { steps, type Part } from "$lib/guides/TourSteps.svelte";
+    import Onboarding from "$lib/onboarding/Onboarding.svelte";
     import LinkHackatime from "$lib/dashboard/LinkHackatime.svelte";
     import LoadError from "$lib/ui/LoadError.svelte";
     import NavMenu from "$lib/dashboard/NavMenu.svelte";
@@ -14,7 +11,6 @@
     import ProfilePanel from "$lib/account/ProfilePanel.svelte";
     import ReferralPanel from "$lib/account/ReferralPanel.svelte";
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
-    import FeedbackPanel from "$lib/feedback/FeedbackPanel.svelte";
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
     import StepsPanel from "$lib/dashboard/StepsPanel.svelte";
     import SnapshotsPanel from "$lib/snapshots/SnapshotsPanel.svelte";
@@ -29,21 +25,22 @@
         fetch_layout,
         fetch_tree,
         purchase_item,
+        skip_sticker,
         unlock_item,
     } from "$lib/tree/api";
     import { node_color } from "$lib/tree/style";
-    import type { ItemMetadata } from "$lib/tree/types";
+    import { STICKER, STICKER_TOKEN } from "$lib/tree/tutorial";
+    import type { ItemMetadata, TreeNode } from "$lib/tree/types";
 
     const metadata: ItemMetadata = item_metadata;
 
     let selected = $state<number | null>(null);
     let panzoom = $state<PanZoom>();
-    let guide = $state<"welcome" | "help" | null>(null);
-    let welcomed = $state(false);
-    let touring = $state(false);
-    let replay = $state(false);
-    let tour_step = $state(0);
+    let onboarding = $state<Onboarding>();
+    let touring = $state<"first" | "replay" | null>(null);
+    let finished = $state(false);
     let project_dialog = $state<ProjectDialog>(null);
+    let demo = $state<Set<number>>(new Set());
 
     const structure = new Load(() =>
         Promise.all([fetch_tree(), fetch_layout()]),
@@ -51,6 +48,9 @@
 
     const data = $derived(dashboard.data);
     const unlocked = $derived(new Set(data?.unlocked));
+    const shown_unlocked = $derived(
+        demo.size ? new Set([...unlocked, ...demo]) : unlocked,
+    );
     const purchased = $derived(new Set(data?.purchased));
     const tree = $derived(structure.data?.[0]);
     const layout = $derived(structure.data?.[1]);
@@ -69,21 +69,15 @@
     const origin = $derived(
         start && layout && around(start, layout.shapes.origin.cog),
     );
-    const nearest_token = $derived.by(() => {
-        if (!start || !layout) return;
-        return layout.nodes
-            .filter((node) => nodes.get(node.id)?.kind === "token")
-            .sort(
-                (a, b) =>
-                    Math.hypot(a.x - start.x, a.y - start.y) -
-                    Math.hypot(b.x - start.x, b.y - start.y),
-            )[0];
+    const spot = (id: number) => {
+        const at = layout?.nodes.find((node) => node.id === id);
+        const kind = nodes.get(id)?.kind;
+        return at && kind && layout && around(at, layout.shapes[kind].cog * 1.3);
+    };
+    const spots = $derived.by(() => {
+        const [sticker, token] = [spot(STICKER), spot(STICKER_TOKEN)];
+        return sticker && token ? { sticker, token } : undefined;
     });
-    const token = $derived(
-        nearest_token &&
-            layout &&
-            around(nearest_token, layout.shapes.token.cog * 4),
-    );
     const go = (bounds: Bounds) =>
         panzoom?.show(bounds, { ms: 700, padding: 24, cap: Infinity });
 
@@ -92,31 +86,50 @@
         selected === null ? undefined : nodes.get(selected),
     );
     const tokens = $derived(
-        [...unlocked].filter((id) => nodes.get(id)?.kind === "token").length -
-            purchased.size,
+        [...unlocked].filter(
+            (id) => id !== STICKER_TOKEN && nodes.get(id)?.kind === "token",
+        ).length - [...purchased].filter((id) => id !== STICKER).length,
     );
+    const sticker_tokens = $derived(
+        unlocked.has(STICKER_TOKEN) &&
+            !purchased.has(STICKER) &&
+            !data?.user.sticker_skipped
+            ? 1
+            : 0,
+    );
+    const tutorial = (id: number) => id === STICKER || id === STICKER_TOKEN;
+    const sticker_token_meta = {
+        title: "Token",
+        description: "This Token can only be spent on the Mipmap sticker",
+        image: "",
+    };
     const available = $derived(
         selected_node?.requires.some(
             (id) => unlocked.has(id) || nodes.get(id)?.kind === "origin",
         ) ?? false,
     );
 
-    const focus = $derived(touring ? steps[tour_step].focus : undefined);
-    const faded = (part: Part) => !!focus && !focus.includes(part);
+    const view = (node: TreeNode) => ({
+        node,
+        meta:
+            node.id === STICKER_TOKEN
+                ? sticker_token_meta
+                : metadata[node.id],
+        unlocked: unlocked.has(node.id),
+        purchased: purchased.has(node.id),
+        tokens: node.id === STICKER ? sticker_tokens : tokens,
+        available,
+        blocked: tutorial(node.id) ? null : (data?.user.blocked ?? null),
+        skippable: node.id === STICKER && sticker_tokens > 0,
+    });
+    let kept: ReturnType<typeof view> | undefined;
+    const item = $derived(selected_node ? (kept = view(selected_node)) : kept);
+
+    const onboarded = $derived(!!data?.user.onboarded || finished);
 
     $effect(() => {
-        if (!data || data.user.guides_seen || welcomed) return;
-        welcomed = true;
-        guide = "welcome";
-        request("/api/guides/seen", { method: "POST" }).catch(() => {});
+        if (data && !onboarded && !touring && spots) touring = "first";
     });
-
-    function start_tour() {
-        replay = guide === "help";
-        guide = null;
-        tour_step = 0;
-        touring = true;
-    }
 
     onMount(() => {
         structure.run();
@@ -146,72 +159,54 @@
         home={sections.tree}
         limits={sections.all}
         keep={origin}
-        locked={touring}
     >
-        <div class="part" class:faded={faded("projects")}>
-            <ProjectsPanel
-                bounds={sections.projects}
-                projects={data.projects}
-                hackatime={data.hackatime_projects}
-                bind:dialog={project_dialog}
-            />
-        </div>
-        <div class="part" class:faded={faded("steps")}>
-            <StepsPanel bounds={sections.steps} />
-        </div>
-        <div class="part" class:faded={faded("tree")}>
-            <TechTree
-                left={sections.tree.left}
-                {nodes}
-                {layout}
-                {metadata}
-                currency={tree.currency}
-                {unlocked}
-                {purchased}
-                onselect={(id) => (selected = id)}
-            />
-        </div>
-        <div class="part" class:faded={faded("fulfillment")}>
-            <FulfillmentPanel bounds={sections.fulfillment} />
-        </div>
-        <div class="part" class:faded={faded("orders")}>
-            <OrdersPanel bounds={sections.orders} orders={data.orders} />
-        </div>
-        <div class="part" class:faded={faded("feedback")}>
-            <FeedbackPanel bounds={sections.feedback} />
-        </div>
-        <div class="part" class:faded={faded("referral")}>
-            <ReferralPanel
-                bounds={sections.referral}
-                code={data.user.referral_code}
-            />
-        </div>
-        <div class="part" class:faded={faded("profile")}>
-            <ProfilePanel
-                bounds={sections.profile}
-                currency={tree.currency}
-                user={data.user}
-                {tokens}
-            />
-        </div>
-        <div class="part" class:faded={faded("snapshots")}>
-            <SnapshotsPanel
-                bounds={sections.snapshots}
-                snapshots={data.snapshots}
-            />
-        </div>
+        <ProjectsPanel
+            bounds={sections.projects}
+            projects={data.projects}
+            hackatime={data.hackatime_projects}
+            bind:dialog={project_dialog}
+            touring={!!touring}
+            onsaved={(kind) => onboarding?.saved(kind)}
+        />
+        <StepsPanel bounds={sections.steps} />
+        <TechTree
+            left={sections.tree.left}
+            {nodes}
+            {layout}
+            {metadata}
+            currency={tree.currency}
+            unlocked={shown_unlocked}
+            {purchased}
+            onselect={(id) => (selected = id)}
+        />
+        <FulfillmentPanel bounds={sections.fulfillment} />
+        <OrdersPanel bounds={sections.orders} orders={data.orders} />
+        <ReferralPanel
+            bounds={sections.referral}
+            code={data.user.referral_code}
+        />
+        <ProfilePanel
+            bounds={sections.profile}
+            currency={tree.currency}
+            user={data.user}
+            {tokens}
+        />
+        <SnapshotsPanel
+            bounds={sections.snapshots}
+            snapshots={data.snapshots}
+        />
     </PanZoom>
 
     <button
         type="button"
         class="help"
-        class:locked={touring}
-        inert={touring}
+        inert={!!touring}
+        disabled={!spots}
         aria-label="Help"
-        onclick={() => (guide = "help")}>?</button
+        onclick={() => (touring = "replay")}>?</button
     >
 
-    <div class="nav" class:locked={touring} inert={touring}>
+    <div class="nav" inert={!!touring}>
         <NavMenu
             items={[
                 { label: "Project", onselect: () => go(sections.projects) },
@@ -222,20 +217,19 @@
                 { label: "Orders", onselect: () => go(sections.orders) },
                 { label: "Referrals", onselect: () => go(sections.referral) },
                 { label: "Profile", onselect: () => go(sections.profile) },
-                { label: "Feedback", onselect: () => go(sections.feedback) },
                 { label: "Snapshots", onselect: () => go(sections.snapshots) },
             ]}
         />
     </div>
 
-    <div class="banners">
-        {#if data.user.blocked}
+    <div class="banners" class:touring>
+        {#if !touring && data.user.blocked}
             <div class="banner">
                 {data.user.blocked}
                 <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
             </div>
         {/if}
-        {#if data.user.hackatime_revoked}
+        {#if !touring && data.user.hackatime_revoked}
             <div class="banner">
                 Mipmap lost access to your Hackatime account, so your hours
                 aren't being tracked
@@ -252,51 +246,55 @@
         {/if}
     </div>
 
-    {#if guide}
-        <GuidesDialog
-            title={guide === "welcome" ? "Check out Mipmap!" : "Mipmap Guides"}
-            ontour={start_tour}
-            onclose={() => (guide = null)}
-        />
-    {/if}
-
-    {#if touring}
-        <Tour
-            sections={{ ...sections, token: token ?? sections.tree }}
+    {#if touring && spots}
+        <Onboarding
+            bind:this={onboarding}
+            {sections}
+            {spots}
+            {nodes}
             {panzoom}
             projects={data.projects}
-            token={nearest_token?.id}
-            {replay}
-            bind:step={tour_step}
+            {unlocked}
+            {purchased}
+            granted={data.user.onboarding_granted}
+            mips={data.user.mips}
+            sticker_skipped={data.user.sticker_skipped}
+            returning={data.user.saw_old_onboarding}
+            stored={data.user.onboarding_step}
+            replay={touring === "replay"}
             bind:dialog={project_dialog}
-            onclose={() => {
-                touring = false;
+            bind:selected
+            bind:demo
+            onfinish={() => {
+                if (touring === "first") finished = true;
+                touring = null;
+                project_dialog = null;
                 panzoom?.settle();
             }}
         />
     {/if}
 
-    {#if !data.user.hackatime_linked &&
-        (data.user.guides_seen || welcomed) &&
-        !guide &&
-        !touring}
+    {#if !data.user.hackatime_linked && onboarded && !touring}
         <LinkHackatime />
     {/if}
 
-    {#if selected_node}
+    {#if selected_node && item}
         <ItemModal
-            node={selected_node}
-            meta={metadata[selected_node.id]}
+            node={item.node}
+            meta={item.meta}
             currency={tree.currency}
-            unlocked={unlocked.has(selected_node.id)}
-            purchased={purchased.has(selected_node.id)}
-            {tokens}
-            {available}
-            blocked={data.user.blocked}
-            image={selected_node.kind === "token" ? token_image : undefined}
+            unlocked={item.unlocked}
+            purchased={item.purchased}
+            tokens={item.tokens}
+            available={item.available}
+            blocked={item.blocked}
+            image={item.node.kind === "token" ? token_image : undefined}
             onclose={() => (selected = null)}
             onunlock={() => act(unlock_item)}
             onpurchase={() => act(purchase_item)}
+            onskip={item.skippable
+                ? () => act(skip_sticker)
+                : undefined}
         />
     {/if}
 {:else if structure.error || dashboard.error}
@@ -312,16 +310,12 @@
 {/if}
 
 {#snippet token_image()}
-    {#if selected_node}
-        <CogArt kind="token" color={node_color(selected_node)} size={160} />
+    {#if item}
+        <CogArt kind="token" color={node_color(item.node)} size={160} />
     {/if}
 {/snippet}
 
 <style>
-    .part.faded {
-        opacity: 0.15;
-    }
-
     .help {
         position: fixed;
         right: calc(1rem + 3rem + 4px + 0.5rem);
@@ -351,15 +345,6 @@
         color: #4f2f1f;
     }
 
-    .help.locked,
-    .nav.locked {
-        opacity: 0.4;
-    }
-
-    .nav {
-        transition: opacity 0.3s;
-    }
-
     .status {
         position: fixed;
         inset: 0;
@@ -380,6 +365,10 @@
         gap: 1rem;
         width: max-content;
         max-width: calc(100vw - 2rem);
+    }
+
+    .banners.touring {
+        z-index: 1101;
     }
 
     .banner {

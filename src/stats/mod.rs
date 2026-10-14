@@ -1,4 +1,4 @@
-use crate::{error::ApiError, middleware, projects::review};
+use crate::{error::ApiError, middleware, projects::review, tree};
 use actix_web::{HttpRequest, HttpResponse, get, post, web, web::Bytes};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
@@ -80,12 +80,74 @@ struct Funnels {
     all: Funnel,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+struct OnboardingTotals {
+    users: i64,
+    started: i64,
+    finished: i64,
+    median_minutes: Option<f64>,
+    stickers: i64,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct OnboardingStep {
+    step: String,
+    users: i64,
+}
+
+#[derive(Serialize)]
+struct Onboarding {
+    #[serde(flatten)]
+    totals: OnboardingTotals,
+    steps: Vec<OnboardingStep>,
+}
+
+#[derive(Serialize)]
+struct Onboardings {
+    day: Onboarding,
+    week: Onboarding,
+    all: Onboarding,
+}
+
 #[derive(Serialize)]
 struct Stats {
     days: Vec<Day>,
     hours: Vec<Hour>,
     totals: Totals,
     funnel: Funnels,
+    onboarding: Onboardings,
+}
+
+async fn onboarding(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Onboarding> {
+    let totals = sqlx::query_as(
+        "SELECT count(*) AS users,
+             count(*) FILTER (WHERE onboarding_started_at IS NOT NULL) AS started,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL) AS finished,
+             (percentile_cont(0.5) WITHIN GROUP (
+                  ORDER BY extract(epoch FROM onboarded_at - onboarding_started_at)
+              ) FILTER (WHERE onboarded_at IS NOT NULL AND onboarding_started_at IS NOT NULL))::float8
+                 / 60 AS median_minutes,
+             count(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM \"order\"
+                 WHERE user_id = \"user\".id AND node_id = $2 AND deleted_at IS NULL
+             )) AS stickers
+         FROM \"user\"
+         WHERE deleted_at IS NULL AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))",
+    )
+    .bind(hours)
+    .bind(tree::STICKER as i32)
+    .fetch_one(pool)
+    .await?;
+    let steps = sqlx::query_as(
+        "SELECT onboarding_step AS step, count(*) AS users FROM \"user\"
+         WHERE deleted_at IS NULL AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))
+             AND onboarding_started_at IS NOT NULL AND onboarding_step IS NOT NULL
+         GROUP BY 1",
+    )
+    .bind(hours)
+    .fetch_all(pool)
+    .await?;
+    Ok(Onboarding { totals, steps })
 }
 
 async fn funnel(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Funnel> {
@@ -105,13 +167,15 @@ async fn funnel(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Funnel> {
                  WHERE project.user_id = \"user\".id AND submission.deleted_at IS NULL
              )) AS shipped,
              count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM \"order\" WHERE user_id = \"user\".id AND deleted_at IS NULL
+                 SELECT 1 FROM \"order\"
+                 WHERE user_id = \"user\".id AND deleted_at IS NULL AND node_id <> $2
              )) AS redeemed
          FROM \"user\"
          WHERE deleted_at IS NULL
              AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))",
     )
     .bind(hours)
+    .bind(tree::STICKER as i32)
     .fetch_one(pool)
     .await
 }
@@ -182,7 +246,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
                  + (SELECT count(*) FROM \"user\" WHERE referral_paid) * $2 AS mips_awarded,
              (SELECT count(*) FROM snapshot WHERE deleted_at IS NULL) AS snapshots_shared,
              (SELECT count(*) FROM \"user\" WHERE referral_paid) AS successful_referrals,
-             (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL) AS orders_placed,
+             (SELECT count(*) FROM \"order\" WHERE deleted_at IS NULL AND node_id <> $3) AS orders_placed,
              (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
               WHERE \"user\".deleted_at IS NULL AND login.logged_in_at > now() - interval '1 day')
                  AS logged_in_last_day,
@@ -198,6 +262,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     )
     .bind(review::APPROVED)
     .bind(review::REFERRER_MIPS + review::REFEREE_MIPS)
+    .bind(tree::STICKER as i32)
     .fetch_one(pool)
     .await?;
     let funnel = Funnels {
@@ -205,7 +270,12 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
         week: funnel(pool, Some(24 * 7)).await?,
         all: funnel(pool, None).await?,
     };
-    Ok(serde_json::to_vec(&Stats { days, hours, totals, funnel })?.into())
+    let onboarding = Onboardings {
+        day: onboarding(pool, Some(24)).await?,
+        week: onboarding(pool, Some(24 * 7)).await?,
+        all: onboarding(pool, None).await?,
+    };
+    Ok(serde_json::to_vec(&Stats { days, hours, totals, funnel, onboarding })?.into())
 }
 
 #[get("/stats")]

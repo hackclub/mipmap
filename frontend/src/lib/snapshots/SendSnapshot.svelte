@@ -123,7 +123,9 @@
         <div class="note">
             {status.sent_today
                 ? "You've gotta wait for tomorrow to send the next one!"
-                : "You can still send a snapshot today!"}
+                : status.tracked_seconds < status.required_seconds
+                  ? "Make sure you've got 15 minutes in projects tracked by Hackatime first!"
+                  : "You can still send a snapshot today!"}
         </div>
         {#if send.error}
             <div class="note">{send.error}</div>

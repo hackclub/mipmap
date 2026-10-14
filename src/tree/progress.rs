@@ -1,4 +1,4 @@
-use super::{Kind, TREE};
+use super::{Kind, STICKER, STICKER_TOKEN, TREE, tutorial};
 use crate::{
     accounts::{profile, session::User},
     dashboard,
@@ -22,16 +22,25 @@ pub async fn unlocked(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<Vec
     .await
 }
 
-async fn lock_user(conn: &mut PgConnection, user_id: i32) -> Result<i32, ApiError> {
-    let (mips, status, eligible): (i32, Option<String>, bool) = sqlx::query_as(
-        "SELECT mips, verification_status, ysws_eligible FROM \"user\" WHERE id = $1 FOR UPDATE",
+struct Locked {
+    mips: i32,
+    onboarded: bool,
+    sticker_skipped: bool,
+}
+
+async fn lock_user(conn: &mut PgConnection, user_id: i32, verify: bool) -> Result<Locked, ApiError> {
+    let (mips, onboarded, sticker_skipped, status, eligible): (i32, bool, bool, Option<String>, bool) =
+        sqlx::query_as(
+            "SELECT mips, onboarded_at IS NOT NULL, sticker_skipped_at IS NOT NULL,
+                 verification_status, ysws_eligible
+             FROM \"user\" WHERE id = $1 FOR UPDATE",
     )
     .bind(user_id)
     .fetch_one(conn)
     .await?;
-    match profile::shop_blocked(status.as_deref(), eligible) {
+    match profile::shop_blocked(status.as_deref(), eligible).filter(|_| verify) {
         Some(reason) => Err(reject(reason)),
-        None => Ok(mips),
+        None => Ok(Locked { mips, onboarded, sticker_skipped }),
     }
 }
 
@@ -60,9 +69,15 @@ pub async fn unlock_item(
         .node(body.id)
         .filter(|node| node.kind != Kind::Origin)
         .ok_or_else(|| reject("unknown node"))?;
-    ensure_eligible(&pool, user_id).await?;
+    let practice = tutorial(node.id);
+    if !practice {
+        ensure_eligible(&pool, user_id).await?;
+    }
     let mut tx = pool.begin().await?;
-    let mips = lock_user(&mut tx, user_id).await?;
+    let Locked { mips, onboarded, .. } = lock_user(&mut tx, user_id, !practice).await?;
+    if !onboarded && !practice {
+        return Err(reject("Finish the tutorial first"));
+    }
     let unlocked = unlocked(&mut *tx, user_id).await?;
     if unlocked.contains(&(node.id as i32)) {
         return Err(reject("already unlocked"));
@@ -106,9 +121,21 @@ pub async fn purchase_item(
         .node(body.id)
         .filter(|node| node.kind == Kind::Item)
         .ok_or_else(|| reject("unknown item"))?;
-    ensure_eligible(&pool, user_id).await?;
+    let sticker = node.id == STICKER;
+    if !sticker {
+        ensure_eligible(&pool, user_id).await?;
+    }
+    let addressed: bool =
+        sqlx::query_scalar("SELECT address_line_1 IS NOT NULL FROM \"user\" WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(pool.get_ref())
+            .await?;
+    if !addressed && let Err(e) = profile::refresh(&pool, user_id).await {
+        log::warn!("refreshing user {user_id}'s HCA profile failed: {e:#}");
+    }
     let mut tx = pool.begin().await?;
-    if lock_user(&mut tx, user_id).await? < 0 {
+    let locked = lock_user(&mut tx, user_id, !sticker).await?;
+    if locked.mips < 0 {
         return Err(reject(format!("Your {} balance is negative", TREE.currency)));
     }
     let unlocked = unlocked(&mut *tx, user_id).await?;
@@ -123,11 +150,12 @@ pub async fn purchase_item(
     if ordered.contains(&(node.id as i32)) {
         return Err(reject("item already purchased"));
     }
-    let tokens = unlocked
-        .iter()
-        .filter(|&&id| TREE.is(id as u32, Kind::Token))
-        .count();
-    if ordered.len() >= tokens {
+    let available = if sticker {
+        !locked.sticker_skipped && unlocked.contains(&(STICKER_TOKEN as i32))
+    } else {
+        tokens(&unlocked) > ordered.iter().filter(|&&id| id != STICKER as i32).count()
+    };
+    if !available {
         return Err(reject("no tokens available"));
     }
     let inserted = sqlx::query(
@@ -155,6 +183,29 @@ pub async fn purchase_item(
     dashboard::respond(&pool, user_id).await
 }
 
+#[post("/skip-sticker")]
+pub async fn skip_sticker(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let mut tx = pool.begin().await?;
+    lock_user(&mut tx, user_id, false).await?;
+    if !unlocked(&mut *tx, user_id).await?.contains(&(STICKER_TOKEN as i32)) {
+        return Err(reject("no tokens available"));
+    }
+    let skipped = sqlx::query(
+        "UPDATE \"user\" SET sticker_skipped_at = now()
+         WHERE id = $1 AND sticker_skipped_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM \"order\" WHERE user_id = $1 AND node_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(user_id)
+    .bind(STICKER as i32)
+    .execute(&mut *tx)
+    .await?;
+    if skipped.rows_affected() == 0 {
+        return Err(reject("item already purchased"));
+    }
+    tx.commit().await?;
+    dashboard::respond(&pool, user_id).await
+}
+
 pub async fn backfill_prices(pool: &PgPool) -> sqlx::Result<()> {
     let (ids, prices): (Vec<i32>, Vec<i32>) = TREE
         .nodes
@@ -177,6 +228,13 @@ pub async fn backfill_prices(pool: &PgPool) -> sqlx::Result<()> {
     Ok(())
 }
 
+fn tokens(unlocked: &[i32]) -> usize {
+    unlocked
+        .iter()
+        .filter(|&&id| id != STICKER_TOKEN as i32 && TREE.is(id as u32, Kind::Token))
+        .count()
+}
+
 fn reached(unlocked: &[i32]) -> Vec<i32> {
     let mut reached = Vec::new();
     loop {
@@ -186,7 +244,7 @@ fn reached(unlocked: &[i32]) -> Vec<i32> {
                 && TREE.node(id as u32).is_none_or(|node| {
                     node.requires
                         .iter()
-                        .any(|&req| TREE.is(req, Kind::Origin) || reached.contains(&(req as i32)))
+                        .any(|&req| TREE.is(req, Kind::Origin) || tutorial(req) || reached.contains(&(req as i32)))
                 })
             {
                 reached.push(id);
@@ -229,7 +287,7 @@ pub async fn refund(conn: &mut PgConnection, user_id: i32) -> anyhow::Result<()>
             if owed <= 0 {
                 break;
             }
-            if undone.contains(&id) {
+            if undone.contains(&id) || tutorial(id as u32) {
                 continue;
             }
             if orders.iter().any(|&(_, node, fulfilled)| node == id && fulfilled) {
@@ -246,11 +304,17 @@ pub async fn refund(conn: &mut PgConnection, user_id: i32) -> anyhow::Result<()>
                 .map(|&(order, ..)| order)
                 .collect();
             if TREE.is(id as u32, Kind::Token) {
-                let tokens = rest.iter().filter(|&&node| TREE.is(node as u32, Kind::Token)).count();
-                let excess = (orders.len() - dropped.len()).saturating_sub(tokens);
+                let generic = |node: i32| node != STICKER as i32;
+                let spent = orders
+                    .iter()
+                    .filter(|&&(order, node, _)| generic(node) && !dropped.contains(&order))
+                    .count();
+                let excess = spent.saturating_sub(tokens(&rest));
                 let spare: Vec<i32> = orders
                     .iter()
-                    .filter(|&&(order, _, fulfilled)| !fulfilled && !dropped.contains(&order))
+                    .filter(|&&(order, node, fulfilled)| {
+                        !fulfilled && generic(node) && !dropped.contains(&order)
+                    })
                     .take(excess)
                     .map(|&(order, ..)| order)
                     .collect();

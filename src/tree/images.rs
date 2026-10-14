@@ -48,7 +48,8 @@ pub fn spawn() {
                 return;
             }
         };
-        let downloaded: Vec<(u32, Stored)> = join_all(metadata.into_iter().map(|(id, meta)| async move {
+        let remote = metadata.into_iter().filter(|(_, meta)| !meta.image.starts_with('/'));
+        let downloaded: Vec<(u32, Stored)> = join_all(remote.map(|(id, meta)| async move {
             match download(&meta.image).await {
                 Ok(stored) => Some((id, stored)),
                 Err(e) => {

@@ -173,5 +173,10 @@
     "title": "Benq RD280U Monitor",
     "description": "among the fanciest programming monitors you'll ever come across",
     "image": "https://image.benq.com/is/image/benqco/07-rd280u-right45?wid=800"
+  },
+  "53": {
+    "title": "Mipmap sticker",
+    "description": "",
+    "image": "/mipmap-avatar.svg"
   }
 }

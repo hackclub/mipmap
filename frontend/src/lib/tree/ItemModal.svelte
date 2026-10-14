@@ -4,6 +4,7 @@
     import { Task } from "$lib/load.svelte";
     import { price_label } from "$lib/tree/style";
     import HoldButton from "$lib/tree/HoldButton.svelte";
+    import { STICKER } from "$lib/tree/tutorial";
     import type { ItemMeta, TreeNode } from "$lib/tree/types";
 
     let {
@@ -19,6 +20,7 @@
         onclose,
         onunlock,
         onpurchase,
+        onskip,
     }: {
         node: TreeNode;
         meta?: ItemMeta;
@@ -32,15 +34,18 @@
         onclose: () => void;
         onunlock: () => Promise<void>;
         onpurchase: () => Promise<void>;
+        onskip?: () => Promise<void>;
     } = $props();
 
     const uid = $props.id();
     const token_description =
-        "Gives you one token which can be used to get yourself one prize";
+        "Gives you one Token which can be used to get yourself one prize";
 
     const title = $derived(meta?.title ?? node.name);
     const description = $derived(
-        node.kind === "token" ? token_description : meta?.description,
+        node.kind === "token"
+            ? (meta?.description ?? token_description)
+            : meta?.description,
     );
     const has_image = $derived(Boolean(image || meta?.image));
     const actionable = $derived(
@@ -105,11 +110,23 @@
                     fees that I may be charged to receive this item
                 </label>
                 <HoldButton
-                    label="Purchase with token ({tokens})"
+                    label="Purchase with Token ({tokens})"
                     disabled={tokens === 0 || !customs || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onpurchase)}
                 />
+                {#if onskip}
+                    <p class="skip">
+                        If you don't want to actually receive the sticker, use
+                        this button. The token will still be lost for the
+                        purposes of this tutorial.
+                    </p>
+                    <HoldButton
+                        label="Skip"
+                        disabled={tokens === 0 || task.pending}
+                        onconfirm={() => act(onskip)}
+                    />
+                {/if}
             {/if}
             {#if blocked && actionable}
                 <div class="note">
@@ -118,7 +135,17 @@
                 </div>
             {/if}
             {#if task.error}
-                <div class="note" role="alert">{task.error}</div>
+                <div class="note" role="alert">
+                    {task.error}
+                    {#if task.error.includes("Hack Club account")}
+                        <a href="https://auth.hackclub.com">
+                            Visit Hack Club Auth in order to receive prizes{node.id ===
+                            STICKER
+                                ? " such as this sticker"
+                                : ""}
+                        </a>
+                    {/if}
+                </div>
             {/if}
         </div>
     </div>
@@ -196,6 +223,12 @@
     }
 
     .note {
+        font-size: 0.85em;
+    }
+
+    .skip {
+        max-width: 28rem;
+        margin: 0.5rem 0 0;
         font-size: 0.85em;
     }
 

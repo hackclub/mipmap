@@ -28,6 +28,14 @@
   "currency": "Mips",
   "edges": [
     {
+      "from": 52,
+      "to": 53
+    },
+    {
+      "from": 53,
+      "to": 54
+    },
+    {
       "from": 5,
       "to": 16
     },
@@ -188,19 +196,19 @@
       "to": 51
     },
     {
-      "from": 52,
+      "from": 54,
       "to": 5
     },
     {
-      "from": 52,
+      "from": 54,
       "to": 9
     },
     {
-      "from": 52,
+      "from": 54,
       "to": 21
     },
     {
-      "from": 52,
+      "from": 54,
       "to": 11
     },
     {
@@ -261,7 +269,7 @@
       "kind": "item",
       "name": "TIS100",
       "price": 5,
-      "requires": [52],
+      "requires": [54],
       "with_token_mips": {
         "40": 965,
         "41": 80,
@@ -349,7 +357,7 @@
       "kind": "item",
       "name": "Blahaj",
       "price": 150,
-      "requires": [52],
+      "requires": [54],
       "with_token_mips": {
         "40": 1115,
         "41": 225,
@@ -393,7 +401,7 @@
       "kind": "item",
       "name": "Dot Matrix Module",
       "price": 5,
-      "requires": [52],
+      "requires": [54],
       "with_token_mips": {
         "40": 970,
         "41": 75,
@@ -613,7 +621,7 @@
       "kind": "item",
       "name": "16x2 LCD",
       "price": 5,
-      "requires": [52],
+      "requires": [54],
       "with_token_mips": {
         "40": 970,
         "41": 75,
@@ -1232,6 +1240,22 @@
         "48": 565,
         "49": 1570
       }
+    },
+    {
+      "category": "Knickknacks",
+      "id": 53,
+      "kind": "item",
+      "name": "Mipmap sticker",
+      "price": 20,
+      "requires": [52]
+    },
+    {
+      "category": null,
+      "id": 54,
+      "kind": "token",
+      "name": "Token",
+      "price": 100,
+      "requires": [53]
     },
     {
       "category": null,

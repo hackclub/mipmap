@@ -3,12 +3,12 @@ use crate::{
         hackatime, profile, redirect,
         session::{self, User},
     },
-    error::{ApiError, reject_with},
+    error::{ApiError, reject, reject_with},
     projects, snapshots, tree,
 };
 use actix_web::{HttpRequest, HttpResponse, get, http::StatusCode, post, web};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
@@ -21,7 +21,7 @@ const REFRESH_EVERY: Duration = Duration::from_secs(30);
 static REFRESHED: LazyLock<Mutex<HashMap<i32, Instant>>> = LazyLock::new(Default::default);
 
 pub fn api(cfg: &mut web::ServiceConfig) {
-    cfg.service((get_dashboard, see_guides));
+    cfg.service((get_dashboard, save_onboarding_step, grant_onboarding_mips, finish_onboarding));
 }
 
 pub fn pages(cfg: &mut web::ServiceConfig) {
@@ -42,7 +42,11 @@ struct UserInfo {
     hackatime_linked: bool,
     #[sqlx(skip)]
     hackatime_revoked: bool,
-    guides_seen: bool,
+    onboarding_step: Option<String>,
+    onboarding_granted: bool,
+    onboarded: bool,
+    saw_old_onboarding: bool,
+    sticker_skipped: bool,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -75,7 +79,10 @@ pub struct Dashboard {
 pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<Dashboard> {
     let mut user: UserInfo = sqlx::query_as(
         "SELECT first_name, mips, referral_code, verification_status, ysws_eligible,
-             hackatime_user_id IS NOT NULL AS hackatime_linked, guides_seen
+             hackatime_user_id IS NOT NULL AS hackatime_linked, onboarding_step,
+             onboarding_granted_at IS NOT NULL AS onboarding_granted,
+             onboarded_at IS NOT NULL AS onboarded, saw_old_onboarding,
+             sticker_skipped_at IS NOT NULL AS sticker_skipped
          FROM \"user\" WHERE id = $1",
     )
     .bind(user_id)
@@ -162,16 +169,75 @@ async fn get_dashboard(
     Ok(HttpResponse::Ok().json(build(&pool, user_id, fresh).await?))
 }
 
-#[post("/guides/seen")]
-async fn see_guides(
+#[derive(Deserialize)]
+struct OnboardingStep {
+    step: String,
+}
+
+#[post("/onboarding/step")]
+async fn save_onboarding_step(
+    User(user_id): User,
+    pool: web::Data<PgPool>,
+    body: web::Json<OnboardingStep>,
+) -> Result<HttpResponse, ApiError> {
+    if body.step.is_empty() || body.step.len() > 64 {
+        return Err(reject("Invalid onboarding step"));
+    }
+    sqlx::query(
+        "UPDATE \"user\" SET onboarding_step = $2,
+             onboarding_started_at = COALESCE(onboarding_started_at, now())
+         WHERE id = $1 AND onboarded_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(&body.step)
+    .execute(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[post("/onboarding/grant")]
+async fn grant_onboarding_mips(
     User(user_id): User,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, ApiError> {
-    sqlx::query("UPDATE \"user\" SET guides_seen = true WHERE id = $1 AND NOT guides_seen")
+    sqlx::query(
+        "UPDATE \"user\" SET mips = mips + $2, onboarding_granted_at = now()
+         WHERE id = $1 AND onboarding_granted_at IS NULL AND onboarded_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(tree::tutorial_mips())
+    .execute(pool.get_ref())
+    .await?;
+    respond(&pool, user_id).await
+}
+
+#[post("/onboarding/finish")]
+async fn finish_onboarding(
+    User(user_id): User,
+    pool: web::Data<PgPool>,
+) -> Result<HttpResponse, ApiError> {
+    let (done, onboarded): (bool, bool) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM unlock
+                 WHERE user_id = $1 AND node_id = ANY($2) AND deleted_at IS NULL) = 2
+             AND (sticker_skipped_at IS NOT NULL
+                  OR EXISTS (SELECT 1 FROM \"order\"
+                             WHERE user_id = $1 AND node_id = $3 AND deleted_at IS NULL)),
+             onboarded_at IS NOT NULL
+         FROM \"user\" WHERE id = $1",
+    )
+    .bind(user_id)
+    .bind([tree::STICKER as i32, tree::STICKER_TOKEN as i32])
+    .bind(tree::STICKER as i32)
+    .fetch_one(pool.get_ref())
+    .await?;
+    if !done && !onboarded {
+        return Err(reject("Redeem the Mipmap sticker to finish the tutorial"));
+    }
+    sqlx::query("UPDATE \"user\" SET onboarded_at = now() WHERE id = $1 AND onboarded_at IS NULL")
         .bind(user_id)
         .execute(pool.get_ref())
         .await?;
-    Ok(HttpResponse::NoContent().finish())
+    respond(&pool, user_id).await
 }
 
 #[get("/dashboard")]

@@ -10,6 +10,7 @@
         width,
         valid = true,
         cancel = false,
+        locked = false,
         onsubmit,
         onclose,
         extra,
@@ -20,6 +21,7 @@
         width?: string;
         valid?: boolean;
         cancel?: boolean;
+        locked?: boolean;
         onsubmit: () => Promise<unknown>;
         onclose: () => void;
         extra?: Snippet;
@@ -48,7 +50,7 @@
     labelledby="{uid}-title"
     corner="bottom-right"
     {width}
-    onclose={close}
+    onclose={locked ? undefined : close}
 >
     <form onsubmit={save}>
         <h2 id="{uid}-title">{title}</h2>
@@ -57,11 +59,17 @@
             <div class="error">{task.error}</div>
         {/if}
         <div class="actions" data-tour="actions">
-            {@render extra?.()}
-            {#if cancel}
+            {#if !locked}
+                {@render extra?.()}
+            {/if}
+            {#if cancel && !locked}
                 <MipmapButton type="button" onclick={close}>Cancel</MipmapButton>
             {/if}
-            <MipmapButton type="submit" disabled={task.pending}>
+            <MipmapButton
+                type="submit"
+                disabled={task.pending}
+                data-tour="submit"
+            >
                 {submit}
             </MipmapButton>
         </div>

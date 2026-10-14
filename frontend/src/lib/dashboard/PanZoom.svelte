@@ -190,6 +190,24 @@
         if (smooth) animate(from, ms);
     }
 
+    export function rect(bounds: Bounds): Bounds {
+        return {
+            left: shown.x + bounds.left * shown.scale,
+            top: shown.y + bounds.top * shown.scale,
+            width: bounds.width * shown.scale,
+            height: bounds.height * shown.scale,
+        };
+    }
+
+    export function world(rect: Bounds): Bounds {
+        return {
+            left: (rect.left - shown.x) / shown.scale,
+            top: (rect.top - shown.y) / shown.scale,
+            width: rect.width / shown.scale,
+            height: rect.height / shown.scale,
+        };
+    }
+
     export function settle() {
         const from = { ...shown };
         constrain();

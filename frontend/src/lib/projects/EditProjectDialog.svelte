@@ -15,10 +15,14 @@
     let {
         project,
         hackatime,
+        touring = false,
+        onsaved,
         onclose,
     }: {
         project: Project;
         hackatime: HackatimeProject[];
+        touring?: boolean;
+        onsaved?: () => void;
         onclose: () => void;
     } = $props();
 
@@ -65,7 +69,11 @@
     submit="Save"
     cancel
     extra={remove}
-    onsubmit={() => update_project(id, $state.snapshot(fields))}
+    locked={touring}
+    onsubmit={async () => {
+        await update_project(id, $state.snapshot(fields));
+        onsaved?.();
+    }}
     {onclose}
 >
     {#if reviewing}

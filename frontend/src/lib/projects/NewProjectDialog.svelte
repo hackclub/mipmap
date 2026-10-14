@@ -2,7 +2,12 @@
     import FormDialog from "$lib/ui/FormDialog.svelte";
     import Field from "$lib/ui/Field.svelte";
     import { create_project } from "$lib/projects/api";
-    let { onclose }: { onclose: () => void } = $props();
+    let {
+        touring = false,
+        onsaved,
+        onclose,
+    }: { touring?: boolean; onsaved?: () => void; onclose: () => void } =
+        $props();
 
     let name = $state("");
 </script>
@@ -12,7 +17,11 @@
     submit="Create"
     width="32rem"
     valid={!!name.trim()}
-    onsubmit={() => create_project(name.trim())}
+    onsubmit={async () => {
+        await create_project(name.trim());
+        onsaved?.();
+    }}
+    locked={touring}
     {onclose}
 >
     <Field

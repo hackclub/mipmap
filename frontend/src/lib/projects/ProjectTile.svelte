@@ -54,7 +54,11 @@
     }
 </script>
 
-<article class="tile" class:with-status={status_line}>
+<article
+    class="tile"
+    class:with-status={status_line}
+    data-tour-tile={project.id}
+>
     <h3>{project.name}</h3>
     {#if project.description}
         <p class="description">{project.description}</p>
@@ -111,7 +115,7 @@
         hidden
         onchange={pick}
     />
-    <div class="ship">
+    <div class="ship" data-tour-ship={project.id}>
         {#if project.status === "shipped"}
             <MipmapButton type="button" disabled>Reviewing</MipmapButton>
         {:else}

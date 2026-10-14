@@ -28,6 +28,16 @@ export type Stats = {
     average_approval_hours: number | null;
   };
   funnel: Record<"day" | "week" | "all", Funnel>;
+  onboarding: Record<"day" | "week" | "all", Onboarding>;
+};
+
+export type Onboarding = {
+  users: number;
+  started: number;
+  finished: number;
+  median_minutes: number | null;
+  stickers: number;
+  steps: { step: string; users: number }[];
 };
 
 export type Funnel = {

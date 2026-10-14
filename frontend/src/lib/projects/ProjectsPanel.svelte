@@ -19,11 +19,15 @@
         projects,
         hackatime,
         dialog = $bindable(null),
+        touring = false,
+        onsaved,
     }: {
         bounds: Bounds;
         projects: Project[];
         hackatime: HackatimeProject[];
         dialog?: ProjectDialog;
+        touring?: boolean;
+        onsaved?: (kind: "new" | "edit") => void;
     } = $props();
 
     const seconds = $derived(
@@ -67,11 +71,17 @@
 </Section>
 
 {#if dialog?.kind === "new"}
-    <NewProjectDialog onclose={() => (dialog = null)} />
+    <NewProjectDialog
+        {touring}
+        onsaved={() => onsaved?.("new")}
+        onclose={() => (dialog = null)}
+    />
 {:else if dialog?.kind === "edit" && active}
     <EditProjectDialog
         project={active}
         {hackatime}
+        {touring}
+        onsaved={() => onsaved?.("edit")}
         onclose={() => (dialog = null)}
     />
 {:else if dialog?.kind === "ship" && active}

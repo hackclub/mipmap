@@ -11,3 +11,6 @@ export const unlock_item = (id: number) =>
 
 export const purchase_item = (id: number) =>
   mutate("/api/purchase-item", send_json("POST", { id }));
+
+export const skip_sticker = () =>
+  mutate("/api/skip-sticker", { method: "POST" });
