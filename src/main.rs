@@ -7,6 +7,7 @@ use actix_web::{
 };
 
 mod accounts;
+mod admin;
 mod dashboard;
 mod database;
 mod env;
@@ -90,6 +91,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(tree::routes)
                     .configure(projects::routes)
                     .configure(stats::api)
+                    .configure(admin::api)
                     .service(snapshots::create_snapshot)
                     .service(feedback::create_feedback)
                     .service(accounts::session::logout),
@@ -98,8 +100,13 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/dashboard/item-images").service(tree::item_image))
             .configure(dashboard::pages)
             .configure(stats::pages)
+            .configure(admin::pages)
             .service(docs)
-            .service(Files::new("/", FRONTEND_DIR).index_file("index.html"))
+            .service(
+                Files::new("/", FRONTEND_DIR)
+                    .index_file("index.html")
+                    .path_filter(|path, _| path.file_name().is_none_or(|name| name != "admin.html")),
+            )
     })
     .bind(("0.0.0.0", 8080))?
     .run()

@@ -72,6 +72,7 @@ async fn everyone(pool: &PgPool) -> sqlx::Result<Vec<Snapshot>> {
         "SELECT snapshot.id, image_url AS image, caption, display_name AS author
          FROM snapshot JOIN \"user\" ON \"user\".id = snapshot.user_id
          WHERE snapshot.deleted_at IS NULL AND \"user\".deleted_at IS NULL AND NOT \"user\".is_banned
+         AND snapshot.shadowbanned_at IS NULL
          ORDER BY snapshot.created_at DESC LIMIT $1",
     )
     .bind(FEED_SIZE)

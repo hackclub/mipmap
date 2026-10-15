@@ -98,6 +98,8 @@ struct Submission {
     tracked_hours: Option<f64>,
     multiplier: Option<f64>,
     mips: i32,
+    bonus_percent: f64,
+    bonus_mips: i32,
     deleted: bool,
 }
 
@@ -341,17 +343,30 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
         users.insert(user_id);
         lowered.extend(project_lowered);
     }
-    for user_id in lowered {
-        let overdrawn: bool = sqlx::query_scalar("SELECT mips < 0 FROM \"user\" WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(&mut *tx)
-            .await?;
-        if overdrawn {
-            tree::refund(&mut tx, user_id).await?;
-        }
-    }
+    refund_overdrawn(&mut tx, lowered).await?;
     tx.commit().await?;
     Ok(users.into_iter().collect())
+}
+
+async fn refund_overdrawn(
+    conn: &mut PgConnection,
+    users: impl IntoIterator<Item = i32>,
+) -> anyhow::Result<()> {
+    for user_id in users {
+        let overdrawn: bool = sqlx::query_scalar("SELECT mips < 0 FROM \"user\" WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&mut *conn)
+            .await?;
+        if overdrawn {
+            tree::refund(conn, user_id).await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn rebalance(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<()> {
+    let (_, lowered) = reconcile(conn, project_id).await?;
+    refund_overdrawn(conn, lowered).await
 }
 
 async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(i32, Vec<i32>)> {
@@ -361,7 +376,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
         .await?;
     let submissions: Vec<Submission> = sqlx::query_as(
         "SELECT id, record_id, mips_per_hour, review_status, rejected, hours, tracked_hours, multiplier, mips,
-             deleted_at IS NOT NULL AS deleted
+             bonus_percent, bonus_mips, deleted_at IS NOT NULL AS deleted
          FROM submission WHERE project_id = $1 ORDER BY created_at, id FOR UPDATE",
     )
     .bind(project_id)
@@ -374,7 +389,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
     .fetch_one(&mut *conn)
     .await?;
 
-    let mut delta = 0;
+    let mut delta: i32 = 0;
     let mut legacy_hours = 0.0_f64;
     for submission in submissions {
         let approved = !submission.deleted
@@ -393,7 +408,9 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
                         earned
                     }
                 };
-                let mips = (earned * submission.mips_per_hour * multiplier).round() as i32;
+                let bonus = 1.0 + submission.bonus_percent / 100.0;
+                let mips = ((earned * submission.mips_per_hour * multiplier * bonus).round() as i32)
+                    .saturating_add(submission.bonus_mips);
                 (mips, Some(multiplier))
             }
             (true, None) => {
@@ -412,7 +429,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
                 .bind(multiplier)
                 .execute(&mut *conn)
                 .await?;
-            delta += mips - submission.mips;
+            delta = delta.saturating_add(mips - submission.mips);
         }
     }
     if delta != 0 {
