@@ -10,6 +10,7 @@
     import { arrange } from "$lib/dashboard/sections";
     import ProfilePanel from "$lib/account/ProfilePanel.svelte";
     import ReferralPanel from "$lib/account/ReferralPanel.svelte";
+    import ChallengePanel from "$lib/challenges/ChallengePanel.svelte";
     import FulfillmentPanel from "$lib/fulfillment/FulfillmentPanel.svelte";
     import OrdersPanel from "$lib/orders/OrdersPanel.svelte";
     import StepsPanel from "$lib/dashboard/StepsPanel.svelte";
@@ -186,6 +187,7 @@
             bounds={sections.referral}
             code={data.user.referral_code}
         />
+        <ChallengePanel bounds={sections.challenge} />
         <ProfilePanel
             bounds={sections.profile}
             currency={tree.currency}
@@ -213,6 +215,10 @@
                 },
                 { label: "Orders", onselect: () => go(sections.orders) },
                 { label: "Referrals", onselect: () => go(sections.referral) },
+                {
+                    label: "Challenges",
+                    onselect: () => go(sections.challenge),
+                },
                 { label: "Profile", onselect: () => go(sections.profile) },
                 { label: "Help", onselect: () => go(sections.help) },
                 { label: "Snapshots", onselect: () => go(sections.snapshots) },

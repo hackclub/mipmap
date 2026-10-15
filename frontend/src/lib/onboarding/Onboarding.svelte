@@ -25,6 +25,7 @@
         | "fulfillment"
         | "orders"
         | "referral"
+        | "challenge"
         | "profile"
         | "help";
 
@@ -32,7 +33,7 @@
 
     type Place = {
         layout: "column" | "row";
-        side: "left" | "right" | "bottom" | "center";
+        side: "left" | "right" | "bottom" | "top" | "center";
         x: number;
         y: number;
         width: number;
@@ -82,6 +83,7 @@
         "fulfillment",
         "orders",
         "referral",
+        "challenge",
         "profile",
         "help",
     ] as const;
@@ -334,13 +336,20 @@
                     ?.getAnimations({ subtree: true })
                     .some((a) => a.effect?.getComputedTiming().endTime !== Infinity);
             if (settling) return place;
+            const top: Place = {
+                layout: "row",
+                side: "top",
+                x: margin,
+                y: margin,
+                width: view_width - 2 * margin,
+            };
             const box = open?.getBoundingClientRect();
             const anchor = shapes[0];
-            if (narrow || !box || !anchor) return bottom;
+            if (narrow || !box || !anchor) return top;
             const right = view_width - box.right - 2 * margin;
             const left = box.left - 2 * margin;
             const width = Math.min(column_width, Math.max(left, right));
-            if (width < 240) return bottom;
+            if (width < 240) return top;
             const y = Math.min(
                 Math.max(anchor.top + anchor.height / 2 - guide_height / 2, margin),
                 view_height - guide_height - margin - reserve,
@@ -415,7 +424,10 @@
             await new Promise((done) => setTimeout(done, 350));
             const el = step.holes?.[0] && element(step.holes[0]);
             if (el && current === step) {
-                el.style.scrollMarginTop = "24px";
+                el.style.scrollMarginTop =
+                    place.side === "top"
+                        ? `${guide_height + 2 * margin + 24}px`
+                        : "24px";
                 el.scrollIntoView({
                     block: place.layout === "row" ? "start" : "center",
                     behavior: "smooth",
@@ -674,11 +686,17 @@
         if (!current || !(current.dialog || item_wait(current))) return;
         if (place.layout !== "row") return;
         const root = document.documentElement;
+        const guide_space = guide_height + 2 * margin;
+        const top = place.side === "top";
         root.style.setProperty(
             "--tour-space",
-            `${guide_height + 2 * margin + reserve}px`,
+            `${top ? reserve : guide_space + reserve}px`,
         );
-        return () => root.style.removeProperty("--tour-space");
+        if (top) root.style.setProperty("--tour-top", `${guide_space}px`);
+        return () => {
+            root.style.removeProperty("--tour-space");
+            root.style.removeProperty("--tour-top");
+        };
     });
 
     function usable(target: Node | null) {
