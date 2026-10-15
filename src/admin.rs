@@ -3,6 +3,7 @@ use crate::{
     env,
     error::{ApiError, reject, reject_with},
     projects::review,
+    tree,
 };
 use actix_web::{
     FromRequest, HttpRequest, HttpResponse,
@@ -138,11 +139,12 @@ fn like(query: &Option<String>) -> Option<String> {
         })
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct PageQuery {
     before: Option<i32>,
     status: Option<String>,
     q: Option<String>,
+    item: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -278,7 +280,7 @@ async fn set_bonus(
         .execute(&mut *tx)
         .await?;
     review::rebalance(&mut tx, project_id).await?;
-    let ship = fetch_ships(&mut *tx, Some(id), &PageQuery { before: None, status: None, q: None })
+    let ship = fetch_ships(&mut *tx, Some(id), &PageQuery::default())
         .await?
         .pop()
         .ok_or_else(|| reject("Unknown ship"))?;
@@ -564,11 +566,14 @@ async fn get_orders(
     let orders: Vec<Order> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{ORDER_SELECT} WHERE o.deleted_at IS NULL AND ($1::int IS NULL OR o.id < $1)
          AND ($2::text IS DISTINCT FROM 'unfulfilled' OR NOT o.fulfilled)
+         AND CASE $4::text WHEN 'sticker' THEN o.node_id = $5 WHEN 'other' THEN o.node_id <> $5 ELSE true END
          ORDER BY o.id DESC LIMIT $3"
     )))
     .bind(query.before)
     .bind(query.status.as_deref())
     .bind(PAGE)
+    .bind(query.item.as_deref())
+    .bind(tree::STICKER as i32)
     .fetch_all(pool.get_ref())
     .await?;
     Ok(HttpResponse::Ok().json(orders))

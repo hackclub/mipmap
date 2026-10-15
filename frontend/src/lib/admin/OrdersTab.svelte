@@ -18,10 +18,13 @@
     let { onchange }: { onchange: () => void } = $props();
 
     let status = $state<"unfulfilled" | "all">("unfulfilled");
-    const pages = new Pages<Order>((before) => fetch_orders({ before, status }));
+    let item = $state<"all" | "sticker" | "other">("all");
+    const pages = new Pages<Order>((before) =>
+        fetch_orders({ before, status, item }),
+    );
 
     $effect(() => {
-        void status;
+        void [status, item];
         untrack(pages.reset);
     });
 
@@ -65,6 +68,15 @@
         ["all", "All"],
     ]}
     bind:value={status}
+/>
+
+<Filters
+    options={[
+        ["all", "All items"],
+        ["sticker", "Stickers"],
+        ["other", "Not stickers"],
+    ]}
+    bind:value={item}
 />
 
 <PagedList {pages} empty="No orders here">
