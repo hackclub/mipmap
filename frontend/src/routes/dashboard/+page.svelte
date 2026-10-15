@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import Onboarding from "$lib/onboarding/Onboarding.svelte";
     import LinkHackatime from "$lib/dashboard/LinkHackatime.svelte";
+    import Steve from "$lib/feedback/Steve.svelte";
     import Dialog from "$lib/ui/Dialog.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import { unsaved } from "$lib/onboarding/api";
@@ -312,6 +313,8 @@
     {#if !data.user.hackatime_linked && onboarded && !touring}
         <LinkHackatime />
     {/if}
+
+    <Steve active={onboarded && !touring && !reset} />
 
     {#if selected_node && item}
         <ItemModal

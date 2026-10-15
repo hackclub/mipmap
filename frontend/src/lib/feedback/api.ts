@@ -1,11 +1,18 @@
-import { json, request, send_json } from "$lib/api";
+import { request, send_json } from "$lib/api";
+import { mutate } from "$lib/dashboard/state.svelte";
 
-export async function send_feedback(feedback: {
+export const send_feedback = (feedback: {
   score: number;
   source: string;
   positives: string;
   improvements: string;
-}) {
-  const response = await request("/api/feedback", send_json("POST", feedback));
-  if (!response.ok) await json(response);
-}
+}) => mutate("/api/feedback", send_json("POST", feedback));
+
+export const visit_survey = () =>
+  request("/api/survey/visit", { method: "POST" })
+    .then((response) => (response.ok ? response.json() : { show: false }))
+    .then((body: { show: boolean }) => body.show)
+    .catch(() => false);
+
+export const dismiss_survey = () =>
+  request("/api/survey/dismiss", { method: "POST" }).catch(() => {});

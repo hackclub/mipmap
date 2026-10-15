@@ -1,12 +1,32 @@
 use crate::{
     accounts::session::User,
-    error::{ApiError, reject, reject_with},
+    dashboard,
+    error::{ApiError, reject},
 };
-use actix_web::{HttpResponse, http::StatusCode, post, web};
+use actix_web::{HttpResponse, post, web};
 use serde::Deserialize;
-use sqlx::PgPool;
+use serde_json::json;
+use sqlx::{PgExecutor, PgPool};
 
 const TEXT_LIMIT: usize = 2000;
+const SURVEY_MIPS: i32 = 15;
+
+pub async fn survey_due(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        "SELECT u.onboarded_at IS NOT NULL AND u.dashboard_visits >= 3
+             AND (u.survey_dismissed_at IS NULL OR u.survey_dismissed_at < now() - interval '5 days')
+             AND NOT EXISTS (
+                 SELECT 1 FROM feedback f
+                 WHERE f.user_id = u.id AND f.deleted_at IS NULL AND f.created_at > now() - interval '5 days'
+             )
+             AND (SELECT COALESCE(sum(p.total_seconds), 0) FROM project p
+                  WHERE p.user_id = u.id AND p.deleted_at IS NULL) >= 3600
+         FROM \"user\" u WHERE u.id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(db)
+    .await
+}
 
 #[derive(Deserialize)]
 struct FeedbackRequest {
@@ -39,12 +59,12 @@ pub async fn create_feedback(
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    let inserted = sqlx::query(
+    if !survey_due(&mut *tx, user_id).await? {
+        return Err(reject("Steve's survey isn't open right now"));
+    }
+    sqlx::query(
         "INSERT INTO feedback (user_id, score, source, positives, improvements)
-         SELECT $1, $2, $3, $4, $5
-         WHERE NOT EXISTS (
-             SELECT 1 FROM feedback WHERE user_id = $1 AND created_at > now() - interval '1 day'
-         )",
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(user_id)
     .bind(body.score)
@@ -53,12 +73,32 @@ pub async fn create_feedback(
     .bind(clean(body.improvements)?)
     .execute(&mut *tx)
     .await?;
-    if inserted.rows_affected() == 0 {
-        return Err(reject_with(
-            StatusCode::TOO_MANY_REQUESTS,
-            "You already sent feedback today. Thanks!",
-        ));
-    }
+    sqlx::query("UPDATE \"user\" SET mips = mips + $2, dashboard_visits = 0 WHERE id = $1")
+        .bind(user_id)
+        .bind(SURVEY_MIPS)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
+    dashboard::respond(&pool, user_id).await
+}
+
+#[post("/survey/visit")]
+pub async fn visit_survey(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE \"user\" SET dashboard_visits = dashboard_visits + 1 WHERE id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    let show = survey_due(&mut *tx, user_id).await? && rand::random::<bool>();
+    tx.commit().await?;
+    Ok(HttpResponse::Ok().json(json!({ "show": show })))
+}
+
+#[post("/survey/dismiss")]
+pub async fn dismiss_survey(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    sqlx::query("UPDATE \"user\" SET survey_dismissed_at = now() WHERE id = $1")
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
     Ok(HttpResponse::NoContent().finish())
 }

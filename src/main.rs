@@ -93,7 +93,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(stats::api)
                     .configure(admin::api)
                     .service(snapshots::create_snapshot)
-                    .service(feedback::create_feedback)
+                    .service((feedback::create_feedback, feedback::visit_survey, feedback::dismiss_survey))
                     .service(accounts::session::logout),
             )
             .configure(accounts::routes)

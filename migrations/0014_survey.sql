@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN survey_dismissed_at TIMESTAMPTZ, ADD COLUMN dashboard_visits INTEGER NOT NULL DEFAULT 0;
