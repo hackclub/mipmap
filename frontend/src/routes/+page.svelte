@@ -5,7 +5,7 @@
     import CogField from "$lib/landing/CogField.svelte";
     import FaqSection from "$lib/landing/FaqSection.svelte";
     import TextBlock from "$lib/landing/TextBlock.svelte";
-    import SiteHead from "$lib/SiteHead.svelte";
+    import SiteHead, { site_url } from "$lib/SiteHead.svelte";
     import { grid } from "$lib/cog_layout";
     import { grow_field } from "$lib/landing/cog_field";
 
@@ -151,17 +151,35 @@
             if (scroll_frame) window.cancelAnimationFrame(scroll_frame);
         };
     });
+
+    const description =
+        "Hack Club Mipmap is a program for teenagers by the nonprofit Hack Club where you can ship a game made without an engine to progress your tech tree and unlock free prizes!";
+    const structured = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "Hack Club Mipmap",
+        url: `${site_url}/`,
+        description,
+        publisher: {
+            "@type": "Organization",
+            name: "Hack Club",
+            url: "https://hackclub.com/",
+        },
+    }).replace(/</g, "\\u003c");
 </script>
 
 <svelte:window onresize={measure} />
 
 <svelte:head>
     <link rel="preload" as="image" href="/logo.svg" fetchpriority="high" />
+    {#if site_url}
+        {@html `<script type="application/ld+json">${structured}</script>`}
+    {/if}
 </svelte:head>
 
 <SiteHead
-    title="Hack Club Mipmap - Build a Game Without an Engine"
-    description="Hack Club Mipmap challenges teens to build a game without an engine, learn how games work, progress a tech tree, and unlock prizes."
+    title="Hack Club Mipmap - Make a game without an engine"
+    {description}
     path="/"
 />
 

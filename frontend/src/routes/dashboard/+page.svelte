@@ -151,6 +151,7 @@
 
 <svelte:head>
     <title>Dashboard - Hack Club Mipmap</title>
+    <meta name="robots" content="noindex" />
 </svelte:head>
 
 {#if account.suspended}

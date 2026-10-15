@@ -209,8 +209,8 @@
 </script>
 
 <SiteHead
-    title="Docs - Hack Club Mipmap"
-    description="Guides for Hack Club Mipmap."
+    title="Hack Club Mipmap Docs"
+    description="Overview of all the important graphics concepts, with links to a bunch of resources for common libraries like SDL, GLFW, OpenGL, Vulkan, Direct3D 12 and wgpu."
     path="/docs"
 />
 
