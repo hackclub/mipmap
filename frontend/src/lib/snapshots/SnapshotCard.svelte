@@ -20,14 +20,22 @@
 </script>
 
 <figure>
-    <img src={snapshot.image} alt="" loading="lazy" />
+    <button
+        type="button"
+        class="open"
+        aria-label="Open snapshot by {snapshot.author}"
+        onclick={() => (open = true)}
+    >
+        <img src={snapshot.image} alt="" loading="lazy" />
+    </button>
     <figcaption>
         <p class:long {@attach measure}>
-            {snapshot.caption} - {snapshot.author}
+            {snapshot.caption}
         </p>
         {#if long}
             <button type="button" onclick={() => (open = true)}>Read more</button>
         {/if}
+        <span class="author">- {snapshot.author}</span>
     </figcaption>
 </figure>
 
@@ -47,6 +55,13 @@
         margin: 0;
     }
 
+    .open {
+        display: block;
+        padding: 0;
+        background: none;
+        border: none;
+    }
+
     img {
         display: block;
         box-sizing: border-box;
@@ -62,7 +77,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        height: 4.2em;
+        height: 5.6em;
         padding: 0.5rem 0.75rem;
         background: #74472a;
         border: 2px solid #4f2f1f;
@@ -85,6 +100,14 @@
     figcaption p.long {
         -webkit-line-clamp: 2;
         line-clamp: 2;
+    }
+
+    .author {
+        margin-top: auto;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     figcaption button {
