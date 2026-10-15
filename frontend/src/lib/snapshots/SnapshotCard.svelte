@@ -1,13 +1,43 @@
 <script lang="ts">
     import type { Snapshot } from "$lib/snapshots/types";
+    import Dialog from "$lib/ui/Dialog.svelte";
 
     let { snapshot }: { snapshot: Snapshot } = $props();
+
+    const uid = $props.id();
+    let long = $state(false);
+    let open = $state(false);
+
+    function measure(text: HTMLElement) {
+        const check = () => {
+            const line = parseFloat(getComputedStyle(text).lineHeight);
+            long = text.scrollHeight > line * 3 + 1;
+        };
+        const observer = new ResizeObserver(check);
+        observer.observe(text);
+        return () => observer.disconnect();
+    }
 </script>
 
 <figure>
     <img src={snapshot.image} alt="" loading="lazy" />
-    <figcaption>{snapshot.caption} - {snapshot.author}</figcaption>
+    <figcaption>
+        <p class:long {@attach measure}>
+            {snapshot.caption} - {snapshot.author}
+        </p>
+        {#if long}
+            <button type="button" onclick={() => (open = true)}>Read more</button>
+        {/if}
+    </figcaption>
 </figure>
+
+{#if open}
+    <Dialog labelledby="{uid}-title" onclose={() => (open = false)}>
+        <h2 id="{uid}-title">Snapshot by {snapshot.author}</h2>
+        <img class="full" src={snapshot.image} alt="" />
+        <p class="full">{snapshot.caption}</p>
+    </Dialog>
+{/if}
 
 <style>
     figure {
@@ -29,11 +59,58 @@
     }
 
     figcaption {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        height: 4.2em;
         padding: 0.5rem 0.75rem;
         background: #74472a;
         border: 2px solid #4f2f1f;
         border-top: none;
         border-radius: 0 0 7px 7px;
         font-size: 0.85em;
+        line-height: 1.4;
+    }
+
+    figcaption p {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+
+    figcaption p.long {
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+    }
+
+    figcaption button {
+        padding: 0;
+        background: none;
+        border: none;
+        color: #e8c58c;
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    h2 {
+        margin: 0 0 1rem;
+    }
+
+    img.full {
+        aspect-ratio: auto;
+        max-height: 60vh;
+        object-fit: contain;
+        border-radius: 7px;
+    }
+
+    p.full {
+        margin: 1rem 0 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 </style>
