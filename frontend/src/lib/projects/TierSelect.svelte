@@ -169,13 +169,19 @@
             color 0.3s;
     }
 
-    .trigger:hover:not(:disabled),
     .trigger:focus-visible,
-    .options li:hover,
     .options li:focus-visible,
     .options li[aria-selected="true"] {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .trigger:hover:not(:disabled),
+        .options li:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .trigger:disabled {

@@ -85,10 +85,16 @@
             color 0.3s;
     }
 
-    header > :global(button:hover),
     header > :global(button:focus-visible) {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        header > :global(button:hover) {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .body {

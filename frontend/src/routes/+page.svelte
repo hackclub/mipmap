@@ -165,141 +165,148 @@
     path="/"
 />
 
-<div class="field" style:height="{cog_field_height}px">
-    <CogField {cogs} {scroll_y} {viewport_height} {footer_blocked} />
-</div>
-
-<div style:visibility={ready ? "visible" : "hidden"}>
-    <TextBlock
-        x={container_x}
-        y={container_y}
-        width={container_width}
-        {cogs}
-        obstacles={[left_box, right_box, description_box]}
-        bind:box_height={first_container_height}
-    >
-        <h1>Make a game without an engine, progress your tech tree!</h1>
-    </TextBlock>
-
-    <TextBlock
-        x={container_x}
-        y={pair_y}
-        width={pair_width}
-        {cogs}
-        min_height={pair_height}
-        obstacles={[first_box, right_box, description_box]}
-        bind:box_height={left_box_height}
-        bind:content_height={left_content_height}
-    >
-        <div class="pair">
-            <h2>Don't know where to start?</h2>
-        </div>
-        <div class="actions">
-            <MipmapButton
-                type="button"
-                onclick={() => (window.location.href = "/docs")}
-            >
-                Learn here!
-            </MipmapButton>
-        </div>
-    </TextBlock>
-
-    <TextBlock
-        x={container_x + pair_width + pair_gap}
-        y={pair_y}
-        width={pair_width}
-        {cogs}
-        min_height={pair_height}
-        obstacles={[first_box, left_box, description_box]}
-        bind:box_height={right_box_height}
-        bind:content_height={right_content_height}
-    >
-        <div class="pair">
-            <h2>Wanna get started?</h2>
-        </div>
-        <div class="actions">
-            <MipmapButton
-                type="button"
-                onclick={() => (window.location.href = "/login")}
-            >
-                Log in!
-            </MipmapButton>
-        </div>
-    </TextBlock>
-
-    <TextBlock
-        x={container_x}
-        y={description_y}
-        width={container_width}
-        {cogs}
-        variant="body"
-        min_height={240}
-        obstacles={[first_box, left_box, right_box]}
-        bind:box_height={description_box_height}
-    >
-        <p>
-            Ever wondered how video games work under the hood? Here's your
-            chance to find out! Hack Club Mipmap is a program for teenagers
-            (13-18 inclusive) by the nonprofit <a href="https://hackclub.com"
-                >Hack Club</a
-            > where you can ship a game made without an engine to progress your tech
-            tree and unlock free prizes!
-        </p>
-        <p>&ThickSpace;</p>
-        <p>
-            Got no idea how to even get started? That's totally fine! Mipmap's
-            got a video designed to get you up to speed with the
-            basics in one sitting. After that, you know exactly what
-            to look for when you're going through guides for the specific
-            graphics library you're using. Just click the "Learn here!" button
-            above!
-        </p>
-    </TextBlock>
-
-    <FaqSection
-        top={faq_y}
-        {viewport_width}
-        {pair_width}
-        {cogs}
-        obstacles={[first_box, left_box, right_box, description_box]}
-        bind:height={faq_height}
-    />
-</div>
-
-<div class="content" style:height="{page_height}px"></div>
-
-<footer
-    class="site-footer"
-    bind:clientWidth={footer_width}
-    bind:clientHeight={footer_height}
->
-    <div class="footer-links">
-        <a href="https://hackclub.com/">Hack Club</a>
-        <a href="https://hackclub.com/privacy-and-terms"
-            >Terms &amp; Privacy Policy</a
-        >
-        <a href="https://forms.hackclub.com/bounty">Fulfillment Bounty</a>
-        <a href="https://security.hackclub.com/">Security</a>
+<div class="page">
+    <div class="field" style:height="{cog_field_height}px">
+        <CogField {cogs} {scroll_y} {viewport_height} {footer_blocked} />
     </div>
-    <p class="made-with">
-        Made with <span class="heart" aria-label="love">&hearts;</span> by
-        <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR"
-            >Brendan</a
-        >
-        @ <a href="https://hackclub.com/">Hack Club</a>
-    </p>
-</footer>
 
-<div
-    class="logo"
-    style:top="{logo_top}px"
-    style:--aspect={logo_aspect}
-    bind:clientWidth={logo_width}
->
-    <MipmapLogo />
+    <div style:visibility={ready ? "visible" : "hidden"}>
+        <TextBlock
+            x={container_x}
+            y={container_y}
+            width={container_width}
+            {cogs}
+            obstacles={[left_box, right_box, description_box]}
+            bind:box_height={first_container_height}
+        >
+            <h1>Make a game without an engine, progress your tech tree!</h1>
+        </TextBlock>
+
+        <TextBlock
+            x={container_x}
+            y={pair_y}
+            width={pair_width}
+            {cogs}
+            min_height={pair_height}
+            obstacles={[first_box, right_box, description_box]}
+            bind:box_height={left_box_height}
+            bind:content_height={left_content_height}
+        >
+            <div class="pair">
+                <h2>Don't know where to start?</h2>
+            </div>
+            <div class="actions">
+                <MipmapButton
+                    type="button"
+                    onclick={() => (window.location.href = "/docs")}
+                >
+                    Learn here!
+                </MipmapButton>
+            </div>
+        </TextBlock>
+
+        <TextBlock
+            x={container_x + pair_width + pair_gap}
+            y={pair_y}
+            width={pair_width}
+            {cogs}
+            min_height={pair_height}
+            obstacles={[first_box, left_box, description_box]}
+            bind:box_height={right_box_height}
+            bind:content_height={right_content_height}
+        >
+            <div class="pair">
+                <h2>Wanna get started?</h2>
+            </div>
+            <div class="actions">
+                <MipmapButton
+                    type="button"
+                    onclick={() => (window.location.href = "/login")}
+                >
+                    Log in!
+                </MipmapButton>
+            </div>
+        </TextBlock>
+
+        <TextBlock
+            x={container_x}
+            y={description_y}
+            width={container_width}
+            {cogs}
+            variant="body"
+            min_height={240}
+            obstacles={[first_box, left_box, right_box]}
+            bind:box_height={description_box_height}
+        >
+            <p>
+                Ever wondered how video games work under the hood? Here's your
+                chance to find out! Hack Club Mipmap is a program for teenagers
+                (13-18 inclusive) by the nonprofit <a href="https://hackclub.com"
+                    >Hack Club</a
+                > where you can ship a game made without an engine to progress your tech
+                tree and unlock free prizes!
+            </p>
+            <p>&ThickSpace;</p>
+            <p>
+                Got no idea how to even get started? That's totally fine! Mipmap's
+                got a video designed to get you up to speed with the
+                basics in one sitting. After that, you know exactly what
+                to look for when you're going through guides for the specific
+                graphics library you're using. Just click the "Learn here!" button
+                above!
+            </p>
+        </TextBlock>
+
+        <FaqSection
+            top={faq_y}
+            {viewport_width}
+            {pair_width}
+            {cogs}
+            obstacles={[first_box, left_box, right_box, description_box]}
+            bind:height={faq_height}
+        />
+    </div>
+
+    <div class="content" style:height="{page_height}px"></div>
+
+    <footer
+        class="site-footer"
+        bind:clientWidth={footer_width}
+        bind:clientHeight={footer_height}
+    >
+        <div class="footer-links">
+            <a href="https://hackclub.com/">Hack Club</a>
+            <a href="https://hackclub.com/privacy-and-terms"
+                >Terms &amp; Privacy Policy</a
+            >
+            <a href="https://forms.hackclub.com/bounty">Fulfillment Bounty</a>
+            <a href="https://security.hackclub.com/">Security</a>
+        </div>
+        <p class="made-with">
+            Made with <span class="heart" aria-label="love">&hearts;</span> by
+            <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR"
+                >Brendan</a
+            >
+            @ <a href="https://hackclub.com/">Hack Club</a>
+        </p>
+    </footer>
+
+    <div
+        class="logo"
+        style:top="{logo_top}px"
+        style:--aspect={logo_aspect}
+        bind:clientWidth={logo_width}
+    >
+        <MipmapLogo />
+    </div>
 </div>
 
 <style>
+    .page {
+        position: relative;
+        overflow-x: clip;
+    }
+
     .site-footer {
         position: relative;
         box-sizing: border-box;
@@ -346,14 +353,14 @@
 
     .logo {
         position: absolute;
-        width: min(75%, calc(70vh * var(--aspect)));
-        left: calc((100% - min(75%, calc(70vh * var(--aspect)))) / 2);
+        width: min(75%, calc(70svh * var(--aspect)));
+        left: calc((100% - min(75%, calc(70svh * var(--aspect)))) / 2);
     }
 
     @media (max-width: 600px) {
         .logo {
-            width: min(90%, calc(70vh * var(--aspect)));
-            left: calc((100% - min(90%, calc(70vh * var(--aspect)))) / 2);
+            width: min(90%, calc(70svh * var(--aspect)));
+            left: calc((100% - min(90%, calc(70svh * var(--aspect)))) / 2);
         }
     }
 

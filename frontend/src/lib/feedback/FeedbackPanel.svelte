@@ -120,11 +120,17 @@
             color 0.3s;
     }
 
-    .scores label:hover,
     .scores label:has(:focus-visible),
     .scores label.chosen {
         background: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .scores label:hover {
+            background: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .scores input {

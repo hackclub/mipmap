@@ -396,10 +396,16 @@
             color 0.3s;
     }
 
-    .home:hover,
     .home:focus-visible {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .home:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .card {

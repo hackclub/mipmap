@@ -1159,10 +1159,16 @@
             color 0.3s;
     }
 
-    .controls button:hover:not(:disabled),
     .controls button:focus-visible {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .controls button:hover:not(:disabled) {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .controls button:disabled {

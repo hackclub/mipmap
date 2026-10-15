@@ -560,9 +560,15 @@
         border-top: 2px solid #4f2f1f;
     }
 
-    .controls button:hover,
     .controls button:focus-visible {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .controls button:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 </style>

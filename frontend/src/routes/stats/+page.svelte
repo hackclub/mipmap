@@ -277,13 +277,19 @@
             color 0.3s;
     }
 
-    .refresh button:hover:not(:disabled),
     .refresh button:focus-visible,
-    .ranges button:hover,
     .ranges button:focus-visible,
     .ranges button.active {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .refresh button:hover:not(:disabled),
+        .ranges button:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .refresh button:disabled {

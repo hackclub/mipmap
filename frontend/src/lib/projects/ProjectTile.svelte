@@ -207,12 +207,18 @@
             color 0.3s;
     }
 
-    .edit:hover,
     .edit:focus-visible,
-    .shot:hover:not(:disabled) span,
     .shot:focus-visible span {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .edit:hover,
+        .shot:hover:not(:disabled) span {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .shot {

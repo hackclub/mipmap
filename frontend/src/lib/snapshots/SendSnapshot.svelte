@@ -188,11 +188,17 @@
             color 0.3s;
     }
 
-    .drop:hover,
     .drop:focus-visible,
     .drop.dragging {
         background-color: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .drop:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .drop img {

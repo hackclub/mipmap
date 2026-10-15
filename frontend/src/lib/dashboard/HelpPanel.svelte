@@ -88,9 +88,15 @@
         opacity: 0.5;
     }
 
-    .guide:hover:not(:disabled) .caption,
     .guide:focus-visible .caption {
         background: #ead7c2;
         color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .guide:hover:not(:disabled) .caption {
+            background: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 </style>

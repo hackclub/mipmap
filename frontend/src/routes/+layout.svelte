@@ -59,8 +59,13 @@
 		transition: color 0.3s;
 	}
 
-	:global(a:hover),
 	:global(a:focus-visible) {
 		color: #d6ab70;
+	}
+
+	@media (hover: hover) {
+		:global(a:hover) {
+			color: #d6ab70;
+		}
 	}
 </style>

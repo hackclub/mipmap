@@ -359,7 +359,7 @@
 		border: 2px solid #4f2f1f;
 		border-radius: 7px;
 		color: #ead7c2;
-		font-size: 0.7rem;
+		font-size: 0.8rem;
 		line-height: 1.15;
 		text-align: center;
 		animation: clutch calc(var(--spin-duration) * 0.336) linear infinite;

@@ -365,10 +365,10 @@
 
     .close {
         position: absolute;
-        top: 0.75rem;
-        right: 0.75rem;
+        top: 0.125rem;
+        right: 0.125rem;
         display: grid;
-        padding: 0.25rem;
+        padding: 0.875rem;
         background: none;
         border: none;
         color: inherit;
@@ -377,9 +377,14 @@
         transition: opacity 0.3s;
     }
 
-    .close:hover,
     .close:focus-visible {
         opacity: 1;
+    }
+
+    @media (hover: hover) {
+        .close:hover {
+            opacity: 1;
+        }
     }
 
     .close svg {

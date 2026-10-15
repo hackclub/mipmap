@@ -128,14 +128,24 @@
         transition: transform 0.3s;
     }
 
-    .interactive:hover .cog,
     .interactive:focus-visible .cog {
         transform: rotate(20deg);
     }
 
-    .interactive:hover .label,
+    @media (hover: hover) {
+        .interactive:hover .cog {
+            transform: rotate(20deg);
+        }
+    }
+
     .interactive:focus-visible .label {
         transform: scale(1.06);
+    }
+
+    @media (hover: hover) {
+        .interactive:hover .label {
+            transform: scale(1.06);
+        }
     }
 
     .label {
