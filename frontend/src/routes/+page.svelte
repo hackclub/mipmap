@@ -191,7 +191,9 @@
         bind:box_height={left_box_height}
         bind:content_height={left_content_height}
     >
-        <h2>Don't know where to start?</h2>
+        <div class="pair">
+            <h2>Don't know where to start?</h2>
+        </div>
         <div class="actions">
             <MipmapButton
                 type="button"
@@ -212,7 +214,9 @@
         bind:box_height={right_box_height}
         bind:content_height={right_content_height}
     >
-        <h2>Wanna get started?</h2>
+        <div class="pair">
+            <h2>Wanna get started?</h2>
+        </div>
         <div class="actions">
             <MipmapButton
                 type="button"
@@ -353,7 +357,24 @@
         }
     }
 
+    .pair {
+        font-size: clamp(1rem, 4vw, 3.5rem);
+        font-weight: 400;
+        overflow-wrap: break-word;
+    }
+
     .actions {
         margin-top: 1.25rem;
+    }
+
+    .actions :global(button) {
+        max-width: 100%;
+    }
+
+    @media (max-width: 600px) {
+        .actions :global(button) {
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+        }
     }
 </style>

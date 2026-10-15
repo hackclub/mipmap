@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { cog_size, large_cog_size, hub_radius } from '$lib/cog_layout';
 	import { belt_shadow, cog_image, cog_shadow, shadow_pad, shadow_x, shadow_y } from '$lib/landing/cog_images';
-	import type { Blocked, FieldCog } from '$lib/landing/cog_field';
+	import { mulberry32, type Blocked, type FieldCog } from '$lib/landing/cog_field';
+	import item_metadata from '$lib/assets/item_metadata.json';
 
 	let {
 		cogs,
@@ -16,6 +17,8 @@
 	const render_margin = cog_size;
 	const max_belt_height = 900 + 2 * (belt_radius + belt_thickness / 2);
 	const belt_cell_size = 420;
+	const prizes = Object.values(item_metadata as Record<string, { title: string; image: string }>);
+	const prize_seed = Math.floor(Math.random() * 2 ** 31);
 
 	function brightness_for(cog: FieldCog) {
 		let hash = Math.imul(cog.x, 374761393) ^ Math.imul(cog.y, 668265263);
@@ -119,6 +122,24 @@
 			clockwise: cog.parity === 1
 		};
 	}
+
+	const cog_prizes = $derived.by(() => {
+		const rng = mulberry32(prize_seed);
+		const assigned = new Map<FieldCog, { prize: (typeof prizes)[number]; phase: number }>();
+		let deck: typeof prizes = [];
+		for (const cog of cogs) {
+			if (cog.size !== large_cog_size) continue;
+			if (deck.length === 0) {
+				deck = [...prizes];
+				for (let i = deck.length - 1; i > 0; i--) {
+					const j = Math.floor(rng() * (i + 1));
+					[deck[i], deck[j]] = [deck[j], deck[i]];
+				}
+			}
+			assigned.set(cog, { prize: deck.pop()!, phase: rng() });
+		}
+		return assigned;
+	});
 
 	const ordered_cogs = $derived([...cogs].sort((a, b) => a.y - b.y));
 	const visible_cogs = $derived.by(() => {
@@ -234,6 +255,17 @@
 				<img decoding="sync" src={cog_image(cog.size, brightness_for(cog))} width={cog.size} height={cog.size} alt="" />
 			</div>
 		</div>
+		{#if cog_prizes.get(cog)}
+			{@const { prize, phase } = cog_prizes.get(cog)!}
+			<div
+				class="prize"
+				class:reverse={cog.parity !== 1}
+				style:--clutch-phase={phase}
+			>
+				<img src={prize.image} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+				<span>{prize.title}</span>
+			</div>
+		{/if}
 	</div>
 {/each}
 
@@ -296,6 +328,50 @@
 		line-height: 0;
 	}
 
+	.prize {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		box-sizing: border-box;
+		width: 108px;
+		height: 108px;
+		margin: -54px 0 0 -54px;
+		padding: 6px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		background: #74472a;
+		border: 2px solid #4f2f1f;
+		border-radius: 7px;
+		color: #ead7c2;
+		font-size: 0.7rem;
+		line-height: 1.15;
+		text-align: center;
+		animation: clutch calc(var(--spin-duration) * 0.336) linear infinite;
+		animation-delay: calc(var(--spin-duration) * -0.336 * var(--clutch-phase));
+	}
+
+	.prize.reverse {
+		animation-name: clutch-reverse;
+	}
+
+	.prize img {
+		width: 100%;
+		height: 56px;
+		object-fit: contain;
+		border-radius: 4px;
+	}
+
+	.prize span {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+	}
+
 	.cw,
 	.ccw {
 		animation: spin var(--spin-duration) linear infinite;
@@ -311,9 +387,54 @@
 		}
 	}
 
+	@keyframes clutch {
+		0% {
+			transform: rotate(-14deg);
+			animation-timing-function: linear;
+		}
+		77.7% {
+			transform: rotate(80deg);
+			animation-timing-function: ease-in-out;
+		}
+		85.1% {
+			transform: rotate(-42deg);
+			animation-timing-function: ease-in-out;
+		}
+		92.6% {
+			transform: rotate(24deg);
+			animation-timing-function: ease-in-out;
+		}
+		100% {
+			transform: rotate(-14deg);
+		}
+	}
+
+	@keyframes clutch-reverse {
+		0% {
+			transform: rotate(14deg);
+			animation-timing-function: linear;
+		}
+		77.7% {
+			transform: rotate(-80deg);
+			animation-timing-function: ease-in-out;
+		}
+		85.1% {
+			transform: rotate(42deg);
+			animation-timing-function: ease-in-out;
+		}
+		92.6% {
+			transform: rotate(-24deg);
+			animation-timing-function: ease-in-out;
+		}
+		100% {
+			transform: rotate(14deg);
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.cw,
 		.ccw,
+		.prize,
 		.track {
 			animation: none;
 		}
