@@ -14,6 +14,7 @@ const profile_height = 1000;
 const panel_height = 3360;
 const snapshots_width = 6300;
 const gap = 48;
+const steps_gap = 192;
 
 const dot = (value: number) =>
   Math.round((value - grid / 2) / grid) * grid + grid / 2;
@@ -39,7 +40,7 @@ export function arrange(tree: { width: number; height: number }) {
     left: margin,
     top: projects.top + projects.height + gap,
     width: projects_width,
-    height: tree.height - gap - (projects.top + projects.height + gap),
+    height: tree.height - steps_gap - (projects.top + projects.height + gap),
   });
   const tree_bounds: Bounds = {
     left: margin + projects_width,

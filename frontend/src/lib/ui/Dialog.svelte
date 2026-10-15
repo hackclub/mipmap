@@ -58,6 +58,44 @@
         direction + 180 - small_pitch / 2 + phase * (big_size / small_size),
     );
 
+    let overlay: HTMLDivElement;
+    let track = $state(0);
+    let thumb = $state(0);
+    let thumb_top = $state(0);
+    let drag: { y: number; scroll: number } | null = null;
+
+    const travel = () => track - thumb;
+    const range = () => overlay.scrollHeight - overlay.clientHeight;
+
+    function update() {
+        const { scrollTop, scrollHeight, clientHeight } = overlay;
+        track = clientHeight - 16;
+        thumb =
+            scrollHeight > clientHeight + 1
+                ? Math.max(40, (track * clientHeight) / scrollHeight)
+                : 0;
+        thumb_top = range() > 0 ? (scrollTop / range()) * travel() : 0;
+    }
+
+    function watch(node: HTMLElement) {
+        const observer = new ResizeObserver(update);
+        observer.observe(node);
+        observer.observe(node.querySelector(".dialog")!);
+        return () => observer.disconnect();
+    }
+
+    function grab(e: PointerEvent) {
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        drag = { y: e.clientY, scroll: overlay.scrollTop };
+    }
+
+    function slide(e: PointerEvent) {
+        if (!drag || travel() <= 0) return;
+        overlay.scrollTop =
+            drag.scroll + ((e.clientY - drag.y) * range()) / travel();
+    }
+
     const fade_ms = 200;
     const spin_ms = 200;
     const reduced = () =>
@@ -146,7 +184,10 @@
 
 <div
     class="overlay {corner}"
+    bind:this={overlay}
     {@attach portal}
+    {@attach watch}
+    onscroll={update}
     out:dim
     role="presentation"
     onpointerdown={(e) => {
@@ -208,6 +249,20 @@
             {@render children()}
         </div>
     </div>
+    {#if thumb}
+        <div class="scrollbar" aria-hidden="true">
+            <div
+                class="thumb"
+                role="presentation"
+                style:height="{thumb}px"
+                style:transform="translateY({thumb_top}px)"
+                onpointerdown={grab}
+                onpointermove={slide}
+                onpointerup={() => (drag = null)}
+                onpointercancel={() => (drag = null)}
+            ></div>
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -221,6 +276,29 @@
         padding: max(5rem, var(--tour-top, 0px)) 1.5rem calc(2rem + var(--tour-space, 0px));
         background-color: rgba(0, 0, 0, 0.45);
         animation: dim 0.4s ease-out;
+        scrollbar-width: none;
+    }
+
+    .overlay::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scrollbar {
+        position: fixed;
+        top: 8px;
+        right: 4px;
+        bottom: 8px;
+        width: 8px;
+        border-radius: 4px;
+        background: rgb(79 47 31 / 0.6);
+    }
+
+    .thumb {
+        width: 100%;
+        border-radius: 4px;
+        background: #d6ab70;
+        touch-action: none;
+        cursor: grab;
     }
 
     .overlay.bottom-right {

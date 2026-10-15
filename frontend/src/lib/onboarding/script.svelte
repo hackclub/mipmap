@@ -269,6 +269,7 @@
 {#snippet hackatime()}
     When you start tracking your project using
     <span class="hackatime">Hackatime</span>, make sure to tick it off here!
+    We'll link it at the end of this onboarding then you'll be able to actually see the project list
 {/snippet}
 
 {#snippet save()}
