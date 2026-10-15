@@ -42,8 +42,13 @@ export interface Dashboard {
 
 export const account = $state({ suspended: false });
 
-function parse(response: Response) {
-  if (response.status === 403) account.suspended = true;
+const suspended = "Your account has been suspended";
+
+async function parse(response: Response) {
+  if (response.status === 403) {
+    const body = await response.clone().json().catch(() => ({}));
+    if (body.error === suspended) account.suspended = true;
+  }
   return json<Dashboard>(response);
 }
 

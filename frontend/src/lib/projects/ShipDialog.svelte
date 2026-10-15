@@ -17,6 +17,7 @@
     let started = $state(false);
     let running = $state(false);
     let shipped = $state(false);
+    let agreed = $state(false);
     let error = $state("");
     const submit_failed = $derived(
         checks.some(
@@ -62,6 +63,14 @@
         <p class="note">
             Shipping sends your project for review
         </p>
+        <label class="agree">
+            <input type="checkbox" bind:checked={agreed} />
+            I agree that I am not willingly and obviously attempting to cheat the
+            review process
+        </label>
+    {/if}
+    {#if running}
+        <p class="note">Keep this tab open till' your project's done shipping!</p>
     {/if}
     {#if checks.length}
         <ol>
@@ -116,7 +125,7 @@
             <MipmapButton
                 type="button"
                 data-autofocus
-                disabled={running}
+                disabled={running || !agreed}
                 onclick={ship}
             >
                 Ship
@@ -129,6 +138,34 @@
     .note {
         margin: 0.75rem 0 0;
         font-size: 0.85em;
+    }
+
+    .agree {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        font-size: 0.85em;
+        cursor: pointer;
+    }
+
+    .agree input {
+        flex: none;
+        width: 1.25em;
+        height: 1.25em;
+        margin: 0;
+        appearance: none;
+        background: #4f2f1f;
+        cursor: pointer;
+    }
+
+    .agree input:checked {
+        background: #d6ab70;
+        box-shadow: inset 0 0 0 0.25em #4f2f1f;
+    }
+
+    .agree input:focus-visible {
+        outline: 2px solid #ead7c2;
     }
 
     ol {

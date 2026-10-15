@@ -105,7 +105,10 @@
         {#if project.screenshot}
             <img src={project.screenshot} alt="" />
         {:else}
-            <span>Add screenshot</span>
+            <span>
+                Upload a screenshot that demonstrates your project working. It
+                will only be visible to Hack Club reviewers
+            </span>
         {/if}
     </button>
     <input
@@ -247,10 +250,13 @@
     .shot span {
         display: grid;
         place-items: center;
+        box-sizing: border-box;
         height: 100%;
+        padding: 1rem;
         background: #4f2f1f;
         color: #ead7c2;
         font-size: 0.85em;
+        text-align: center;
         transition:
             background-color 0.3s,
             color 0.3s;

@@ -5,7 +5,13 @@ export async function request(
   init?: RequestInit,
   retries = 3,
 ): Promise<Response> {
-  const response = await fetch(input, { ...init, redirect: "manual" });
+  const response = await fetch(input, { ...init, redirect: "manual" }).catch(
+    (error) => {
+      if (error instanceof TypeError && (init?.method ?? "GET") !== "GET")
+        throw new Error("Couldn't save, wait a moment and try again");
+      throw error;
+    },
+  );
   if (response.type === "opaqueredirect" || response.status === 401) {
     location.href = "/login";
     return new Promise(() => {});
@@ -18,10 +24,34 @@ export async function request(
   return response;
 }
 
+const reasons: Record<number, string> = {
+  400: "Bad Request",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  408: "Request Timeout",
+  409: "Conflict",
+  413: "Content Too Large",
+  429: "Too Many Requests",
+  500: "Internal Server Error",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+  520: "Web Server Returned an Unknown Error",
+  521: "Web Server Is Down",
+  522: "Connection Timed Out",
+  523: "Origin Is Unreachable",
+  524: "A Timeout Occurred",
+};
+
 export async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${response.status})`);
+    const reason = reasons[response.status] ?? response.statusText;
+    throw new Error(
+      body.error ??
+        `Request failed (${response.status})${reason ? `: ${reason}` : ""}`,
+    );
   }
   return response.json();
 }

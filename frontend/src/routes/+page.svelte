@@ -241,7 +241,7 @@
                     type="button"
                     onclick={() => (window.location.href = "/login")}
                 >
-                    Log in!
+                    Log in with Hack Club Auth!
                 </MipmapButton>
             </div>
         </TextBlock>

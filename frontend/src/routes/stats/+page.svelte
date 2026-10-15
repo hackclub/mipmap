@@ -89,8 +89,8 @@
         funnel && [
             { label: "Visited", count: funnel.visited },
             { label: "Signed in", count: funnel.signed_in },
-            { label: "Linked Hackatime", count: funnel.linked_hackatime },
             { label: "Created a project", count: funnel.created_project },
+            { label: "Linked Hackatime", count: funnel.linked_hackatime },
             { label: "Logged time", count: funnel.logged_time },
             { label: "Shipped a project", count: funnel.shipped },
             { label: "Redeemed a prize", count: funnel.redeemed },

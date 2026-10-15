@@ -33,6 +33,13 @@
     const filled = $derived(
         Boolean(image && caption.trim() && username.trim()),
     );
+    const missing = $derived(
+        [
+            !image && "an image",
+            !caption.trim() && "a caption",
+            !username.trim() && "a username",
+        ].filter((part): part is string => !!part),
+    );
     const progress = $derived(
         `${Math.floor(status.tracked_seconds / 60)} / ${Math.floor(status.required_seconds / 60)} minutes`,
     );
@@ -104,6 +111,10 @@
             e.currentTarget.value = "";
         }}
     />
+    <p class="public">
+        This will be shown publicly across Mipmap, so make sure there's no
+        personal info!
+    </p>
     <Field
         label="Publicly Displayed Username"
         bind:value={username}
@@ -127,6 +138,13 @@
                   ? "Make sure you've got 15 minutes in projects tracked by Hackatime first!"
                   : "You can still send a snapshot today!"}
         </div>
+        {#if ready && missing.length}
+            <div class="note">
+                Make sure you've got {missing.length > 1
+                    ? `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}`
+                    : missing[0]} before you can submit
+            </div>
+        {/if}
         {#if send.error}
             <div class="note">{send.error}</div>
         {/if}
@@ -134,11 +152,18 @@
 </form>
 
 <style>
+    .public {
+        grid-area: public;
+        margin: 0;
+        font-size: 0.85em;
+    }
+
     form {
         display: grid;
         grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
-        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
         grid-template-areas:
+            "drop public"
             "drop username"
             "drop caption"
             "drop side";

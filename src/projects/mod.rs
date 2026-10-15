@@ -105,7 +105,7 @@ fn limited<'a>(label: &str, value: &'a str, limit: usize) -> Result<&'a str, Api
 
 fn required_name(name: &str) -> Result<&str, ApiError> {
     match limited("Name", name, NAME_LIMIT)? {
-        "" => Err(reject("name required")),
+        "" => Err(reject("Make sure the name isn't empty!")),
         name => Ok(name),
     }
 }

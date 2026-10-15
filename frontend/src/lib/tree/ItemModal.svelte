@@ -15,6 +15,7 @@
         purchased,
         tokens,
         available,
+        requires,
         blocked,
         image,
         onclose,
@@ -29,6 +30,7 @@
         purchased: boolean;
         tokens: number;
         available: boolean;
+        requires: string[];
         blocked: string | null;
         image?: Snippet;
         onclose: () => void;
@@ -104,18 +106,35 @@
                     autofocus
                     onconfirm={() => act(onunlock)}
                 />
+                {#if !unlocked && !available && requires.length}
+                    <div class="prereqs">
+                        Unlock one of the following first:
+                        <ul>
+                            {#each requires as name}
+                                <li>{name}</li>
+                            {/each}
+                        </ul>
+                    </div>
+                {/if}
             {:else if node.kind === "item" && !purchased}
                 <label class="customs">
                     <input type="checkbox" bind:checked={customs} />
                     I understand that Hack Club does not pay any customs or duties
                     fees that I may be charged to receive this item
                 </label>
+                <p class="skip">
+                    This prize will ship to the primary address set in Hack Club
+                    Auth
+                </p>
                 <HoldButton
                     label="Purchase with Token ({tokens})"
                     disabled={tokens === 0 || !customs || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onpurchase)}
                 />
+                {#if tokens === 0}
+                    <p class="skip">You need a Token to redeem this item</p>
+                {/if}
                 {#if onskip}
                     <p class="skip">
                         If you don't want to actually receive the sticker, use
@@ -231,6 +250,17 @@
         max-width: 28rem;
         margin: 0.5rem 0 0;
         font-size: 0.85em;
+    }
+
+    .prereqs {
+        max-width: 28rem;
+        font-size: 0.85em;
+        text-align: left;
+    }
+
+    .prereqs ul {
+        margin: 0.25rem 0 0;
+        padding-left: 1.25rem;
     }
 
     .customs {

@@ -8,6 +8,7 @@
 <Dialog labelledby="{uid}-title" width="32rem">
     <h2 id="{uid}-title">Linking Hackatime</h2>
     <p>This lets you track your hours for prizes!</p>
+    <p>Features like Snapshots won't work until you do this</p>
     <div class="actions">
         <MipmapButton
             type="button"

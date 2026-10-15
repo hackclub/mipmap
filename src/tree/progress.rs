@@ -87,7 +87,7 @@ pub async fn unlock_item(
         .iter()
         .any(|&req| unlocked.contains(&(req as i32)) || TREE.is(req, Kind::Origin));
     if !reachable {
-        return Err(reject("requirements not met"));
+        return Err(reject("Missing prerequisite, maybe you need to reload?"));
     }
     if mips < node.price {
         return Err(reject(format!("Not enough {}", TREE.currency)));

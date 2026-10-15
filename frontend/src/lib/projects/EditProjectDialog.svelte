@@ -159,6 +159,11 @@
                 <li class="empty">No matching projects</li>
             {/each}
         </ul>
+        {#if fields.hackatime.length}
+            <p class="note">
+                Each Hackatime entry can only be used for one Mipmap project!
+            </p>
+        {/if}
     </section>
 </FormDialog>
 

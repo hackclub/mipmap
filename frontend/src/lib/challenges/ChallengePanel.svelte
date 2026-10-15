@@ -61,6 +61,10 @@
             <h3>{@render coloured(challenge.name)}</h3>
             <p class="countdown">Ends in {countdown(challenge.ends)}</p>
             <p>{@render coloured(challenge.description)}</p>
+            <p class="fine">
+                Project must be shipped before the Challenge deadline. Reviewers
+                have discretion on whether or not this project meets the criteria
+            </p>
         </article>
     {:else}
         <p>Nothing's running at the moment, check back soon!</p>
@@ -82,6 +86,12 @@
     h3 {
         font: inherit;
         font-weight: 700;
+    }
+
+    .fine {
+        margin-top: 0.5rem;
+        font-size: 0.75em;
+        opacity: 0.75;
     }
 
     .countdown {

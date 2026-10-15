@@ -2,6 +2,9 @@
     import { onMount } from "svelte";
     import Onboarding from "$lib/onboarding/Onboarding.svelte";
     import LinkHackatime from "$lib/dashboard/LinkHackatime.svelte";
+    import Dialog from "$lib/ui/Dialog.svelte";
+    import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import { unsaved } from "$lib/onboarding/api";
     import LoadError from "$lib/ui/LoadError.svelte";
     import NavMenu from "$lib/dashboard/NavMenu.svelte";
     import PanZoom, { type Bounds } from "$lib/dashboard/PanZoom.svelte";
@@ -43,6 +46,7 @@
     let finished = $state(false);
     let project_dialog = $state<ProjectDialog>(null);
     let demo = $state<Set<number>>(new Set());
+    let reset = $state(unsaved());
 
     const structure = new Load(() =>
         Promise.all([fetch_tree(), fetch_layout()]),
@@ -121,6 +125,10 @@
         purchased: purchased.has(node.id),
         tokens: node.id === STICKER ? sticker_tokens : tokens,
         available,
+        requires: node.requires
+            .map((id) => nodes.get(id))
+            .filter((req) => req && req.kind !== "origin")
+            .map((req) => metadata[req!.id]?.title ?? req!.name),
         blocked: tutorial(node.id) ? null : (data?.user.blocked ?? null),
         skippable: node.id === STICKER && sticker_tokens > 0,
     });
@@ -130,7 +138,8 @@
     const onboarded = $derived(!!data?.user.onboarded || finished);
 
     $effect(() => {
-        if (data && !onboarded && !touring && spots) touring = "first";
+        if (data && !onboarded && !touring && spots && !reset)
+            touring = "first";
     });
 
     onMount(() => {
@@ -279,6 +288,27 @@
         />
     {/if}
 
+    {#if reset && !onboarded}
+        <Dialog labelledby="reset-title" width="28rem">
+            <p id="reset-title" class="reset">
+                Your onboarding progress couldn't be saved so you were reset to
+                the start
+            </p>
+            <div class="actions">
+                <MipmapButton
+                    type="button"
+                    data-autofocus
+                    onclick={() => {
+                        unsaved(true);
+                        reset = false;
+                    }}
+                >
+                    OK
+                </MipmapButton>
+            </div>
+        </Dialog>
+    {/if}
+
     {#if !data.user.hackatime_linked && onboarded && !touring}
         <LinkHackatime />
     {/if}
@@ -292,6 +322,7 @@
             purchased={item.purchased}
             tokens={item.tokens}
             available={item.available}
+            requires={item.requires}
             blocked={item.blocked}
             image={item.node.kind === "token" ? token_image : undefined}
             onclose={() => (selected = null)}
@@ -329,6 +360,16 @@
         padding: 1.5rem;
         color: #ead7c2;
         font-size: clamp(1.25rem, 2vw, 1.75rem);
+    }
+
+    .reset {
+        margin: 0;
+    }
+
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
     }
 
     .banners {
