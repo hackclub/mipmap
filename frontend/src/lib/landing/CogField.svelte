@@ -17,7 +17,9 @@
 	const render_margin = cog_size;
 	const max_belt_height = 900 + 2 * (belt_radius + belt_thickness / 2);
 	const belt_cell_size = 420;
-	const prizes = Object.values(item_metadata as Record<string, { title: string; image: string }>);
+	const prizes = Object.entries(item_metadata as Record<string, { title: string; image: string }>).map(
+		([id, meta]) => ({ id, ...meta })
+	);
 	const prize_seed = Math.floor(Math.random() * 2 ** 31);
 
 	function brightness_for(cog: FieldCog) {
@@ -262,7 +264,17 @@
 				class:reverse={cog.parity !== 1}
 				style:--clutch-phase={phase}
 			>
-				<img src={prize.image} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+				<img
+					src="/dashboard/item-images/{prize.id}"
+					alt=""
+					loading="lazy"
+					decoding="async"
+					referrerpolicy="no-referrer"
+					onerror={(e) => {
+						const img = e.currentTarget as HTMLImageElement;
+						if (img.src !== prize.image) img.src = prize.image;
+					}}
+				/>
 				<span>{prize.title}</span>
 			</div>
 		{/if}

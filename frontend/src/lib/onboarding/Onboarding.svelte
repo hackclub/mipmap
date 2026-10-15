@@ -671,7 +671,8 @@
     });
 
     $effect(() => {
-        if (!current?.dialog || place.layout !== "row") return;
+        if (!current || !(current.dialog || item_wait(current))) return;
+        if (place.layout !== "row") return;
         const root = document.documentElement;
         root.style.setProperty(
             "--tour-space",
