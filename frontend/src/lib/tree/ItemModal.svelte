@@ -85,7 +85,8 @@
                             alt=""
                             onerror={(e) => {
                                 const img = e.currentTarget as HTMLImageElement;
-                                if (img.src !== meta.image) img.src = meta.image;
+                                const fallback = new URL(meta.image, location.href).href;
+                                if (img.src !== fallback) img.src = fallback;
                             }}
                         />
                     {/if}

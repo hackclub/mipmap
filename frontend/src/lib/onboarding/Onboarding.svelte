@@ -100,6 +100,8 @@
     let guide_height = $state(0);
     let controls_height = $state(0);
     let controls: HTMLDivElement;
+    let root: HTMLDivElement;
+    let dialog_open = $state(false);
     let text = $state<HTMLDivElement>();
     let picking = false;
     let shapes = $state<Shape[]>([]);
@@ -133,7 +135,15 @@
                 undefined,
             ),
     );
+    const item_wait = (step: Step) =>
+        step.wait === "sticker-unlocked" ||
+        step.wait === "token-unlocked" ||
+        step.wait === "sticker-redeemed";
+
     const blocking = $derived(!!current?.wait);
+    const passthrough = $derived(
+        dialog_open && !!current && (!!current.dialog || item_wait(current)),
+    );
     const first = $derived(steps.findIndex((step) => !skipped(step)));
     const reserve = $derived(controls_height + margin);
     const narrow = $derived(view_width < 760 || view_width < view_height);
@@ -150,10 +160,13 @@
     const bubble_max = $derived(
         Math.max(
             120,
-            view_height -
-                2 * margin -
-                reserve -
-                (place.layout === "column" ? avatar_size + 14 : 0),
+            Math.min(
+                view_height -
+                    2 * margin -
+                    reserve -
+                    (place.layout === "column" ? avatar_size + 14 : 0),
+                place.layout === "row" ? view_height * 0.38 : Infinity,
+            ),
         ),
     );
 
@@ -177,8 +190,10 @@
         ),
     );
     const rings = $derived(shapes.filter((s) => !s.quiet));
+    const bleed = 4000;
     const dim = $derived(
-        `M0 0H${view_width}V${view_height}H0Z` + cuts.map(outline).join(""),
+        `M${-bleed} ${-bleed}H${view_width + bleed}V${view_height + bleed}H${-bleed}Z` +
+            cuts.map(outline).join(""),
     );
 
     const union = (list: Bounds[]): Bounds => {
@@ -277,11 +292,6 @@
         ];
     }
 
-    const item_wait = (step: Step) =>
-        step.wait === "sticker-unlocked" ||
-        step.wait === "token-unlocked" ||
-        step.wait === "sticker-redeemed";
-
     function measure() {
         const step = current;
         if (!step || phase === "out") return [];
@@ -326,6 +336,14 @@
             };
         const open = modal();
         if (step.dialog || (item_wait(step) && open)) {
+            const top: Place = {
+                layout: "row",
+                side: "top",
+                x: margin,
+                y: margin,
+                width: view_width - 2 * margin,
+            };
+            if (narrow) return top;
             if (open !== opened) {
                 opened = open;
                 settle_until = performance.now() + 1500;
@@ -336,16 +354,9 @@
                     ?.getAnimations({ subtree: true })
                     .some((a) => a.effect?.getComputedTiming().endTime !== Infinity);
             if (settling) return place;
-            const top: Place = {
-                layout: "row",
-                side: "top",
-                x: margin,
-                y: margin,
-                width: view_width - 2 * margin,
-            };
             const box = open?.getBoundingClientRect();
             const anchor = shapes[0];
-            if (narrow || !box || !anchor) return top;
+            if (!box || !anchor) return top;
             const right = view_width - box.right - 2 * margin;
             const left = box.left - 2 * margin;
             const width = Math.min(column_width, Math.max(left, right));
@@ -699,6 +710,17 @@
         };
     });
 
+    $effect(() => {
+        if (!dialog_open || !current || !item_wait(current)) return;
+        const timer = setTimeout(() => {
+            const open = modal();
+            if (!open) return;
+            open.style.scrollMarginBottom = `${reserve + margin}px`;
+            open.scrollIntoView({ block: "end", behavior: "smooth" });
+        }, 400);
+        return () => clearTimeout(timer);
+    });
+
     function usable(target: Node | null) {
         const step = current;
         if (!target || !step) return false;
@@ -709,6 +731,23 @@
         return (step.holes ?? []).some((hole) =>
             (hole === "dialog" ? open : element(hole))?.contains(target),
         );
+    }
+
+    function guard(e: Event) {
+        if (!passthrough || phase === "out") return;
+        const target = e.target as Node | null;
+        if (root.contains(target) || usable(target)) return;
+        e.stopPropagation();
+        if (e.type === "pointerdown") {
+            picking = !!modal()?.querySelector('[aria-expanded="true"]');
+            return;
+        }
+        e.preventDefault();
+        if (e.type === "mousedown") {
+            const active = document.activeElement;
+            if (active instanceof HTMLElement && modal()?.contains(active)) active.blur();
+        }
+        if (e.type === "click" && current?.interactive && !picking) next();
     }
 
     function onkeydown(e: KeyboardEvent) {
@@ -794,6 +833,8 @@
         }, 1400);
         let frame = 0;
         const loop = () => {
+            const open = !!modal();
+            if (open !== dialog_open) dialog_open = open;
             const next_shapes = measure();
             if (!same_shapes(next_shapes, shapes)) shapes = next_shapes;
             const next_place = placement();
@@ -810,6 +851,8 @@
         };
         loop();
         window.addEventListener("keydown", onkeydown, true);
+        for (const type of ["pointerdown", "mousedown", "click"])
+            window.addEventListener(type, guard, true);
         window.addEventListener("wheel", onwheel, { capture: true, passive: true });
         window.addEventListener("pointerdown", onpointerdown, true);
         window.addEventListener("pointerup", onpointerup, true);
@@ -823,6 +866,8 @@
             clearTimeout(switch_timer);
             clearTimeout(tilt_timer);
             window.removeEventListener("keydown", onkeydown, true);
+            for (const type of ["pointerdown", "mousedown", "click"])
+                window.removeEventListener(type, guard, true);
             window.removeEventListener("wheel", onwheel, true);
             window.removeEventListener("pointerdown", onpointerdown, true);
             window.removeEventListener("pointerup", onpointerup, true);
@@ -832,15 +877,22 @@
     });
 </script>
 
-<svelte:window bind:innerWidth={view_width} bind:innerHeight={view_height} />
-
 <div
     class="onboarding"
     class:out={phase === "out"}
+    bind:this={root}
+    bind:clientWidth={view_width}
+    bind:clientHeight={view_height}
     data-above-dialogs
     {@attach portal}
 >
-    <svg class="dim" width={view_width} height={view_height} aria-hidden="true">
+    <svg
+        class="dim"
+        class:passthrough
+        width={view_width}
+        height={view_height}
+        aria-hidden="true"
+    >
         <path
             d={dim}
             fill-rule="evenodd"
@@ -953,6 +1005,7 @@
     .dim {
         position: absolute;
         inset: 0;
+        overflow: visible;
     }
 
     .dim {
@@ -962,6 +1015,10 @@
     .dim path {
         fill: rgba(0, 0, 0, 0.6);
         pointer-events: visiblePainted;
+    }
+
+    .dim.passthrough path {
+        pointer-events: none;
     }
 
     .rings {
@@ -1072,7 +1129,10 @@
         right: 1rem;
         bottom: 1rem;
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: 0.5rem;
+        max-width: calc(100% - 2rem);
         pointer-events: auto;
     }
 

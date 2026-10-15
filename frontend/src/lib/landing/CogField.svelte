@@ -272,7 +272,8 @@
 					referrerpolicy="no-referrer"
 					onerror={(e) => {
 						const img = e.currentTarget as HTMLImageElement;
-						if (img.src !== prize.image) img.src = prize.image;
+						const fallback = new URL(prize.image, location.href).href;
+						if (img.src !== fallback) img.src = fallback;
 					}}
 				/>
 				<span>{prize.title}</span>
