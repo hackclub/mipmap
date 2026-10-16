@@ -14,7 +14,7 @@
 	const belt_radius = hub_radius + belt_thickness / 2;
 	const belt_speed = 80;
 	const stripe_length = 24;
-	const render_margin = cog_size;
+	const render_margin = $derived(cog_size + viewport_height / 2);
 	const max_belt_height = 900 + 2 * (belt_radius + belt_thickness / 2);
 	const belt_cell_size = 420;
 	const prizes = Object.entries(item_metadata as Record<string, { title: string; image: string }>).map(
