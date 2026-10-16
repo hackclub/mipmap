@@ -19,7 +19,7 @@ const pattern = new RegExp(
   `\\b(?:${words.map((word) => `(${word.match})`).join("|")})\\b`,
   "gi",
 );
-const skip = "script, style, noscript, textarea";
+const skip = "a, script, style, noscript, textarea";
 const key = (name: string) => `word-${name}`;
 
 function scan() {
