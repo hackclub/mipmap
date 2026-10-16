@@ -9,7 +9,7 @@
     <ol>
         <li>
             <h3>Step 1</h3>
-            <p>Make and ship a project</p>
+            <p>Make and ship a game without an engine</p>
         </li>
         <li>
             <h3>Step 2</h3>
