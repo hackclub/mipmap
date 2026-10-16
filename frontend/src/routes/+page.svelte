@@ -16,6 +16,8 @@
     let footer_height = $state(0);
     let first_container_height = $state(0);
     let left_content_height = $state(0);
+    let left_heading_height = $state(0);
+    let left_actions_height = $state(0);
     let right_content_height = $state(0);
     let left_box_height = $state(0);
     let right_box_height = $state(0);
@@ -62,6 +64,20 @@
     const pair_height = $derived(
         Math.max(left_content_height, right_content_height),
     );
+    const learn_shift = $derived.by(() => {
+        const below = pair_height - left_heading_height;
+        const natural =
+            left_content_height - left_heading_height - left_actions_height;
+        return Math.max(0, (below - left_actions_height) / 2 - natural);
+    });
+
+    let email = $state("");
+
+    function sign_up(e: SubmitEvent) {
+        e.preventDefault();
+        window.location.href = `/login?email=${encodeURIComponent(email.trim())}`;
+    }
+
     const pair_box_height = $derived(
         Math.max(left_box_height, right_box_height),
     );
@@ -210,16 +226,26 @@
             bind:box_height={left_box_height}
             bind:content_height={left_content_height}
         >
-            <div class="pair">
+            <div class="pair" bind:clientHeight={left_heading_height}>
                 <h2>Don't know where to start?</h2>
             </div>
-            <div class="actions">
-                <MipmapButton
-                    type="button"
-                    onclick={() => (window.location.href = "/docs")}
-                >
-                    Learn here!
-                </MipmapButton>
+            <div
+                class="actions learn"
+                bind:clientHeight={left_actions_height}
+                style:transform="translateY({learn_shift}px)"
+            >
+                <a class="guide" href="/docs">
+                    <span class="icon">
+                        <svg viewBox="0 0 16 16" aria-hidden="true">
+                            <path
+                                fill-rule="evenodd"
+                                d="M8.316 2.07a.75.75 0 00-.632 0l-7 3.25a.75.75 0 000 1.36l1.434.666A.746.746 0 002 7.750V11a.75.75 0 00.158.46L2.75 11l-.592.46.001.002.001.001.003.004.008.01a1.882 1.882 0 00.103.12c.068.076.165.178.292.299.254.24.63.555 1.132.866C4.706 13.388 6.217 14 8.250 14c2.037 0 3.440-.615 4.345-1.266a5.320 5.320 0 00.977-.902 3.916 3.916 0 00.322-.448l.007-.012.003-.004v-.002h.001c0-.001 0-.002-.655-.366l.655.365A.754.754 0 0014 11V7.750a.747.747 0 00-.118-.404l1.434-.666a.75.75 0 000-1.360l-7-3.250zM12.5 7.988L8.316 9.930a.75.75 0 01-.632 0L3.5 7.988v2.723a5.585 5.585 0 00.990.776c.804.5 2.043 1.013 3.760 1.013 1.713 0 2.810-.51 3.468-.984a3.812 3.812 0 00.782-.745V7.988zM8 8.423L2.781 6 8 3.577 13.219 6 8 8.423z"
+                                clip-rule="evenodd"
+                            />
+                        </svg>
+                    </span>
+                    <span class="caption">Learn here!</span>
+                </a>
             </div>
         </TextBlock>
 
@@ -236,13 +262,38 @@
             <div class="pair">
                 <h2>Wanna get started?</h2>
             </div>
-            <div class="actions">
-                <MipmapButton
-                    type="button"
-                    onclick={() => (window.location.href = "/login")}
-                >
-                    Log in with Hack Club Auth!
-                </MipmapButton>
+            <div class="start">
+                <form class="signup" onsubmit={sign_up}>
+                    <label for="signup-email">Sign up with your email!</label>
+                    <div class="email">
+                        <input
+                            id="signup-email"
+                            type="email"
+                            autocomplete="email"
+                            placeholder="heidi@hackclub.com"
+                            maxlength={254}
+                            size={1}
+                            required
+                            bind:value={email}
+                        />
+                        <button type="submit" aria-label="Continue">
+                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                                <path
+                                    d="M8.47 2.47a.75.75 0 0 1 1.06 0l5 5a.75.75 0 0 1 0 1.06l-5 5a.75.75 0 1 1-1.06-1.06l3.72-3.72H2a.75.75 0 0 1 0-1.5h10.19L8.47 3.53a.75.75 0 0 1 0-1.06Z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+                <div class="or" aria-hidden="true">OR</div>
+                <div class="actions">
+                    <MipmapButton
+                        type="button"
+                        onclick={() => (window.location.href = "/login")}
+                    >
+                        Log in with Hack Club Auth
+                    </MipmapButton>
+                </div>
             </div>
         </TextBlock>
 
@@ -396,10 +447,170 @@
         max-width: 100%;
     }
 
+    .learn {
+        display: flex;
+        justify-content: center;
+    }
+
+    .guide {
+        display: flex;
+        flex-direction: column;
+        width: clamp(9rem, 24vw, 16rem);
+        max-width: 100%;
+        overflow: hidden;
+        border: 2px solid #4f2f1f;
+        border-radius: 7px;
+        color: #ead7c2;
+        text-align: center;
+        text-decoration: none;
+    }
+
+    .icon {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 2.25;
+        min-height: 0;
+        background: #5f4838;
+    }
+
+    .icon svg {
+        width: 60%;
+        height: 60%;
+        fill: currentColor;
+    }
+
+    .caption {
+        padding: 0.5rem 0.25rem;
+        background: #4f2f1f;
+        font-size: clamp(0.95rem, 2.6vw, 2.25rem);
+        white-space: nowrap;
+        font-weight: 700;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .guide:focus-visible {
+        outline: none;
+    }
+
+    .guide:focus-visible .caption {
+        background: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .guide:hover .caption {
+            background: #ead7c2;
+            color: #4f2f1f;
+        }
+    }
+
+    .start {
+        display: grid;
+        width: fit-content;
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    .start .actions :global(button) {
+        width: 100%;
+    }
+
+    .or {
+        margin-top: 1rem;
+        font-size: clamp(0.8rem, 1.4vw, 1.1rem);
+        font-weight: 700;
+        text-align: center;
+        opacity: 0.5;
+    }
+
+    .start .actions {
+        margin-top: 1rem;
+    }
+
+    .signup {
+        display: grid;
+        gap: 0.5rem;
+        margin-top: 1.25rem;
+        font-size: clamp(1rem, 2vw, 1.5rem);
+    }
+
+    .email {
+        position: relative;
+    }
+
+    .email input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 0.6rem 3.25rem 0.6rem 0.9rem;
+        background: #4f2f1f;
+        color: #ead7c2;
+        border: none;
+        border-radius: 0;
+        font: inherit;
+    }
+
+    .email input::placeholder {
+        color: inherit;
+        opacity: 0.6;
+    }
+
+    .email input:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: -2px;
+    }
+
+    .email button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        display: grid;
+        place-items: center;
+        width: 3rem;
+        padding: 0;
+        background: none;
+        border: none;
+        color: #ead7c2;
+        font-size: inherit;
+        cursor: pointer;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .email button:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+        outline: none;
+    }
+
+    @media (hover: hover) {
+        .email button:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
+    }
+
+    .email svg {
+        width: 1.1em;
+        height: 1.1em;
+        fill: currentColor;
+    }
+
     @media (max-width: 600px) {
         .actions :global(button) {
             padding: 0.5rem 0.75rem;
             font-size: 1rem;
+        }
+
+        .email input {
+            padding: 0.5rem 2.25rem 0.5rem 0.5rem;
+        }
+
+        .email button {
+            width: 2rem;
         }
     }
 </style>

@@ -3,20 +3,30 @@ use super::{
     tokens::{self, Provider},
 };
 use actix_web::{
-    HttpRequest, HttpResponse, cookie::Cookie, get,
+    HttpRequest, HttpResponse,
+    cookie::Cookie,
+    get,
+    http::header::{self, HeaderValue},
     web::{self, Query},
 };
 use hc_helper::auth::{
     data::get_auth_data_with_token,
     login::{self, CallbackArgs, Scopes},
 };
+use reqwest::Url;
+use serde::Deserialize;
 use sqlx::PgPool;
 
 const CALLBACK: &str = "/callback";
 const REFERRAL_COOKIE: &str = "ref";
 
+#[derive(Deserialize)]
+pub struct LoginQuery {
+    email: Option<String>,
+}
+
 #[get("/login")]
-pub async fn start(req: HttpRequest) -> HttpResponse {
+pub async fn start(req: HttpRequest, query: Query<LoginQuery>) -> HttpResponse {
     let scopes = Scopes {
         openid: false,
         profile: false,
@@ -28,7 +38,25 @@ pub async fn start(req: HttpRequest) -> HttpResponse {
         addresses: true,
         phone_number: true,
     };
-    login::handle_login(&req, scopes, callback_url(CALLBACK)).await
+    let mut response = login::handle_login(&req, scopes, callback_url(CALLBACK)).await;
+    let email = query.email.as_deref().map(str::trim).filter(|email| {
+        email.len() <= 254 && email.contains('@') && !email.chars().any(char::is_control)
+    });
+    if let Some(email) = email
+        && let Some(mut url) = response
+            .headers()
+            .get(header::LOCATION)
+            .and_then(|location| location.to_str().ok())
+            .and_then(|location| Url::parse(location).ok())
+    {
+        url.query_pairs_mut()
+            .append_pair("login_hint", email)
+            .append_pair("email", email);
+        if let Ok(location) = HeaderValue::from_str(url.as_str()) {
+            response.headers_mut().insert(header::LOCATION, location);
+        }
+    }
+    response
 }
 
 #[get("/callback")]
