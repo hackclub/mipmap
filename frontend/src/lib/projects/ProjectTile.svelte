@@ -44,6 +44,41 @@
     let picker = $state<HTMLInputElement>();
     const upload = new Task("Upload failed");
 
+    function autoscroll(text: HTMLElement) {
+        const frame = text.parentElement!;
+        const still = matchMedia("(prefers-reduced-motion: reduce)");
+        let animation: Animation | undefined;
+        const update = () => {
+            animation?.cancel();
+            const distance = text.offsetHeight - frame.clientHeight;
+            if (distance <= 0 || still.matches) return;
+            const hold = 1000;
+            const scroll = Math.max(1500, (distance / 25) * 1000);
+            const total = 2 * hold + scroll;
+            const down = `translateY(${-distance}px)`;
+            animation = text.animate(
+                [
+                    { transform: "translateY(0)", offset: 0 },
+                    { transform: "translateY(0)", offset: hold / total, easing: "ease-in-out" },
+                    { transform: down, offset: (hold + scroll) / total },
+                    { transform: down, offset: 1 },
+                ],
+                { duration: total, iterations: Infinity },
+            );
+        };
+        const observer = new ResizeObserver(update);
+        observer.observe(frame);
+        observer.observe(text);
+        still.addEventListener("change", update);
+        return {
+            destroy() {
+                observer.disconnect();
+                still.removeEventListener("change", update);
+                animation?.cancel();
+            },
+        };
+    }
+
     async function pick(e: Event & { currentTarget: HTMLInputElement }) {
         const file = e.currentTarget.files?.[0];
         e.currentTarget.value = "";
@@ -105,9 +140,11 @@
         {#if project.screenshot}
             <img src={project.screenshot} alt="" />
         {:else}
-            <span>
-                Upload a screenshot that demonstrates your project working. It
-                will only be visible to Hack Club reviewers
+            <span class="placeholder">
+                <span use:autoscroll>
+                    Upload a screenshot that demonstrates your project working.
+                    It will only be visible to Hack Club reviewers
+                </span>
             </span>
         {/if}
     </button>
@@ -211,14 +248,14 @@
     }
 
     .edit:focus-visible,
-    .shot:focus-visible span {
+    .shot:focus-visible .placeholder {
         background-color: #ead7c2;
         color: #4f2f1f;
     }
 
     @media (hover: hover) {
         .edit:hover,
-        .shot:hover:not(:disabled) span {
+        .shot:hover:not(:disabled) .placeholder {
             background-color: #ead7c2;
             color: #4f2f1f;
         }
@@ -247,12 +284,13 @@
         object-fit: cover;
     }
 
-    .shot span {
-        display: grid;
-        place-items: center;
+    .placeholder {
+        display: flex;
+        flex-direction: column;
+        justify-content: safe center;
         box-sizing: border-box;
         height: 100%;
-        padding: 1rem;
+        overflow: hidden;
         background: #4f2f1f;
         color: #ead7c2;
         font-size: 0.85em;
@@ -260,6 +298,10 @@
         transition:
             background-color 0.3s,
             color 0.3s;
+    }
+
+    .placeholder span {
+        padding: 1rem;
     }
 
     .ship {
