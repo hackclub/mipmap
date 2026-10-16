@@ -13,6 +13,7 @@ const challenge_height = 780;
 const profile_height = 1000;
 const panel_height = 3360;
 const snapshots_width = 6300;
+const snapshots_height = 4200;
 const gap = 48;
 const steps_gap = 192;
 
@@ -79,7 +80,7 @@ export function arrange(tree: { width: number; height: number }) {
     left: margin,
     top: tree.height,
     width: snapshots_width,
-    height: panel_height,
+    height: snapshots_height,
   });
   const feedback = snap({
     left: side_left,

@@ -161,7 +161,7 @@
     form {
         display: grid;
         grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
-        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        grid-template-rows: auto auto minmax(7em, 1fr) auto;
         grid-template-areas:
             "drop public"
             "drop username"

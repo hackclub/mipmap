@@ -24,6 +24,9 @@
 
     const uid = $props.id();
     const arrow = 20;
+    const ordered = $derived(
+        [...layout.nodes].sort((a, b) => b.y - a.y || a.x - b.x),
+    );
 </script>
 
 <div
@@ -55,7 +58,7 @@
             <path d={edge.path} marker-end="url(#{uid}-arrow)" />
         {/each}
     </svg>
-    {#each layout.nodes as placed (placed.id)}
+    {#each ordered as placed (placed.id)}
         {@const node = nodes.get(placed.id)}
         {#if node}
             <NodeView
@@ -77,6 +80,7 @@
     .tree {
         position: absolute;
         top: 0;
+        z-index: -1;
     }
 
     .edges {

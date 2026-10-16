@@ -172,6 +172,7 @@
         home={sections.tree}
         limits={sections.all}
         keep={origin}
+        targets="button[data-node]"
     >
         <ProjectsPanel
             bounds={sections.projects}
@@ -182,16 +183,6 @@
             onsaved={(kind) => onboarding?.saved(kind)}
         />
         <StepsPanel bounds={sections.steps} />
-        <TechTree
-            left={sections.tree.left}
-            {nodes}
-            {layout}
-            {metadata}
-            currency={tree.currency}
-            unlocked={shown_unlocked}
-            {purchased}
-            onselect={(id) => (selected = id)}
-        />
         <FulfillmentPanel bounds={sections.fulfillment} />
         <OrdersPanel bounds={sections.orders} orders={data.orders} />
         <ReferralPanel
@@ -213,6 +204,16 @@
         <SnapshotsPanel
             bounds={sections.snapshots}
             snapshots={data.snapshots}
+        />
+        <TechTree
+            left={sections.tree.left}
+            {nodes}
+            {layout}
+            {metadata}
+            currency={tree.currency}
+            unlocked={shown_unlocked}
+            {purchased}
+            onselect={(id) => (selected = id)}
         />
     </PanZoom>
 

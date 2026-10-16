@@ -24,12 +24,14 @@
         limits,
         keep,
         locked = false,
+        targets,
     }: {
         children: Snippet;
         home: Bounds;
         limits?: Bounds;
         keep?: Bounds;
         locked?: boolean;
+        targets?: string;
     } = $props();
 
     const min_scale = 0.1;
@@ -38,6 +40,13 @@
     const button_zoom = 1.4;
     const fit_padding = 48;
     const overscroll = 0.25;
+    const pan_speed = 900;
+    const arrows: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
+    };
 
     let viewport: HTMLDivElement;
     let view_width = $state(0);
@@ -277,6 +286,92 @@
         constrain();
     }
 
+    const held = new Set<string>();
+    let pan_frame = 0;
+
+    function ignored(e: KeyboardEvent) {
+        const target = e.target as Element;
+        const own = target.closest<HTMLElement>("[data-scroll]");
+        return (
+            locked ||
+            e.ctrlKey ||
+            e.metaKey ||
+            e.altKey ||
+            !!viewport.closest("[inert]") ||
+            !!target.closest("input, textarea, select, [contenteditable]") ||
+            (!!own && own.scrollHeight > own.clientHeight)
+        );
+    }
+
+    function pan() {
+        if (pan_frame) return;
+        stop();
+        let last = performance.now();
+        const step = (now: number) => {
+            const dt = Math.min(0.05, (now - last) / 1000);
+            last = now;
+            for (const key of held) {
+                x -= arrows[key][0] * pan_speed * dt;
+                y -= arrows[key][1] * pan_speed * dt;
+            }
+            constrain();
+            pan_frame = held.size ? requestAnimationFrame(step) : 0;
+        };
+        pan_frame = requestAnimationFrame(step);
+    }
+
+    function jump([dx, dy]: [number, number]) {
+        if (!targets) return;
+        const centre = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return [r.left + r.width / 2, r.top + r.height / 2];
+        };
+        const active = document.activeElement;
+        const current =
+            active && viewport.contains(active) && active.matches(targets)
+                ? active
+                : null;
+        const view = viewport.getBoundingClientRect();
+        const [ox, oy] = current
+            ? centre(current)
+            : [view.left + view.width / 2, view.top + view.height / 2];
+        let best: HTMLElement | null = null;
+        let best_score = Infinity;
+        for (const el of viewport.querySelectorAll<HTMLElement>(targets)) {
+            if (el === current) continue;
+            const [cx, cy] = centre(el);
+            const along = (cx - ox) * dx + (cy - oy) * dy;
+            if (along <= 1) continue;
+            const across = Math.abs((cx - ox) * dy - (cy - oy) * dx);
+            const score = along + 2 * across + (across > along ? 1e6 : 0);
+            if (score < best_score) {
+                best_score = score;
+                best = el;
+            }
+        }
+        best?.focus({ focusVisible: true } as FocusOptions);
+    }
+
+    function onkeydown(e: KeyboardEvent) {
+        if (ignored(e)) return;
+        if (e.key in arrows) {
+            e.preventDefault();
+            if (e.shiftKey) return jump(arrows[e.key]);
+            held.add(e.key);
+            pan();
+        } else if (e.key === "=" || e.key === "+") {
+            e.preventDefault();
+            zoom(button_zoom);
+        } else if (e.key === "-" || e.key === "_") {
+            e.preventDefault();
+            zoom(1 / button_zoom);
+        }
+    }
+
+    function onkeyup(e: KeyboardEvent) {
+        held.delete(e.key);
+    }
+
     function measure() {
         const points = [...pointers.values()];
         return {
@@ -434,6 +529,8 @@
             2 ** Math.max(0, Math.ceil(Math.log2(16 / (grid * shown.scale)))),
     );
 </script>
+
+<svelte:window {onkeydown} {onkeyup} onblur={() => held.clear()} />
 
 <div
     class="viewport"

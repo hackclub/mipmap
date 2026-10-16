@@ -46,7 +46,7 @@
     .areas {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-        grid-template-rows: minmax(0, 9fr) minmax(0, 11fr);
+        grid-template-rows: minmax(min-content, 9fr) minmax(0, 11fr);
         grid-template-areas:
             "send everyone"
             "mine everyone";
