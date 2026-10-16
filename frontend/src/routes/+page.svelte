@@ -194,7 +194,7 @@
 </svelte:head>
 
 <SiteHead
-    title="Hack Club Mipmap - Make a game without an engine"
+    title="Hack Club Mipmap - Make a game without an engine, earn prizes down your Tech Tree!"
     {description}
     path="/"
 />
@@ -213,7 +213,7 @@
             obstacles={[left_box, right_box, description_box]}
             bind:box_height={first_container_height}
         >
-            <h1>Make a game without an engine, progress your tech tree!</h1>
+            <h1>Make a game without an engine, earn prizes down your Tech Tree!</h1>
         </TextBlock>
 
         <TextBlock

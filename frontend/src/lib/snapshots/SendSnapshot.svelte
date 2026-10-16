@@ -136,7 +136,7 @@
                 ? "You've gotta wait for tomorrow to send the next one!"
                 : status.tracked_seconds < status.required_seconds
                   ? "Make sure you've got 15 minutes in projects tracked by Hackatime first!"
-                  : "You can still send a snapshot today!"}
+                  : "You can still send a Snapshot today!"}
         </div>
         {#if ready && missing.length}
             <div class="note">

@@ -14,7 +14,7 @@
     let reason = $state("");
 </script>
 
-<PagedList {pages} empty="No snapshots yet">
+<PagedList {pages} empty="No Snapshots yet">
     {#snippet item(snapshot)}
         <Card dim={snapshot.shadowbanned}>
             {#snippet title()}
@@ -49,8 +49,8 @@
     {@const snapshot = editing}
     <ActionDialog
         title={snapshot.shadowbanned
-            ? "Unshadowban this snapshot?"
-            : "Shadowban this snapshot?"}
+            ? "Unshadowban this Snapshot?"
+            : "Shadowban this Snapshot?"}
         submit={snapshot.shadowbanned ? "Unshadowban" : "Shadowban"}
         warning={snapshot.shadowbanned
             ? "It will show up in everyone's feed again"

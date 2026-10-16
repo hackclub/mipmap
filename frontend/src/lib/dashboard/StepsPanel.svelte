@@ -19,15 +19,15 @@
             <h3>Step 3</h3>
             <p>
                 Use those Mips to advance your Tech Tree, unlocking both
-                <span class="prizes">prizes</span> and
-                <span class="tokens">Tokens</span>
+                prizes and
+                Tokens
             </p>
         </li>
         <li>
             <h3>Step 4</h3>
             <p>
-                Use a <span class="tokens">Token</span> to redeem a
-                <span class="prizes">prize</span> and get it shipped to your
+                Use a Token to redeem a
+                prize and get it shipped to your
                 door!
             </p>
         </li>
@@ -48,13 +48,5 @@
         margin: 0 0 0.25rem;
         font: inherit;
         font-weight: 700;
-    }
-
-    .prizes {
-        color: #f0788a;
-    }
-
-    .tokens {
-        color: #c3a3e6;
     }
 </style>

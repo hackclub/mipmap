@@ -23,7 +23,7 @@
     <button
         type="button"
         class="open"
-        aria-label="Open snapshot by {snapshot.author}"
+        aria-label="Open Snapshot by {snapshot.author}"
         onclick={() => (open = true)}
     >
         <img src={snapshot.image} alt="" loading="lazy" />

@@ -1231,38 +1231,6 @@
         opacity: 0.6;
     }
 
-    .bubble :global(.mip) {
-        color: #ff9a3d;
-    }
-
-    .bubble :global(.mipmap) {
-        color: #8fcf6b;
-    }
-
-    .bubble :global(.tier) {
-        color: #ffe066;
-    }
-
-    .bubble :global(.tech-tree) {
-        color: #7cc4f0;
-    }
-
-    .bubble :global(.token) {
-        color: #c3a3e6;
-    }
-
-    .bubble :global(.prize) {
-        color: #f0788a;
-    }
-
-    .bubble :global(.snapshot) {
-        color: #e8c58c;
-    }
-
-    .bubble :global(.hackatime) {
-        color: #d6ab70;
-    }
-
     @keyframes fade {
         from {
             opacity: 0;

@@ -156,7 +156,7 @@ pub async fn purchase_item(
         tokens(&unlocked) > ordered.iter().filter(|&&id| id != STICKER as i32).count()
     };
     if !available {
-        return Err(reject("no tokens available"));
+        return Err(reject("No Tokens available"));
     }
     let inserted = sqlx::query(
         "INSERT INTO \"order\" (
@@ -188,7 +188,7 @@ pub async fn skip_sticker(User(user_id): User, pool: web::Data<PgPool>) -> Resul
     let mut tx = pool.begin().await?;
     lock_user(&mut tx, user_id, false).await?;
     if !unlocked(&mut *tx, user_id).await?.contains(&(STICKER_TOKEN as i32)) {
-        return Err(reject("no tokens available"));
+        return Err(reject("No Tokens available"));
     }
     let skipped = sqlx::query(
         "UPDATE \"user\" SET sticker_skipped_at = now()

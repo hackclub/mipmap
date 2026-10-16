@@ -360,22 +360,6 @@
         color: #e8c58c;
     }
 
-    .markdown :global(.mip) {
-        color: #ff9a3d;
-    }
-
-    .markdown :global(.token) {
-        color: #c3a3e6;
-    }
-
-    .markdown :global(.prize) {
-        color: #f0788a;
-    }
-
-    .markdown :global(.tier) {
-        color: #ffe066;
-    }
-
     @media (max-width: 900px) {
         main {
             grid-template-columns: minmax(0, 1fr);

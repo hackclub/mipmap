@@ -1,7 +1,11 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
+	import { onMount } from 'svelte';
+	import { colour_words } from '$lib/words';
 
 	let { children } = $props();
+
+	onMount(colour_words);
 </script>
 
 <svelte:head>

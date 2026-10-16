@@ -215,7 +215,7 @@
 </script>
 
 {#snippet welcome()}
-    Hi, I'm Steve the Sprite, and welcome to <span class="mipmap">Mipmap</span>!
+    Hi, I'm Steve the Sprite, and welcome to Mipmap!
     I'm here to show you how everything works
 {/snippet}
 
@@ -225,7 +225,7 @@
 {/snippet}
 
 {#snippet projects()}
-    If you want to claim your time for <span class="prize">prizes</span>, you've
+    If you want to claim your time for prizes, you've
     gotta first set up a project
 {/snippet}
 
@@ -242,20 +242,20 @@
 {/snippet}
 
 {#snippet tiers()}
-    Pick the <span class="tier">tier</span> that matches how deep your project
-    goes. Higher <span class="tier">tiers</span> earn
-    <span class="mip">Mips</span> faster
+    Pick the tier that matches how deep your project
+    goes. Higher tiers earn
+    Mips faster
     <ul>
         <li>
-            <span class="tier">Tier Quebec</span>: 2D games without an engine,
+            Tier Quebec: 2D games without an engine,
             maybe in a JS canvas?
         </li>
         <li>
-            <span class="tier">Tier Romeo</span>: 3D games in most low level
+            Tier Romeo: 3D games in most low level
             graphics libraries
         </li>
         <li>
-            <span class="tier">Tier Sierra</span>: 3D game in either Vulkan, a
+            Tier Sierra: 3D game in either Vulkan, a
             software renderer (no graphics libraries), or on bare metal
         </li>
     </ul>
@@ -268,7 +268,7 @@
 
 {#snippet hackatime()}
     When you start tracking your project using
-    <span class="hackatime">Hackatime</span>, make sure to tick it off here!
+    Hackatime, make sure to tick it off here!
     We'll link it at the end of this onboarding then you'll be able to actually see the project list
 {/snippet}
 
@@ -278,63 +278,63 @@
 
 {#snippet ship()}
     Whenever your project's good to go, click "Ship" to send it off for review!
-    This'll get you <span class="mip">Mips</span> to use in your
-    <span class="tech-tree">Tech Tree</span>. Speaking of which...
+    This'll get you Mips to use in your
+    Tech Tree. Speaking of which...
 {/snippet}
 
 {#snippet tree()}
-    Here's your <span class="tech-tree">Tech Tree</span> of
-    <span class="prize">prizes</span>! I know it's a bit scary, but don't worry,
+    Here's your Tech Tree of
+    prizes! I know it's a bit scary, but don't worry,
     I'll show you through it!
 {/snippet}
 
 {#snippet currencies()}
-    There are two currencies, <span class="mip">Mips</span> and
-    <span class="token">Tokens</span>
+    There are two currencies, Mips and
+    Tokens
 {/snippet}
 
 {#snippet mips()}
-    You get <span class="mip">Mips</span> from shipping projects, and these let you
+    You get Mips from shipping projects, and these let you
     unlock nodes down the tree
 {/snippet}
 
 {#snippet tokens()}
-    But to actually redeem <span class="prize">prizes</span> to your door,
-    you've gotta unlock one of these <span class="token">Tokens</span> scattered through
+    But to actually redeem prizes to your door,
+    you've gotta unlock one of these Tokens scattered through
     the tree
 {/snippet}
 
 {#snippet token_use()}
-    One <span class="token">Token</span> lets you redeem
+    One Token lets you redeem
     <b
-        >any single <span class="prize">prize</span> from a node you've unlocked
-        with <span class="mip">Mips</span></b
+        >any single prize from a node you've unlocked
+        with Mips</b
     >
 {/snippet}
 
 {#snippet practice()}
-    I'll give you 120 <span class="mip">Mips</span> to practice!
+    I'll give you 120 Mips to practice!
 {/snippet}
 
 {#snippet unlock_sticker()}
-    First, unlock the <span class="mipmap">Mipmap</span> sticker with your
-    <span class="mip">Mips</span>! (click the cog to open, then press and hold
+    First, unlock the Mipmap sticker with your
+    Mips! (click the cog to open, then press and hold
     on the button)
 {/snippet}
 
 {#snippet unlock_token()}
-    Then, unlock this <span class="token">Token</span> with the rest of your
-    <span class="mip">Mips</span>!
+    Then, unlock this Token with the rest of your
+    Mips!
 {/snippet}
 
 {#snippet redeem()}
-    Alright, now go spend this <span class="token">Token</span> so we'll send a free
+    Alright, now go spend this Token so we'll send a free
     sticker to your door!
 {/snippet}
 
 {#snippet redeem_note()}
-    Normally any <span class="token">Token</span> can be used for any
-    <span class="prize">prize</span>, though you do have to spend this one on
+    Normally any Token can be used for any
+    prize, though you do have to spend this one on
     the sticker to proceed
 {/snippet}
 
@@ -344,17 +344,17 @@
 
 {#snippet snapshots()}
     One last thing, I promise! Making games is a super visual activity, so you
-    can be sharing regular <span class="snapshot">Snapshots</span> with everyone else
+    can be sharing regular Snapshots with everyone else
 {/snippet}
 
 {#snippet snapshot_info()}
-    A <span class="snapshot">Snapshot</span> is a screenshot + a caption. You
+    A Snapshot is a screenshot + a caption. You
     don't have to do this, but it does give you a sweet
-    <span class="mip">Mips</span> multiplier!
+    Mips multiplier!
 {/snippet}
 
 {#snippet snapshot_rules()}
-    You can only post a <span class="snapshot">Snapshot</span> once per day and after
+    You can only post a Snapshot once per day and after
     having logged 15 minutes of new time on a project
 {/snippet}
 

@@ -81,13 +81,13 @@
 {#snippet faq_1()}
     <strong>Wait, I get prizes for building projects?</strong>
     <div>
-        Yep! <span class="mipmap">Hack Club Mipmap</span> is a free online
+        Yep! Hack Club Mipmap is a free online
         program where you track time towards engine-less games to accumulate
-        <span class="mip">Mips</span>, which you can then put towards unlocking
-        prizes in your <span class="tech-tree">Tech Tree</span>. You can get
+        Mips, which you can then put towards unlocking
+        prizes in your Tech Tree. You can get
         things like video games, books, monitors, tools, and a bunch of other
         goodies thrown in there. You can also boost how many
-        <span class="mip">Mips</span> you get through a bunch of means.
+        Mips you get through a bunch of means.
     </div>
 {/snippet}
 {@render faq_card(0, faq_1)}
@@ -99,11 +99,11 @@
             Your challenge is to make a video game <i>without</i> making use of
             a game engine. There are three tiers of projects, sorted by
             complexity. Higher tiers accumulate
-            <span class="mip">Mips</span> at a higher rate. Here they are:
+            Mips at a higher rate. Here they are:
         </p>
         <ul>
             <li>
-                <h5><span class="tier">Tier Quebec</span></h5>
+                <h5>Tier Quebec</h5>
                 <p>
                     This tier is for custom 2D game engines. Maybe you're doing
                     it in something like the JavaScript canvas; something that
@@ -112,7 +112,7 @@
                 </p>
             </li>
             <li>
-                <h5><span class="tier">Tier Romeo</span></h5>
+                <h5>Tier Romeo</h5>
                 <p>
                     This tier covers 3D games made with a low-level graphics
                     library. This includes OpenGL, DirectX, Metal, BGFX, and
@@ -124,12 +124,12 @@
                 </p>
             </li>
             <li>
-                <h5><span class="tier">Tier Sierra</span></h5>
+                <h5>Tier Sierra</h5>
                 <p>
                     Projects in this tier use trickier graphics technologies and
-                    get a bit of a <span class="mip">Mip</span> boost compared
+                    get a bit of a Mip boost compared
                     to projects in
-                    <span class="tier">Tier Romeo</span>. The only projects that
+                    Tier Romeo. The only projects that
                     qualify are those that meet one of the following criteria:
                 </p>
                 <ul>
@@ -155,9 +155,7 @@
 {#snippet faq_4()}
     <strong>But I don't know how to do any of this!</strong>
     <div>
-        That's totally alright. It's exactly why <span class="mipmap"
-            >Hack Club Mipmap</span
-        > has a video series to teach the basics of graphics programming, along with
+        That's totally alright. It's exactly why Hack Club Mipmap has a video series to teach the basics of graphics programming, along with
         a few other notes. Scroll up a bit and click the big "Learn here!" button
         to find them.
     </div>
@@ -171,7 +169,7 @@
             href="https://hackatime.hackclub.com/">Hackatime</a
         >
         account. This is how your time is tracked so we know how many
-        <span class="mip">Mips</span>
+        Mips
         to give you!
     </div>
 {/snippet}
@@ -189,9 +187,7 @@
         <p>
             So here's the rule. You may use as much or as little AI as you feel
             is necessary, but time spent AI coding will count for less than time
-            spent coding by hand. Note that Hackatime and the <span
-                class="mipmap">Mipmap</span
-            > dashboard will show all of your time by default, AI and all.
+            spent coding by hand. Note that Hackatime and the Mipmap dashboard will show all of your time by default, AI and all.
         </p>
         <p>
             You are welcome and encouraged to use these powerful new tools in
@@ -233,21 +229,5 @@
 
     div p:not(:last-child) {
         margin-bottom: 1em;
-    }
-
-    .mip {
-        color: #ff9a3d;
-    }
-
-    .mipmap {
-        color: #8fcf6b;
-    }
-
-    .tier {
-        color: #ffe066;
-    }
-
-    .tech-tree {
-        color: #7cc4f0;
     }
 </style>

@@ -358,13 +358,13 @@ async fn shadowban(
     .bind(body.shadowbanned)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| reject("Unknown snapshot"))?;
+    .ok_or_else(|| reject("Unknown Snapshot"))?;
     let (action, verb) = if body.shadowbanned {
         ("shadowban", "Shadowbanned")
     } else {
         ("unshadowban", "Unshadowbanned")
     };
-    record(&mut tx, admin_id, action, user_id, format!("{verb} snapshot #{id} by {author}"), Some(reason))
+    record(&mut tx, admin_id, action, user_id, format!("{verb} Snapshot #{id} by {author}"), Some(reason))
         .await?;
     let snapshot: Snapshot = sqlx::query_as(sqlx::AssertSqlSafe(format!("{SNAPSHOT_SELECT} WHERE s.id = $1")))
         .bind(id)

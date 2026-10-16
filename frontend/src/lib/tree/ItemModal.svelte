@@ -138,7 +138,7 @@
                 {#if onskip}
                     <p class="skip">
                         If you don't want to actually receive the sticker, use
-                        this button. The token will still be lost for the
+                        this button. The Token will still be lost for the
                         purposes of this tutorial.
                     </p>
                     <HoldButton

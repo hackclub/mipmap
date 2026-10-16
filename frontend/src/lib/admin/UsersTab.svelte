@@ -129,7 +129,7 @@
         submit={user.banned ? "Unban" : "Ban"}
         warning={user.banned
             ? "They'll be able to use Mipmap again"
-            : "They'll be locked out of Mipmap and their snapshots will be hidden"}
+            : "They'll be locked out of Mipmap and their Snapshots will be hidden"}
         bind:reason
         onsubmit={async () =>
             pages.replace(
