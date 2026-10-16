@@ -30,7 +30,8 @@ pub fn api(cfg: &mut web::ServiceConfig) {
         web::scope("/admin")
             .wrap(DefaultHeaders::new().add((header::CACHE_CONTROL, "no-store")))
             .service((get_overview, get_ships, set_bonus, get_snapshots, shadowban, get_users))
-            .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit)),
+            .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
+            .service((get_stickers, create_wave, fulfill_wave, wave_csv)),
     );
 }
 
@@ -737,4 +738,166 @@ async fn get_audit(
     .fetch_all(pool.get_ref())
     .await?;
     Ok(HttpResponse::Ok().json(actions))
+}
+
+const PENDING_STICKERS: &str =
+    "node_id = $1 AND deleted_at IS NULL AND NOT fulfilled AND sticker_wave_id IS NULL";
+const CSV_FIELDS: [&str; 9] = [
+    "First Name",
+    "Last Name",
+    "Line 1",
+    "Line 2",
+    "City",
+    "State / Province",
+    "Zip / Postal Code",
+    "Country",
+    "Email",
+];
+
+#[derive(Serialize, sqlx::FromRow)]
+struct Wave {
+    id: i32,
+    admin_name: String,
+    created_at: DateTime<Utc>,
+    stickers: i64,
+    unfulfilled: i64,
+}
+
+#[derive(Serialize)]
+struct Stickers {
+    pending: i64,
+    waves: Vec<Wave>,
+}
+
+async fn fetch_stickers(conn: &mut PgConnection) -> sqlx::Result<Stickers> {
+    let pending = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT count(*) FROM \"order\" WHERE {PENDING_STICKERS}"
+    )))
+    .bind(tree::STICKER as i32)
+    .fetch_one(&mut *conn)
+    .await?;
+    let waves = sqlx::query_as(
+        "SELECT w.id, concat_ws(' ', u.first_name, u.last_name) AS admin_name, w.created_at,
+             count(o.id) AS stickers, count(o.id) FILTER (WHERE NOT o.fulfilled) AS unfulfilled
+         FROM sticker_wave w JOIN \"user\" u ON u.id = w.admin_id
+         LEFT JOIN \"order\" o ON o.sticker_wave_id = w.id AND o.deleted_at IS NULL
+         GROUP BY w.id, u.id ORDER BY w.id DESC",
+    )
+    .fetch_all(conn)
+    .await?;
+    Ok(Stickers { pending, waves })
+}
+
+#[get("/stickers")]
+async fn get_stickers(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let mut conn = pool.acquire().await?;
+    Ok(HttpResponse::Ok().json(fetch_stickers(&mut conn).await?))
+}
+
+#[post("/stickers/waves")]
+async fn create_wave(Admin(admin_id): Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let mut tx = pool.begin().await?;
+    let orders: Vec<i32> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT id FROM \"order\" WHERE {PENDING_STICKERS} FOR UPDATE"
+    )))
+    .bind(tree::STICKER as i32)
+    .fetch_all(&mut *tx)
+    .await?;
+    if orders.is_empty() {
+        return Err(reject("No stickers are waiting for a wave"));
+    }
+    let id: i32 = sqlx::query_scalar("INSERT INTO sticker_wave (admin_id) VALUES ($1) RETURNING id")
+        .bind(admin_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE \"order\" SET sticker_wave_id = $1 WHERE id = ANY($2)")
+        .bind(id)
+        .bind(&orders)
+        .execute(&mut *tx)
+        .await?;
+    let stickers = orders.len();
+    let plural = if stickers == 1 { "" } else { "s" };
+    sqlx::query("INSERT INTO admin_action (admin_id, action, summary) VALUES ($1, 'sticker_wave', $2)")
+        .bind(admin_id)
+        .bind(format!("Created sticker wave #{id} with {stickers} sticker{plural}"))
+        .execute(&mut *tx)
+        .await?;
+    let body = fetch_stickers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(HttpResponse::Ok().json(body))
+}
+
+#[post("/stickers/waves/{id}/fulfill")]
+async fn fulfill_wave(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let mut tx = pool.begin().await?;
+    let fulfilled = sqlx::query(
+        "UPDATE \"order\" SET fulfilled = true
+         WHERE sticker_wave_id = $1 AND deleted_at IS NULL AND NOT fulfilled",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if fulfilled == 0 {
+        return Err(reject("Every sticker in this wave is already fulfilled"));
+    }
+    let plural = if fulfilled == 1 { "" } else { "s" };
+    sqlx::query("INSERT INTO admin_action (admin_id, action, summary) VALUES ($1, 'fulfill_sticker_wave', $2)")
+        .bind(admin_id)
+        .bind(format!("Marked {fulfilled} sticker{plural} in sticker wave #{id} fulfilled"))
+        .execute(&mut *tx)
+        .await?;
+    let body = fetch_stickers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(HttpResponse::Ok().json(body))
+}
+
+fn csv_line<S: AsRef<str>>(fields: impl IntoIterator<Item = S>) -> String {
+    let fields: Vec<String> = fields
+        .into_iter()
+        .map(|field| {
+            let field = field.as_ref();
+            if field.contains([',', '"', '\n', '\r']) {
+                format!("\"{}\"", field.replace('"', "\"\""))
+            } else {
+                field.to_string()
+            }
+        })
+        .collect();
+    fields.join(",") + "\r\n"
+}
+
+#[get("/stickers/waves/{id}/csv")]
+async fn wave_csv(_: Admin, pool: web::Data<PgPool>, id: web::Path<i32>) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let created_at: DateTime<Utc> = sqlx::query_scalar("SELECT created_at FROM sticker_wave WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .ok_or_else(not_found)?;
+    let rows: Vec<Vec<String>> = sqlx::query_scalar(
+        "SELECT ARRAY[
+             coalesce(o.address_first_name, u.first_name, ''), coalesce(o.address_last_name, u.last_name, ''),
+             coalesce(o.address_line_1, ''), coalesce(o.address_line_2, ''), coalesce(o.address_city, ''),
+             coalesce(o.address_state, ''), coalesce(o.address_postal_code, ''),
+             upper(trim(coalesce(o.address_country, ''))), coalesce(u.email, '')
+         ]
+         FROM \"order\" o JOIN \"user\" u ON u.id = o.user_id
+         WHERE o.sticker_wave_id = $1 AND o.deleted_at IS NULL
+         ORDER BY o.id",
+    )
+    .bind(id)
+    .fetch_all(pool.get_ref())
+    .await?;
+    let body = rows.iter().fold(csv_line(CSV_FIELDS), |body, row| body + &csv_line(row));
+    let filename = format!("mipmap-stickers-{}-wave-{id}.csv", created_at.format("%Y-%m-%d"));
+    Ok(HttpResponse::Ok()
+        .content_type("text/csv; charset=utf-8")
+        .insert_header((header::CONTENT_DISPOSITION, format!("attachment; filename=\"{filename}\"")))
+        .body(body))
 }

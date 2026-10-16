@@ -4,6 +4,7 @@
     import SnapshotsTab from "$lib/admin/SnapshotsTab.svelte";
     import UsersTab from "$lib/admin/UsersTab.svelte";
     import OrdersTab from "$lib/admin/OrdersTab.svelte";
+    import StickersTab from "$lib/admin/StickersTab.svelte";
     import FeedbackTab from "$lib/admin/FeedbackTab.svelte";
     import AuditTab from "$lib/admin/AuditTab.svelte";
 
@@ -12,6 +13,7 @@
         ["snapshots", "Snapshots"],
         ["users", "Users"],
         ["orders", "Orders"],
+        ["stickers", "Stickers"],
         ["feedback", "Feedback"],
         ["audit", "Audit log"],
     ] as const;
@@ -73,6 +75,8 @@
                         <UsersTab onchange={refresh} />
                     {:else if tab === "orders"}
                         <OrdersTab onchange={refresh} />
+                    {:else if tab === "stickers"}
+                        <StickersTab onchange={refresh} />
                     {:else if tab === "feedback"}
                         <FeedbackTab />
                     {:else}

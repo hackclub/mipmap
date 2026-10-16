@@ -1,5 +1,13 @@
 import { get_json, json, request, send_json } from "$lib/api";
-import type { Action, Feedback, Order, Ship, Snapshot, User } from "./types";
+import type {
+  Action,
+  Feedback,
+  Order,
+  Ship,
+  Snapshot,
+  Stickers,
+  User,
+} from "./types";
 
 export const page_size = 50;
 
@@ -57,6 +65,16 @@ export const cancel_order = async (id: number, reason: string) => {
   );
   if (!response.ok) await json(response);
 };
+
+export const fetch_stickers = () =>
+  get_json<Stickers>("/api/admin/stickers");
+
+export const create_wave = () => post<Stickers>("stickers/waves", {});
+
+export const fulfill_wave = (id: number) =>
+  post<Stickers>(`stickers/waves/${id}/fulfill`, {});
+
+export const wave_csv = (id: number) => `/api/admin/stickers/waves/${id}/csv`;
 
 export const safe_url = (url: string | null) =>
   url && /^https?:\/\//i.test(url) ? url : undefined;

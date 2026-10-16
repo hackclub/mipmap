@@ -90,3 +90,16 @@ export type Action = {
   reason: string | null;
   created_at: string;
 };
+
+export type Wave = {
+  id: number;
+  admin_name: string;
+  created_at: string;
+  stickers: number;
+  unfulfilled: number;
+};
+
+export type Stickers = {
+  pending: number;
+  waves: Wave[];
+};
