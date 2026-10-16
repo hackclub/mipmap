@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { Snippet } from "svelte";
     import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
+    import { scroll_focus } from "$lib/ui/scroll_focus";
 
     let {
         title,
@@ -33,7 +34,7 @@
         <h2 id={uid}>{title}</h2>
         {@render actions?.()}
     </header>
-    <div class="body" class:padded data-scroll style:zoom>
+    <div class="body" class:padded data-scroll style:zoom {@attach scroll_focus}>
         {@render children()}
     </div>
 </section>
@@ -101,6 +102,11 @@
         flex: 1;
         min-height: 0;
         overflow: auto;
+    }
+
+    .body:focus-visible {
+        outline: 3px solid #e8c58c;
+        outline-offset: -3px;
     }
 
     .padded {

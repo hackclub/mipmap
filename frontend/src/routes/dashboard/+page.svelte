@@ -167,55 +167,58 @@
 {#if account.suspended}
     <div class="status">Your account has been suspended</div>
 {:else if tree && layout && sections && data}
-    <PanZoom
-        bind:this={panzoom}
-        home={sections.tree}
-        limits={sections.all}
-        keep={origin}
-        targets="button[data-node]"
-    >
-        <ProjectsPanel
-            bounds={sections.projects}
-            projects={data.projects}
-            hackatime={data.hackatime_projects}
-            bind:dialog={project_dialog}
-            touring={!!touring}
-            onsaved={(kind) => onboarding?.saved(kind)}
-        />
-        <StepsPanel bounds={sections.steps} />
-        <FulfillmentPanel bounds={sections.fulfillment} />
-        <OrdersPanel bounds={sections.orders} orders={data.orders} />
-        <ReferralPanel
-            bounds={sections.referral}
-            code={data.user.referral_code}
-        />
-        <ChallengePanel bounds={sections.challenge} />
-        <ProfilePanel
-            bounds={sections.profile}
-            currency={tree.currency}
-            user={data.user}
-            {tokens}
-        />
-        <HelpPanel
-            bounds={sections.help}
-            disabled={!spots}
-            onreplay={() => (touring = "replay")}
-        />
-        <SnapshotsPanel
-            bounds={sections.snapshots}
-            snapshots={data.snapshots}
-        />
-        <TechTree
-            left={sections.tree.left}
-            {nodes}
-            {layout}
-            {metadata}
-            currency={tree.currency}
-            unlocked={shown_unlocked}
-            {purchased}
-            onselect={(id) => (selected = id)}
-        />
-    </PanZoom>
+    <main aria-labelledby="dashboard-title">
+        <h1 id="dashboard-title" class="title">Dashboard</h1>
+        <PanZoom
+            bind:this={panzoom}
+            home={sections.tree}
+            limits={sections.all}
+            keep={origin}
+            targets="button[data-node]"
+        >
+            <ProjectsPanel
+                bounds={sections.projects}
+                projects={data.projects}
+                hackatime={data.hackatime_projects}
+                bind:dialog={project_dialog}
+                touring={!!touring}
+                onsaved={(kind) => onboarding?.saved(kind)}
+            />
+            <StepsPanel bounds={sections.steps} />
+            <FulfillmentPanel bounds={sections.fulfillment} />
+            <OrdersPanel bounds={sections.orders} orders={data.orders} />
+            <ReferralPanel
+                bounds={sections.referral}
+                code={data.user.referral_code}
+            />
+            <ChallengePanel bounds={sections.challenge} />
+            <ProfilePanel
+                bounds={sections.profile}
+                currency={tree.currency}
+                user={data.user}
+                {tokens}
+            />
+            <HelpPanel
+                bounds={sections.help}
+                disabled={!spots}
+                onreplay={() => (touring = "replay")}
+            />
+            <SnapshotsPanel
+                bounds={sections.snapshots}
+                snapshots={data.snapshots}
+            />
+            <TechTree
+                left={sections.tree.left}
+                {nodes}
+                {layout}
+                {metadata}
+                currency={tree.currency}
+                unlocked={shown_unlocked}
+                {purchased}
+                onselect={(id) => (selected = id)}
+            />
+        </PanZoom>
+    </main>
 
     <div class="nav" inert={!!touring}>
         <NavMenu
@@ -238,7 +241,7 @@
         />
     </div>
 
-    <div class="banners" class:touring>
+    <aside class="banners" class:touring aria-label="Notices">
         {#if !touring && data.user.blocked}
             <div class="banner">
                 {data.user.blocked}
@@ -260,7 +263,7 @@
                 />
             </div>
         {/if}
-    </div>
+    </aside>
 
     {#if touring && spots}
         <Onboarding
@@ -356,6 +359,15 @@
 {/snippet}
 
 <style>
+    .title {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
     .status {
         position: fixed;
         inset: 0;

@@ -103,7 +103,7 @@
         </p>
         <ul>
             <li>
-                <h5>Tier Quebec</h5>
+                <h3>Tier Quebec</h3>
                 <p>
                     This tier is for custom 2D game engines. Maybe you're doing
                     it in something like the JavaScript canvas; something that
@@ -112,7 +112,7 @@
                 </p>
             </li>
             <li>
-                <h5>Tier Romeo</h5>
+                <h3>Tier Romeo</h3>
                 <p>
                     This tier covers 3D games made with a low-level graphics
                     library. This includes OpenGL, DirectX, Metal, BGFX, and
@@ -124,7 +124,7 @@
                 </p>
             </li>
             <li>
-                <h5>Tier Sierra</h5>
+                <h3>Tier Sierra</h3>
                 <p>
                     Projects in this tier use trickier graphics technologies and
                     get a bit of a Mip boost compared
@@ -225,6 +225,11 @@
 <style>
     div {
         font-size: 0.85em;
+    }
+
+    h3 {
+        margin-block: 1.67em;
+        font-size: 0.83em;
     }
 
     div p:not(:last-child) {

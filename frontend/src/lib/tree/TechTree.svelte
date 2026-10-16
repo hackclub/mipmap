@@ -31,6 +31,8 @@
 
 <div
     class="tree"
+    role="group"
+    aria-label="Tech Tree"
     style:left="{left}px"
     style:width="{layout.width}px"
     style:height="{layout.height}px"

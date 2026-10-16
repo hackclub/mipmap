@@ -209,11 +209,11 @@
 />
 
 <div class="page">
-    <div class="field" style:height="{cog_field_height}px">
+    <div class="field" style:height="{cog_field_height}px" aria-hidden="true">
         <CogField {cogs} {scroll_y} {viewport_height} {footer_blocked} />
     </div>
 
-    <div style:visibility={ready ? "visible" : "hidden"}>
+    <main style:visibility={ready ? "visible" : "hidden"}>
         <TextBlock
             x={container_x}
             y={container_y}
@@ -272,7 +272,7 @@
                 <h2>Wanna get started?</h2>
             </div>
             <div class="start">
-                <form class="signup" onsubmit={sign_up}>
+                <form class="signup" aria-label="Sign up" onsubmit={sign_up}>
                     <label for="signup-email">Sign up with your email!</label>
                     <div class="email">
                         <input
@@ -343,7 +343,7 @@
             obstacles={[first_box, left_box, right_box, description_box]}
             bind:height={faq_height}
         />
-    </div>
+    </main>
 
     <div class="content" style:height="{page_height}px"></div>
 
@@ -361,7 +361,7 @@
             <a href="https://security.hackclub.com/">Security</a>
         </div>
         <p class="made-with">
-            Made with <span class="heart" aria-label="love">&hearts;</span> by
+            Made with <span class="heart" role="img" aria-label="love">&hearts;</span> by
             <a href="https://hackclub.enterprise.slack.com/team/U08LEHUPSCR"
                 >Brendan</a
             >
@@ -369,14 +369,14 @@
         </p>
     </footer>
 
-    <div
+    <header
         class="logo"
         style:top="{logo_top}px"
         style:--aspect={logo_aspect}
         bind:clientWidth={logo_width}
     >
         <MipmapLogo />
-    </div>
+    </header>
 </div>
 
 <style>

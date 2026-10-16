@@ -562,7 +562,13 @@
     </div>
 </div>
 
-<div class="controls" class:locked inert={locked}>
+<div
+    class="controls"
+    class:locked
+    inert={locked}
+    role="group"
+    aria-label="Map controls"
+>
     <button type="button" aria-label="Zoom in" onclick={() => zoom(button_zoom)}
         >+</button
     >

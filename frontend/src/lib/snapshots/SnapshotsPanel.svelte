@@ -4,6 +4,7 @@
     import type { Dashboard } from "$lib/dashboard/state.svelte";
     import SendSnapshot from "$lib/snapshots/SendSnapshot.svelte";
     import SnapshotCard from "$lib/snapshots/SnapshotCard.svelte";
+    import { scroll_focus } from "$lib/ui/scroll_focus";
 
     let {
         bounds,
@@ -27,7 +28,7 @@
                 </p>
             </div>
         </div>
-        <div class="area mine" data-scroll>
+        <div class="area mine" data-scroll {@attach scroll_focus}>
             {#each snapshots.mine as snapshot (snapshot.id)}
                 <SnapshotCard {snapshot} />
             {:else}
@@ -100,6 +101,11 @@
         overflow-y: auto;
         touch-action: pan-y;
         border-right: 2px solid #4f2f1f;
+    }
+
+    .mine:focus-visible {
+        outline: 3px solid #e8c58c;
+        outline-offset: -3px;
     }
 
     .everyone {

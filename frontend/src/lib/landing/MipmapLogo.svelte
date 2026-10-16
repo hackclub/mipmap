@@ -128,18 +128,18 @@
 	</svg>
 {/snippet}
 
-<div class="logo" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width} bind:this={root}>
+<div class="logo" role="img" aria-label="Mipmap" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width} bind:this={root}>
 	<img
 		class="static"
 		class:hidden={live}
 		src="/logo.svg"
-		alt="Mipmap"
+		alt=""
 		fetchpriority="high"
 		style:left="{(-2 / view_width) * 100}%"
 		style:top="{(-2 / view_height) * 100}%"
 		style:width="{((view_width + 4) / view_width) * 100}%"
 	/>
-	<div class="live" class:on={live} aria-hidden={!live}>
+	<div class="live" class:on={live} aria-hidden="true">
 	<div class="layer letter-shadow" aria-hidden="true">
 		{@render letters()}
 	</div>

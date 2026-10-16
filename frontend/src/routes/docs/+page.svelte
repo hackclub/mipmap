@@ -214,7 +214,9 @@
     path="/docs"
 />
 
-<a class="home" href="/">Home</a>
+<nav aria-label="Site">
+    <a class="home" href="/">Home</a>
+</nav>
 
 <main>
     <header class="card title">

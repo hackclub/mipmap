@@ -880,6 +880,8 @@
 <div
     class="onboarding"
     class:out={phase === "out"}
+    role="region"
+    aria-label="Tutorial"
     bind:this={root}
     bind:clientWidth={view_width}
     bind:clientHeight={view_height}
