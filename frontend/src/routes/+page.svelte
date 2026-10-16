@@ -59,10 +59,17 @@
     const pair_gap = $derived(
         ((container_width / grid) % 2 === 0 ? 2 : 1) * grid,
     );
-    const pair_width = $derived((container_width - pair_gap) / 2);
+    const stacked = $derived(viewport_width < 760);
+    const pair_width = $derived(
+        stacked ? container_width : (container_width - pair_gap) / 2,
+    );
     const pair_y = $derived(container_y + first_container_height + 144);
+    const right_x = $derived(
+        stacked ? container_x : container_x + pair_width + pair_gap,
+    );
+    const right_y = $derived(stacked ? pair_y + left_box_height + 96 : pair_y);
     const pair_height = $derived(
-        Math.max(left_content_height, right_content_height),
+        stacked ? 0 : Math.max(left_content_height, right_content_height),
     );
     const learn_shift = $derived.by(() => {
         const below = pair_height - left_heading_height;
@@ -81,7 +88,9 @@
     const pair_box_height = $derived(
         Math.max(left_box_height, right_box_height),
     );
-    const description_y = $derived(pair_y + pair_box_height + 144);
+    const description_y = $derived(
+        (stacked ? right_y + right_box_height : pair_y + pair_box_height) + 144,
+    );
     const first_box = $derived({
         left: container_x,
         right: container_x + container_width,
@@ -92,13 +101,13 @@
         left: container_x,
         right: container_x + pair_width,
         top: pair_y,
-        bottom: pair_y + pair_box_height,
+        bottom: pair_y + (stacked ? left_box_height : pair_box_height),
     });
     const right_box = $derived({
-        left: container_x + pair_width + pair_gap,
+        left: right_x,
         right: container_x + container_width,
-        top: pair_y,
-        bottom: pair_y + pair_box_height,
+        top: right_y,
+        bottom: right_y + (stacked ? right_box_height : pair_box_height),
     });
     const description_box = $derived({
         left: container_x,
@@ -250,8 +259,8 @@
         </TextBlock>
 
         <TextBlock
-            x={container_x + pair_width + pair_gap}
-            y={pair_y}
+            x={right_x}
+            y={right_y}
             width={pair_width}
             {cogs}
             min_height={pair_height}
