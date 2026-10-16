@@ -30,12 +30,14 @@
     );
     const color = $derived(node_color(node));
     const price = $derived(price_label(node, currency, unlocked, purchased));
+    const unlocked_ring = $derived({ color: unlocked_border, width: border });
+    const focus_ring = $derived({ color: "#ead7c2", width: border + 8 });
 </script>
 
-{#snippet cog(outline: boolean)}
+{#snippet cog(ring?: { color: string; width: number })}
     <div
         class="cog"
-        class:gray={unlocked && !purchased && !outline}
+        class:gray={unlocked && !purchased && !ring}
         style:left="{-shape.cog / 2}px"
         style:top="{-shape.cog / 2}px"
     >
@@ -44,28 +46,26 @@
             color={purchased ? unlocked_border : color}
             size={shape.cog}
             solid={purchased}
-            outline={outline
-                ? { color: unlocked_border, width: border }
-                : undefined}
+            outline={ring}
         />
     </div>
 {/snippet}
 
-{#snippet label(outline: boolean)}
+{#snippet label(ring?: { color: string; width: number })}
     <div
         class="label"
-        class:outline
-        class:gray={unlocked && !purchased && !outline}
-        class:purchased={purchased && !outline}
+        class:outline={ring}
+        class:gray={unlocked && !purchased && !ring}
+        class:purchased={purchased && !ring}
         class:token={node.kind === "token"}
         style:left="{-shape.label_width / 2}px"
         style:top="{shape.label_offset - shape.label_height / 2}px"
         style:width="{shape.label_width}px"
         style:height="{shape.label_height}px"
-        style:--border="{border}px"
-        style:--border-color={unlocked_border}
+        style:--border="{ring?.width}px"
+        style:--border-color={ring?.color}
     >
-        {#if !outline}
+        {#if !ring}
             {#if node.kind === "item"}
                 <span class="title">{title}</span>
             {/if}
@@ -81,7 +81,7 @@
         style:top="{y}px"
         data-node={node.id}
     >
-        {@render cog(false)}
+        {@render cog()}
     </div>
 {:else}
     <button
@@ -93,12 +93,16 @@
         aria-label="{title}, {price}"
         onclick={onselect}
     >
+        <div class="focus">
+            {@render cog(focus_ring)}
+            {@render label(focus_ring)}
+        </div>
         {#if unlocked && !purchased}
-            {@render cog(true)}
-            {@render label(true)}
+            {@render cog(unlocked_ring)}
+            {@render label(unlocked_ring)}
         {/if}
-        {@render cog(false)}
-        {@render label(false)}
+        {@render cog()}
+        {@render label()}
     </button>
 {/if}
 
@@ -120,6 +124,14 @@
 
     .interactive:focus-visible {
         outline: none;
+    }
+
+    .focus {
+        display: none;
+    }
+
+    .interactive:focus-visible .focus {
+        display: contents;
     }
 
     .cog,
