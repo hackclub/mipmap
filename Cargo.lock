@@ -1296,7 +1296,6 @@ dependencies = [
 [[package]]
 name = "hc_helper"
 version = "0.1.0"
-source = "git+https://github.com/breynard0/hc_helper#6a43aba2ea2923a1397eeba303c1b79abe068a45"
 dependencies = [
  "actix-web",
  "anyhow",

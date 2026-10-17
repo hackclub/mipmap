@@ -187,8 +187,9 @@ struct Ship {
     bonus_mips: i32,
     created_at: DateTime<Utc>,
     approved_at: Option<DateTime<Utc>>,
+    awaiting_id: bool,
     #[serde(skip)]
-    record_id: String,
+    record_id: Option<String>,
     #[sqlx(skip)]
     airtable_url: Option<String>,
 }
@@ -202,7 +203,8 @@ async fn fetch_ships(
         "SELECT s.id, s.project_id, p.name AS project, p.repo_url, p.demo_url, s.code_url, p.screenshot_url,
              u.id AS user_id, concat_ws(' ', u.first_name, u.last_name) AS user_name, u.email,
              s.tier, s.review_status, s.rejected, s.hours, s.tracked_hours, s.mips_per_hour, s.multiplier,
-             s.mips, s.bonus_percent, s.bonus_mips, s.created_at, s.approved_at, s.record_id
+             s.mips, s.bonus_percent, s.bonus_mips, s.created_at, s.approved_at,
+             s.record_id IS NULL AS awaiting_id, s.record_id
          FROM submission s JOIN project p ON p.id = s.project_id JOIN \"user\" u ON u.id = p.user_id
          WHERE s.deleted_at IS NULL
          AND ($1::int IS NULL OR s.id = $1)
@@ -225,8 +227,8 @@ async fn fetch_ships(
     let table = review::table()
         .filter(|table| table.base_id.starts_with("app") && table.table_id_or_name.starts_with("tbl"));
     for ship in &mut ships {
-        ship.airtable_url = table.as_ref().map(|table| {
-            format!("https://airtable.com/{}/{}/{}", table.base_id, table.table_id_or_name, ship.record_id)
+        ship.airtable_url = table.as_ref().zip(ship.record_id.as_ref()).map(|(table, record_id)| {
+            format!("https://airtable.com/{}/{}/{}", table.base_id, table.table_id_or_name, record_id)
         });
     }
     Ok(ships)

@@ -264,19 +264,21 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
               WHERE \"user\".deleted_at IS NULL AND login.logged_in_at > now() - interval '1 day')
                  AS logged_in_last_day,
              (SELECT count(*) FROM submission
-              WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1)
+              WHERE record_id IS NOT NULL AND deleted_at IS NULL AND NOT rejected
+                  AND review_status IS DISTINCT FROM $1)
                  AS awaiting_review,
              (SELECT extract(epoch FROM avg(now() - start))::float8 / 3600
-              FROM (SELECT GREATEST(created_at, (
+              FROM (SELECT GREATEST(COALESCE(sending_at, created_at), (
                               SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
                               FROM unnest($4::date[]) AS ship_by
                               WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date
                           )) AS start FROM submission
-                    WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1) queued
+                    WHERE record_id IS NOT NULL AND deleted_at IS NULL AND NOT rejected
+                        AND review_status IS DISTINCT FROM $1) queued
               WHERE start <= now())
                  AS average_wait_hours,
              (SELECT extract(epoch FROM avg(GREATEST(approved_at - start, interval '0')))::float8 / 3600
-              FROM (SELECT approved_at, GREATEST(created_at, (
+              FROM (SELECT approved_at, GREATEST(COALESCE(sending_at, created_at), (
                               SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
                               FROM unnest($4::date[]) AS ship_by
                               WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date

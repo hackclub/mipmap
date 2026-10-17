@@ -17,6 +17,7 @@
     let started = $state(false);
     let running = $state(false);
     let shipped = $state(false);
+    let waiting = $state(false);
     let agreed = $state(false);
     let error = $state("");
     const submit_failed = $derived(
@@ -40,7 +41,7 @@
         error = "";
         checks = [];
         try {
-            await ship_project(project.id, apply);
+            ({ waiting } = await ship_project(project.id, apply));
             shipped = true;
         } catch (e) {
             error = message(e);
@@ -101,7 +102,13 @@
             {/each}
         </ol>
     {/if}
-    {#if shipped}
+    {#if shipped && waiting}
+        <p class="note">
+            Your ship will be automatically submitted as soon as your ID
+            verification comes through. This won't affect the date and time
+            when you pressed the button
+        </p>
+    {:else if shipped}
         <p class="note">Shipped! It's waiting for review</p>
     {/if}
     {#if error}

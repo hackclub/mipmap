@@ -26,9 +26,11 @@
         const parts =
             project.status === "rejected"
                 ? ["Rejected"]
-                : project.status === "shipped"
-                  ? ["In review"]
-                  : ["Approved", `${project.mips_awarded} Mips earned`];
+                : project.awaiting_id
+                  ? ["Waiting for ID verification"]
+                  : project.status === "shipped"
+                    ? ["In review"]
+                    : ["Approved", `${project.mips_awarded} Mips earned`];
         if (round) {
             parts.unshift(`Round ${rounds.indexOf(round) + 1}`);
             if (project.status === "shipped") {

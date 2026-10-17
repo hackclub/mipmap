@@ -53,9 +53,11 @@
     const state_of = (ship: Ship) =>
         ship.rejected
             ? "Rejected"
-            : ship.review_status === "2–Submitted"
-              ? "Approved"
-              : "Pending";
+            : ship.awaiting_id
+              ? "Waiting for ID"
+              : ship.review_status === "2–Submitted"
+                ? "Approved"
+                : "Pending";
 
     const hours = (value: number | null) =>
         value === null ? "–" : `${value.toFixed(1)}h`;

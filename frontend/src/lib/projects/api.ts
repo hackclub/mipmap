@@ -4,7 +4,7 @@ import type { CheckEvent, ProjectFields } from "$lib/projects/types";
 
 type ShipLine =
   | CheckEvent
-  | { dashboard: Dashboard | null }
+  | { dashboard: Dashboard | null; waiting: boolean }
   | { error: string };
 
 export const create_project = (name: string) =>
@@ -37,6 +37,7 @@ export async function ship_project(
   const decoder = new TextDecoder();
   let buffer = "";
   let shipped = false;
+  let waiting = false;
 
   const handle = (line: string) => {
     if (!line.trim()) return;
@@ -46,6 +47,7 @@ export async function ship_project(
       if (event.dashboard) dashboard.set(event.dashboard);
       else dashboard.run();
       shipped = true;
+      waiting = event.waiting;
     } else {
       onevent(event);
     }
@@ -66,4 +68,5 @@ export async function ship_project(
   }
 
   if (!shipped) throw new Error("Lost connection while shipping");
+  return { waiting };
 }

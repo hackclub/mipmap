@@ -1,0 +1,2 @@
+ALTER TABLE submission ALTER COLUMN record_id DROP NOT NULL;
+ALTER TABLE submission ADD COLUMN queued JSONB, ADD COLUMN sending_at TIMESTAMPTZ;

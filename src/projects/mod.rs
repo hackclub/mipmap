@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 pub mod review;
-mod ship;
+pub mod ship;
 
 const PROJECT_LIMIT: i64 = 50;
 const NAME_LIMIT: usize = 100;
@@ -58,6 +58,7 @@ pub struct Project {
     pub hackatime: Vec<String>,
     screenshot: Option<String>,
     status: String,
+    awaiting_id: bool,
     locked: bool,
     shipped_at: Option<DateTime<Utc>>,
     mips_awarded: i32,
@@ -119,6 +120,7 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
                   WHEN latest.rejected THEN 'rejected'
                   WHEN latest.review_status = $2 THEN 'approved'
                   ELSE 'shipped' END AS status,
+             latest.created_at IS NOT NULL AND latest.record_id IS NULL AS awaiting_id,
              EXISTS (SELECT 1 FROM submission WHERE project_id = p.id AND deleted_at IS NULL AND NOT rejected)
                  AS locked,
              latest.created_at AS shipped_at,
@@ -127,7 +129,7 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
              p.total_seconds, p.last_logged_at
          FROM project p
          LEFT JOIN LATERAL (
-             SELECT review_status, rejected, created_at FROM submission
+             SELECT review_status, rejected, created_at, record_id FROM submission
              WHERE project_id = p.id AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1
          ) latest ON true

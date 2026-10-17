@@ -110,6 +110,13 @@ pub fn ship_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> O
     blocked(verification_status, ysws_eligible, "Verify your identity to ship projects")
 }
 
+pub fn verifying(verification_status: &str) -> bool {
+    !matches!(
+        verification_status,
+        "verified" | "verified_eligible" | "verified_but_over_18" | "rejected"
+    )
+}
+
 fn blocked(
     verification_status: Option<&str>,
     ysws_eligible: bool,

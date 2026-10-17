@@ -62,6 +62,7 @@ async fn main() -> std::io::Result<()> {
     hc_helper::airtable::spawn_airtable_queue_handler().map_err(std::io::Error::other)?;
     mirror::spawn(database_pool.clone());
     projects::review::spawn(database_pool.clone());
+    projects::ship::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
     tree::spawn_images();
     uploads::warn_unconfigured();

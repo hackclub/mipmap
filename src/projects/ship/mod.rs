@@ -5,6 +5,7 @@ use crate::{
     error::{ApiError, reject_with},
 };
 use actix_web::{HttpResponse, http::StatusCode, post, web, web::Bytes};
+use chrono::{DateTime, SubsecRound, Utc};
 use futures_util::stream;
 use hc_helper::airtable::AirtableTable;
 use serde_json::{Value, json};
@@ -17,7 +18,10 @@ use std::{
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 mod checks;
+mod queue;
 mod repos;
+
+pub use queue::spawn;
 
 #[derive(sqlx::FromRow)]
 struct Draft {
@@ -125,6 +129,7 @@ pub async fn ship_project(
     pool: web::Data<PgPool>,
     id: web::Path<i32>,
 ) -> Result<HttpResponse, ApiError> {
+    let shipped_at = Utc::now().trunc_subsecs(3);
     let table = review::table()
         .ok_or_else(|| reject_with(StatusCode::SERVICE_UNAVAILABLE, "Shipping isn't open yet"))?;
     ensure_owned(&pool, user_id, *id).await?;
@@ -153,12 +158,12 @@ pub async fn ship_project(
     actix_web::rt::spawn(async move {
         let _shipping = shipping;
         let events = Events(tx);
-        let line = match run(&pool, user_id, &project, table, &events).await {
-            Ok(()) => match dashboard::build(&pool, user_id, false).await {
-                Ok(dashboard) => json!({ "dashboard": dashboard }),
+        let line = match run(&pool, user_id, &project, table, shipped_at, &events).await {
+            Ok(submitted) => match dashboard::build(&pool, user_id, false).await {
+                Ok(dashboard) => json!({ "dashboard": dashboard, "waiting": !submitted }),
                 Err(e) => {
                     log::error!("building dashboard after ship failed: {e:#}");
-                    json!({ "dashboard": null })
+                    json!({ "dashboard": null, "waiting": !submitted })
                 }
             },
             Err(message) => json!({ "error": message }),
@@ -177,8 +182,9 @@ async fn run(
     user_id: i32,
     project: &Draft,
     table: AirtableTable,
+    shipped_at: DateTime<Utc>,
     events: &Events,
-) -> Result<(), &'static str> {
+) -> Result<bool, &'static str> {
     let details = events
         .check("details", "Project details", async { checks::details(project) })
         .await;
@@ -210,7 +216,7 @@ async fn run(
         .check("demo", "Demo link works", checks::demo(&project.demo))
         .await;
 
-    let (Some(()), Some(hca_token), Some(hackatime), Some(repo), Some(_claim), Some(())) =
+    let (Some(()), Some(account), Some(hackatime), Some(repo), Some(_claim), Some(())) =
         (details, account, hackatime, repo, unique, demo)
     else {
         return Err(FAILED);
@@ -220,7 +226,7 @@ async fn run(
         .check(
             "submit",
             "Sending for review",
-            checks::submit(pool, project, &repo, table, &hca_token, hackatime),
+            checks::submit(pool, project, &repo, table, account, hackatime, shipped_at),
         )
         .await
         .ok_or("Submission failed. Try again once or twice, then bug me about it")

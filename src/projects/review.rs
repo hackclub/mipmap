@@ -1,8 +1,6 @@
 use crate::{accounts::profile, env, snapshots, tree};
-use hc_helper::{
-    airtable::{AirtableTable, field_names, get_records},
-    submission::UNIFIED_FIELDS,
-};
+use chrono::{DateTime, Utc};
+use hc_helper::airtable::{AirtableTable, field_names, fields, get_records};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool};
@@ -31,6 +29,8 @@ pub struct Extras {
     pub github_username: Option<String>,
     #[serde(rename = "Submission Tier")]
     pub tier: &'static str,
+    #[serde(rename = "Shipped At")]
+    pub shipped_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
@@ -90,7 +90,7 @@ impl Review {
 #[derive(sqlx::FromRow)]
 struct Submission {
     id: i32,
-    record_id: String,
+    record_id: Option<String>,
     mips_per_hour: f64,
     review_status: Option<String>,
     rejected: bool,
@@ -103,13 +103,34 @@ struct Submission {
     deleted: bool,
 }
 
-const EXTRA_FIELDS: &[&str] = &[
-    "Optional - Override Hours Spent",
-    "Justification - Submitter Hackatime ID",
-    "GitHub Username",
-    "Automation - Status",
-    "Rejected",
-    "Submission Tier",
+const TEXT: &[&str] = &["singleLineText", "multilineText", "richText"];
+const URL: &[&str] = &["url", "singleLineText", "multilineText", "richText"];
+const EMAIL: &[&str] = &["email", "singleLineText", "multilineText", "richText"];
+const STATUS: &[&str] = &["formula", "singleSelect", "singleLineText", "multilineText", "richText"];
+
+const FIELDS: &[(&str, &[&str])] = &[
+    ("Code URL", URL),
+    ("Playable URL", URL),
+    ("First Name", TEXT),
+    ("Last Name", TEXT),
+    ("Email", EMAIL),
+    ("Screenshot", &["multipleAttachments"]),
+    ("Description", TEXT),
+    ("Address (Line 1)", TEXT),
+    ("Address (Line 2)", TEXT),
+    ("City", TEXT),
+    ("State / Province", TEXT),
+    ("ZIP / Postal Code", TEXT),
+    ("Country", TEXT),
+    ("Birthday", &["date"]),
+    ("Justification - Hackatime Project Name(s) + Date Range(s)", TEXT),
+    ("Optional - Override Hours Spent", &["number"]),
+    ("Justification - Submitter Hackatime ID", TEXT),
+    ("GitHub Username", TEXT),
+    ("Automation - Status", STATUS),
+    ("Rejected", &["checkbox"]),
+    ("Submission Tier", &["singleSelect"]),
+    ("Shipped At", &["dateTime"]),
 ];
 
 pub fn table() -> Option<AirtableTable> {
@@ -149,10 +170,10 @@ pub fn spawn(pool: PgPool) {
         return;
     };
     actix_web::rt::spawn(async move {
-        match missing_fields(&table).await {
-            Ok(missing) if !missing.is_empty() => log::warn!(
-                "Review Airtable table is missing fields: {}",
-                missing.join(", ")
+        match field_problems(&table).await {
+            Ok(problems) if !problems.is_empty() => log::error!(
+                "Review Airtable table fields aren't set up right: {}",
+                problems.join("; ")
             ),
             Ok(_) => {}
             Err(e) => log::warn!(
@@ -180,18 +201,44 @@ pub fn spawn(pool: PgPool) {
 
 async fn missing_fields(table: &AirtableTable) -> anyhow::Result<Vec<&'static str>> {
     let fields = field_names(table.clone()).await?;
-    Ok(UNIFIED_FIELDS
+    Ok(FIELDS
         .iter()
-        .chain(EXTRA_FIELDS)
-        .copied()
+        .map(|(field, _)| *field)
         .filter(|field| !fields.iter().any(|name| name == field))
         .collect())
+}
+
+async fn field_problems(table: &AirtableTable) -> anyhow::Result<Vec<String>> {
+    let fields = fields(table.clone()).await?;
+    let mut problems = Vec::new();
+    for (name, kinds) in FIELDS {
+        let Some(field) = fields.iter().find(|field| field.name == *name) else {
+            problems.push(format!("{name} is missing"));
+            continue;
+        };
+        if !kinds.contains(&field.kind.as_str()) {
+            problems.push(format!("{name} is {} but should be {}", field.kind, kinds.join(" or ")));
+        } else if field.kind == "singleSelect" && *name == "Submission Tier" {
+            let choices = field.options["choices"].as_array();
+            let missing: Vec<&str> = TIERS
+                .iter()
+                .map(|(_, label)| *label)
+                .filter(|label| {
+                    !choices.is_some_and(|choices| choices.iter().any(|choice| choice["name"] == *label))
+                })
+                .collect();
+            if !missing.is_empty() {
+                problems.push(format!("{name} is missing the options {}", missing.join(", ")));
+            }
+        }
+    }
+    Ok(problems)
 }
 
 async fn sync(pool: &PgPool, table: &AirtableTable, all: bool) -> anyhow::Result<bool> {
     let ids: Vec<String> = sqlx::query_scalar(
         "SELECT record_id FROM submission
-         WHERE CASE WHEN $1 THEN deleted_at IS NULL OR deleted_at > now() - interval '30 days'
+         WHERE record_id IS NOT NULL AND CASE WHEN $1 THEN deleted_at IS NULL OR deleted_at > now() - interval '30 days'
              ELSE updated_at > now() - interval '7 days'
                  OR (deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $2)
          END",
@@ -416,7 +463,7 @@ async fn reconcile(conn: &mut PgConnection, project_id: i32) -> anyhow::Result<(
             (true, None) => {
                 log::warn!(
                     "Review {} was approved without hours, so it earns nothing until hours are set",
-                    submission.record_id
+                    submission.record_id.as_deref().unwrap_or_default()
                 );
                 (0, submission.multiplier)
             }

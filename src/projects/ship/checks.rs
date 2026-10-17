@@ -1,4 +1,4 @@
-use super::{Draft, repos, repos::Repo};
+use super::{Draft, queue, repos, repos::Repo};
 use crate::{
     accounts::{
         profile,
@@ -16,10 +16,10 @@ use hc_helper::{
         HackatimeUser, forget_hackatime_token, get_hackatime_project_summaries_with_token,
         get_hackatime_user_with_token,
     },
-    submission::create_unified_with_token,
 };
+use chrono::{DateTime, Utc};
 use reqwest::Url;
-use sqlx::PgPool;
+use sqlx::{PgPool, types::Json};
 use std::{
     collections::HashSet,
     sync::{LazyLock, Mutex, PoisonError},
@@ -54,7 +54,12 @@ pub fn details(project: &Draft) -> Result<(), ApiError> {
     Ok(())
 }
 
-pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
+pub struct Account {
+    token: String,
+    verified: bool,
+}
+
+pub async fn account(pool: &PgPool, user_id: i32) -> Result<Account, ApiError> {
     let sign_in = || reject("Couldn't load your Hack Club account. Try signing in again");
     let token = tokens::load(pool, user_id, Provider::Hca)
         .await?
@@ -65,9 +70,11 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
         sign_in()
     })?;
     profile::sync(pool, &data).await?;
-    if let Some(reason) = profile::ship_blocked(Some(&data.verification_status), data.ysws_eligible) {
-        return Err(reject(reason));
-    }
+    let verified = match profile::ship_blocked(Some(&data.verification_status), data.ysws_eligible) {
+        None => true,
+        Some(_) if profile::verifying(&data.verification_status) => false,
+        Some(reason) => return Err(reject(reason)),
+    };
     if !profile::address(&data).is_some_and(|address| {
         [&address.line_1, &address.city, &address.country]
             .iter()
@@ -78,7 +85,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<String, ApiError> {
     if data.birthday.trim().is_empty() {
         return Err(reject("Add your birthday to your Hack Club account"));
     }
-    Ok(token)
+    Ok(Account { token, verified })
 }
 
 pub struct Hackatime {
@@ -203,11 +210,13 @@ pub async fn submit(
     project: &Draft,
     repo: &Repo,
     table: AirtableTable,
-    hca_token: &str,
+    account: Account,
     hackatime: Hackatime,
-) -> Result<(), ApiError> {
+    shipped_at: DateTime<Utc>,
+) -> Result<bool, ApiError> {
     let tier = project.tier.as_deref().unwrap_or_default();
     let mips_per_hour = review::mips_per_hour(Some(tier))?;
+    review::tier_label(tier)?;
     let shared: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM snapshot s JOIN project p ON p.user_id = s.user_id
          WHERE p.id = $1 AND s.deleted_at IS NULL",
@@ -216,26 +225,34 @@ pub async fn submit(
     .fetch_one(pool)
     .await?;
     let code_url = repo.url();
-    let record_id = create_unified_with_token(
-        hca_token,
-        &hackatime.token,
-        table,
-        code_url.clone(),
-        project.demo.trim().to_string(),
-        project.screenshot.clone().unwrap_or_default(),
-        project.description.trim().to_string(),
-        project.hackatime.clone(),
-        review::Extras {
-            hours: hackatime.hours,
-            hackatime_id: hackatime.user.user_id.to_string(),
-            github_username: hackatime.user.github_username.filter(|name| !name.is_empty()),
-            tier: review::tier_label(tier)?,
-        },
-    )
-    .await?;
+    let queued = queue::Queued {
+        demo: project.demo.trim().to_string(),
+        screenshot: project.screenshot.clone().unwrap_or_default(),
+        description: project.description.trim().to_string(),
+        hackatime: project.hackatime.clone(),
+        hours: hackatime.hours,
+        hackatime_id: hackatime.user.user_id.to_string(),
+        github_username: hackatime.user.github_username.filter(|name| !name.is_empty()),
+    };
+    let (record_id, queued) = if account.verified {
+        let record_id = queue::send(
+            table,
+            &account.token,
+            &hackatime.token,
+            code_url.clone(),
+            tier,
+            shipped_at,
+            queued,
+        )
+        .await?;
+        (Some(record_id), None)
+    } else {
+        (None, Some(Json(queued)))
+    };
     if let Err(e) = sqlx::query(
-        "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url, tier, multiplier, tracked_hours)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url, tier, multiplier, tracked_hours,
+             created_at, queued)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(project.id)
     .bind(&record_id)
@@ -244,14 +261,18 @@ pub async fn submit(
     .bind(tier)
     .bind(snapshots::multiplier(shared))
     .bind(hackatime.tracked)
+    .bind(shipped_at)
+    .bind(queued)
     .execute(pool)
     .await
     {
-        log::error!(
-            "Review record {record_id} was created for project {} but saving the submission failed",
-            project.id
-        );
+        if let Some(record_id) = record_id {
+            log::error!(
+                "Review record {record_id} was created for project {} but saving the submission failed",
+                project.id
+            );
+        }
         return Err(e.into());
     }
-    Ok(())
+    Ok(record_id.is_some())
 }

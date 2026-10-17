@@ -21,6 +21,7 @@ export type Ship = {
   bonus_mips: number;
   created_at: string;
   approved_at: string | null;
+  awaiting_id: boolean;
   airtable_url: string | null;
 };
 
