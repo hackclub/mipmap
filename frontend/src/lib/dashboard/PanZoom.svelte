@@ -235,7 +235,10 @@
 
     $effect(() => {
         viewport.addEventListener("wheel", onwheel, { passive: false });
-        return () => viewport.removeEventListener("wheel", onwheel);
+        return () => {
+            viewport.removeEventListener("wheel", onwheel);
+            clearTimeout(latch_timer);
+        };
     });
 
     $effect(() => {
@@ -253,17 +256,24 @@
     const scroller = (e: Event) =>
         (e.target as Element).closest<HTMLElement>("[data-scroll]");
 
+    let latched: HTMLElement | "canvas" | null = null;
+    let latch_timer = 0;
+
+    const can_scroll = (el: HTMLElement, dy: number) =>
+        dy < 0
+            ? el.scrollTop > 0
+            : dy > 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+
     function onwheel(e: WheelEvent) {
-        const own = scroller(e);
-        if (
-            own &&
-            e.deltaY !== 0 &&
-            !e.ctrlKey &&
-            !e.metaKey &&
-            (e.deltaY < 0
-                ? own.scrollTop > 0
-                : own.scrollTop + own.clientHeight < own.scrollHeight - 1)
-        ) {
+        const zooming = e.ctrlKey || e.metaKey;
+        clearTimeout(latch_timer);
+        latch_timer = window.setTimeout(() => (latched = null), 200);
+        if (!zooming && !latched) {
+            const own = scroller(e);
+            latched = own && can_scroll(own, e.deltaY) ? own : "canvas";
+        }
+        if (!zooming && latched instanceof HTMLElement) {
+            if (!can_scroll(latched, e.deltaY)) e.preventDefault();
             return;
         }
         e.preventDefault();
