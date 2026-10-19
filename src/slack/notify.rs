@@ -203,6 +203,31 @@ pub async fn snapshot_reminder(pool: &PgPool, user_id: i32, totals: &Totals, pro
     Ok(())
 }
 
+pub fn templates() -> Vec<(&'static str, String)> {
+    let now = Utc::now();
+    let today = now.date_naive();
+    let challenge = CHALLENGES
+        .iter()
+        .find(|c| eastern(&c.end, true).is_some_and(|end| now < end))
+        .or(CHALLENGES.last());
+    let round = ROUNDS.iter().find(|r| r.ship_by >= today).or(ROUNDS.last());
+    let mut templates = vec![("Welcome", messages::welcome())];
+    if let Some(challenge) = challenge {
+        templates.push(("New challenge", messages::challenge(&challenge.name, &challenge.description)));
+    }
+    if let Some(round) = round {
+        templates.push(("Fulfillment round", messages::round(round.ship_by)));
+    }
+    templates.extend([
+        ("Snapshot reminder", messages::snapshot()),
+        ("Ship approved", messages::ship_approved("Example Project", 100)),
+        ("Ship rejected", messages::ship_rejected("Example Project")),
+        ("Inactivity reminder", messages::inactivity()),
+        ("Admin alert", messages::draft_waiting("challenge", &accounts::site_url("/admin"))),
+    ]);
+    templates
+}
+
 pub async fn welcome(executor: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<()> {
     if super::token().is_none() {
         return Ok(());

@@ -9,6 +9,7 @@
         fetch_drafts,
         fetch_slack_admins,
         fetch_slack_log,
+        fetch_slack_templates,
         send_announcement,
         send_direct,
         send_draft,
@@ -44,6 +45,8 @@
     drafts.run();
     const admins = new Load(fetch_slack_admins);
     admins.run();
+    const templates = new Load(fetch_slack_templates);
+    templates.run();
     const log = new Pages<LogEntry>((before) => fetch_slack_log({ before }));
     log.reset();
 
@@ -155,6 +158,26 @@
             {/if}
         </section>
 
+        {#if templates.data?.length}
+            <div class="premade">
+                <label for="premade">Premade message</label>
+                <select
+                    id="premade"
+                    value=""
+                    onchange={(event) => {
+                        const chosen =
+                            templates.data?.[Number(event.currentTarget.value)];
+                        if (chosen) text = chosen.text;
+                        event.currentTarget.value = "";
+                    }}
+                >
+                    <option value="" disabled>Fill the message with…</option>
+                    {#each templates.data as template, i (template.label)}
+                        <option value={i}>{template.label}</option>
+                    {/each}
+                </select>
+            </div>
+        {/if}
         <div class="direct">
             <Field label="Slack ID" placeholder="U0123ABCD" bind:value={slack_id} />
             <button
@@ -276,6 +299,33 @@
     .status {
         color: #d6ab70;
         font-size: 0.85rem;
+    }
+
+    .premade {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .premade label {
+        font-size: 0.85em;
+        font-weight: 700;
+    }
+
+    .premade select {
+        padding: 0.5rem 0.75rem;
+        background: #4f2f1f;
+        color: #ead7c2;
+        border: none;
+        border-radius: 0;
+        font: inherit;
+        font-size: 0.85em;
+        cursor: pointer;
+    }
+
+    .premade select:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: -2px;
     }
 
     .direct {

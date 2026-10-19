@@ -15,7 +15,7 @@ const USER_FOR_SLACK_ID: &str = "(SELECT id FROM \"user\" WHERE slack_id = $1 OR
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((get_log, create_announcement, get_drafts, send_draft, dismiss_draft, send_direct))
-        .service((get_threads, get_thread, reply, get_admins));
+        .service((get_threads, get_thread, reply, get_admins, get_templates));
 }
 
 fn text(text: &str) -> Result<&str, ApiError> {
@@ -320,6 +320,21 @@ async fn get_admins(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, A
     .fetch_all(pool.get_ref())
     .await?;
     Ok(HttpResponse::Ok().json(admins))
+}
+
+#[derive(Serialize)]
+struct Template {
+    label: &'static str,
+    text: String,
+}
+
+#[get("/slack/templates")]
+async fn get_templates(_: Admin) -> HttpResponse {
+    let templates: Vec<Template> = super::notify::templates()
+        .into_iter()
+        .map(|(label, text)| Template { label, text })
+        .collect();
+    HttpResponse::Ok().json(templates)
 }
 
 #[derive(Serialize, sqlx::FromRow)]

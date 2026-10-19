@@ -130,6 +130,11 @@ export type Draft = {
   created_at: string;
 };
 
+export type Template = {
+  label: string;
+  text: string;
+};
+
 export type AdminContact = {
   slack_id: string;
   name: string;

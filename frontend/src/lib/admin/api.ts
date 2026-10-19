@@ -12,6 +12,7 @@ import type {
   Stickers,
   SurveyResponse,
   SurveyResults,
+  Template,
   Thread,
   User,
 } from "./types";
@@ -109,6 +110,8 @@ export const send_direct = (slack_id: string, text: string) =>
 
 export const fetch_slack_admins = () =>
   get_json<AdminContact[]>("/api/admin/slack/admins");
+export const fetch_slack_templates = () =>
+  get_json<Template[]>("/api/admin/slack/templates");
 
 export const fetch_threads = () =>
   get_json<Thread[]>("/api/admin/slack/threads");
