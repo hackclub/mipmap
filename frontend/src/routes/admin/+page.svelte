@@ -7,6 +7,8 @@
     import StickersTab from "$lib/admin/StickersTab.svelte";
     import FeedbackTab from "$lib/admin/FeedbackTab.svelte";
     import AuditTab from "$lib/admin/AuditTab.svelte";
+    import AnnouncementsTab from "$lib/admin/AnnouncementsTab.svelte";
+    import InboxTab from "$lib/admin/InboxTab.svelte";
 
     const tabs = [
         ["ships", "Ships"],
@@ -15,6 +17,8 @@
         ["orders", "Orders"],
         ["stickers", "Stickers"],
         ["feedback", "Feedback"],
+        ["announcements", "Announcements"],
+        ["inbox", "Slack DMs"],
         ["audit", "Audit log"],
     ] as const;
 
@@ -79,6 +83,10 @@
                         <StickersTab onchange={refresh} />
                     {:else if tab === "feedback"}
                         <FeedbackTab />
+                    {:else if tab === "announcements"}
+                        <AnnouncementsTab />
+                    {:else if tab === "inbox"}
+                        <InboxTab />
                     {:else}
                         <AuditTab />
                     {/if}

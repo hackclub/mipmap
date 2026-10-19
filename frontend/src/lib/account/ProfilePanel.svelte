@@ -1,6 +1,7 @@
 <script lang="ts">
     import Section from "$lib/dashboard/Section.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
+    import SlackDialog from "./SlackDialog.svelte";
     import { json, request } from "$lib/api";
     import { Task } from "$lib/load.svelte";
     import type { User } from "$lib/dashboard/state.svelte";
@@ -15,6 +16,7 @@
         $props();
 
     const logout = new Task("Couldn't log out");
+    let slack = $state(false);
 
     const log_out = () =>
         logout.run(async () => {
@@ -35,6 +37,9 @@
             <dd>{tokens} left to spend</dd>
         </dl>
         <div class="logout">
+            <MipmapButton type="button" onclick={() => (slack = true)}>
+                Manage Slack bot DMs
+            </MipmapButton>
             <MipmapButton
                 type="button"
                 disabled={logout.pending}
@@ -48,6 +53,10 @@
         </div>
     </div>
 </Section>
+
+{#if slack}
+    <SlackDialog onclose={() => (slack = false)} />
+{/if}
 
 <style>
     .profile {
@@ -65,12 +74,16 @@
     }
 
     .logout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
         grid-column: 2;
         margin-top: 0.75rem;
     }
 
     .logout p {
-        margin: 0.75rem 0 0;
+        flex-basis: 100%;
+        margin: 0;
         font-size: 0.85em;
     }
 

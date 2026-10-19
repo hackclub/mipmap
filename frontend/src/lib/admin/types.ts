@@ -104,3 +104,45 @@ export type Stickers = {
   pending: number;
   waves: Wave[];
 };
+
+export type LogEntry = {
+  id: number;
+  kind: string;
+  incoming: boolean;
+  text: string;
+  at: string;
+  slack_id: string | null;
+  user_name: string | null;
+  admin_name: string | null;
+  recipients: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  pending: number;
+  error: string | null;
+};
+
+export type Draft = {
+  id: number;
+  kind: string;
+  text: string;
+  created_at: string;
+};
+
+export type Thread = {
+  slack_id: string;
+  user_id: number | null;
+  user_name: string | null;
+  last_text: string;
+  last_at: string;
+  unread: number;
+};
+
+export type SlackMessage = {
+  id: number;
+  incoming: boolean;
+  kind: string;
+  text: string;
+  at: string;
+  admin_name: string | null;
+};

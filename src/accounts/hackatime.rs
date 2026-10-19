@@ -1,5 +1,5 @@
 use super::{
-    callback_url, redirect, session, token_sink,
+    redirect, session, site_url, token_sink,
     tokens::{self, Provider},
 };
 use actix_web::{
@@ -88,7 +88,7 @@ pub async fn start(req: HttpRequest) -> HttpResponse {
         read: true,
         admin: false,
     };
-    login::handle_login(&req, scopes, callback_url(CALLBACK), true).await
+    login::handle_login(&req, scopes, site_url(CALLBACK), true).await
 }
 
 #[get("/hackatime/callback")]
@@ -105,7 +105,7 @@ pub async fn callback(
     let response = login::handle_callback(
         &req,
         query,
-        callback_url(CALLBACK),
+        site_url(CALLBACK),
         "/dashboard".to_string(),
         Some(sink),
         false,

@@ -136,6 +136,11 @@ async fn status(
     })
 }
 
+pub async fn ready(pool: &PgPool, user_id: i32, current: &Totals, projects: &[Project]) -> sqlx::Result<bool> {
+    let status = status(pool, user_id, Some(current), projects).await?;
+    Ok(!status.sent_today && status.tracked_seconds >= status.required_seconds)
+}
+
 static NAMES: LazyLock<Trie> = LazyLock::new(|| {
     let mut trie = Trie::default();
     for word in RESERVED_NAMES {

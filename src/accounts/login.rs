@@ -1,5 +1,5 @@
 use super::{
-    callback_url, profile, session, token_sink,
+    profile, session, site_url, token_sink,
     tokens::{self, Provider},
 };
 use actix_web::{
@@ -38,7 +38,7 @@ pub async fn start(req: HttpRequest, query: Query<LoginQuery>) -> HttpResponse {
         addresses: true,
         phone_number: true,
     };
-    let mut response = login::handle_login(&req, scopes, callback_url(CALLBACK)).await;
+    let mut response = login::handle_login(&req, scopes, site_url(CALLBACK)).await;
     let email = query.email.as_deref().map(str::trim).filter(|email| {
         email.len() <= 254 && email.contains('@') && !email.chars().any(char::is_control)
     });
@@ -69,7 +69,7 @@ pub async fn callback(
     let mut response = login::handle_callback(
         &req,
         query,
-        callback_url(CALLBACK),
+        site_url(CALLBACK),
         "/dashboard".to_string(),
         Some(sink),
         false,

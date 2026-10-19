@@ -1,4 +1,4 @@
-use crate::{accounts::hackatime, env, projects};
+use crate::{accounts::hackatime, env, projects, slack};
 use sqlx::PgPool;
 
 pub fn spawn(pool: PgPool) {
@@ -22,7 +22,12 @@ async fn sync(pool: &PgPool) -> sqlx::Result<()> {
     .await?;
     for user_id in users {
         if let Some(hackatime) = hackatime::summaries(pool, user_id, false).await {
-            projects::record_time(pool, &projects::list(pool, user_id).await?, &hackatime).await?;
+            let projects = projects::list(pool, user_id).await?;
+            projects::record_time(pool, &projects, &hackatime).await?;
+            let totals = hackatime::totals(&hackatime);
+            if let Err(e) = slack::snapshot_reminder(pool, user_id, &totals, &projects).await {
+                log::error!("Queueing a Snapshot reminder for user {user_id} failed: {e:#}");
+            }
         }
     }
     Ok(())

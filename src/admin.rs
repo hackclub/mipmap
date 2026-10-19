@@ -31,7 +31,8 @@ pub fn api(cfg: &mut web::ServiceConfig) {
             .wrap(DefaultHeaders::new().add((header::CACHE_CONTROL, "no-store")))
             .service((get_overview, get_ships, set_bonus, get_snapshots, shadowban, get_users))
             .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
-            .service((get_stickers, create_wave, fulfill_wave, wave_csv)),
+            .service((get_stickers, create_wave, fulfill_wave, wave_csv))
+            .configure(crate::slack::admin_routes),
     );
 }
 
@@ -73,7 +74,7 @@ fn not_found() -> ApiError {
     reject_with(StatusCode::NOT_FOUND, "Not Found")
 }
 
-pub struct Admin(i32);
+pub struct Admin(pub i32);
 
 impl FromRequest for Admin {
     type Error = ApiError;

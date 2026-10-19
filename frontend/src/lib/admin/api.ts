@@ -1,11 +1,15 @@
 import { get_json, json, request, send_json } from "$lib/api";
 import type {
   Action,
+  Draft,
   Feedback,
+  LogEntry,
   Order,
   Ship,
   Snapshot,
+  SlackMessage,
   Stickers,
+  Thread,
   User,
 } from "./types";
 
@@ -81,3 +85,32 @@ export const safe_url = (url: string | null) =>
 
 export const display_name = (name: string, id: number) =>
   name.trim() || `User #${id}`;
+
+export const fetch_slack_log = list<LogEntry>("slack/log");
+export const fetch_drafts = () => get_json<Draft[]>("/api/admin/slack/drafts");
+export const send_draft = (id: number) =>
+  post<Draft[]>(`slack/drafts/${id}/send`, {});
+export const dismiss_draft = (id: number) =>
+  post<Draft[]>(`slack/drafts/${id}/dismiss`, {});
+
+const post_empty = (path: string, body: unknown) =>
+  request(`/api/admin/${path}`, send_json("POST", body)).then(async (r) => {
+    if (!r.ok) await json(r);
+  });
+
+export const send_announcement = (text: string) =>
+  post_empty("slack/announcements", { text });
+export const send_direct = (slack_id: string, text: string) =>
+  post_empty("slack/direct", { slack_id, text });
+
+export const fetch_threads = () =>
+  get_json<Thread[]>("/api/admin/slack/threads");
+export const fetch_thread = (slack_id: string) =>
+  get_json<SlackMessage[]>(
+    `/api/admin/slack/threads/${encodeURIComponent(slack_id)}`,
+  );
+export const reply = (slack_id: string, text: string) =>
+  post<SlackMessage[]>(
+    `slack/threads/${encodeURIComponent(slack_id)}/reply`,
+    { text },
+  );

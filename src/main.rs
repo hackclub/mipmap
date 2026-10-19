@@ -17,6 +17,7 @@ mod http;
 mod middleware;
 mod mirror;
 mod projects;
+mod slack;
 mod snapshots;
 mod stats;
 mod tree;
@@ -64,6 +65,7 @@ async fn main() -> std::io::Result<()> {
     projects::review::spawn(database_pool.clone());
     projects::ship::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
+    slack::spawn(database_pool.clone());
     tree::spawn_images();
     uploads::warn_unconfigured();
     let database_pool = web::Data::new(database_pool);
@@ -93,11 +95,13 @@ async fn main() -> std::io::Result<()> {
                     .configure(projects::routes)
                     .configure(stats::api)
                     .configure(admin::api)
+                    .configure(slack::routes)
                     .service(snapshots::create_snapshot)
                     .service((feedback::create_feedback, feedback::visit_survey, feedback::dismiss_survey))
                     .service(accounts::session::logout),
             )
             .configure(accounts::routes)
+            .service(slack::events)
             .service(web::scope("/dashboard/item-images").service(tree::item_image))
             .configure(dashboard::pages)
             .configure(stats::pages)

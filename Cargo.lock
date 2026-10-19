@@ -1296,6 +1296,7 @@ dependencies = [
 [[package]]
 name = "hc_helper"
 version = "0.1.0"
+source = "git+https://github.com/breynard0/hc_helper#11d124b1b7bac3fc4c4bc0ac4381c370a7306586"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -1968,6 +1969,7 @@ dependencies = [
  "futures-util",
  "hc_helper",
  "hex",
+ "hmac",
  "image",
  "log",
  "rand",
