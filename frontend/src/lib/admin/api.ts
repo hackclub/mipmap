@@ -1,6 +1,7 @@
 import { get_json, json, request, send_json } from "$lib/api";
 import type {
   Action,
+  AdminContact,
   Draft,
   Feedback,
   LogEntry,
@@ -102,6 +103,9 @@ export const send_announcement = (text: string) =>
   post_empty("slack/announcements", { text });
 export const send_direct = (slack_id: string, text: string) =>
   post_empty("slack/direct", { slack_id, text });
+
+export const fetch_slack_admins = () =>
+  get_json<AdminContact[]>("/api/admin/slack/admins");
 
 export const fetch_threads = () =>
   get_json<Thread[]>("/api/admin/slack/threads");

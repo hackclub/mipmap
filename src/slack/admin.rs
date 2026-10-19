@@ -1,6 +1,6 @@
 use super::{RECIPIENTS, SendError, TEXT_LIMIT, escape};
 use crate::{
-    admin::Admin,
+    admin::{Admin, admin_ids},
     error::{ApiError, reject, reject_with},
 };
 use actix_web::{HttpResponse, get, http::StatusCode, post, web};
@@ -15,7 +15,7 @@ const USER_FOR_SLACK_ID: &str = "(SELECT id FROM \"user\" WHERE slack_id = $1 OR
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((get_log, create_announcement, get_drafts, send_draft, dismiss_draft, send_direct))
-        .service((get_threads, get_thread, reply));
+        .service((get_threads, get_thread, reply, get_admins));
 }
 
 fn text(text: &str) -> Result<&str, ApiError> {
@@ -301,6 +301,25 @@ async fn send_direct(
     let slack_id = slack_id(&body.slack_id)?;
     send_now(&pool, admin_id, slack_id, "direct", text(&body.text)?).await?;
     Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct AdminContact {
+    slack_id: String,
+    name: String,
+}
+
+#[get("/slack/admins")]
+async fn get_admins(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let admins: Vec<AdminContact> = sqlx::query_as(
+        "SELECT slack_id, COALESCE(NULLIF(concat_ws(' ', first_name, last_name), ''), slack_id) AS name
+         FROM \"user\" WHERE hca_id = ANY($1) AND slack_id IS NOT NULL AND deleted_at IS NULL
+         ORDER BY name",
+    )
+    .bind(admin_ids())
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(admins))
 }
 
 #[derive(Serialize, sqlx::FromRow)]

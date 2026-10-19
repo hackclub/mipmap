@@ -129,6 +129,11 @@ export type Draft = {
   created_at: string;
 };
 
+export type AdminContact = {
+  slack_id: string;
+  name: string;
+};
+
 export type Thread = {
   slack_id: string;
   user_id: number | null;

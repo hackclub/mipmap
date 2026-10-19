@@ -40,7 +40,7 @@ pub fn pages(cfg: &mut web::ServiceConfig) {
     cfg.service(page);
 }
 
-fn admin_ids() -> Vec<String> {
+pub fn admin_ids() -> Vec<String> {
     env::var("ADMIN_HCA_IDS")
         .map(|ids| {
             ids.split(',')

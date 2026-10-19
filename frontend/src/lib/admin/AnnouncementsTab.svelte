@@ -7,6 +7,7 @@
     import {
         dismiss_draft,
         fetch_drafts,
+        fetch_slack_admins,
         fetch_slack_log,
         send_announcement,
         send_direct,
@@ -15,6 +16,7 @@
     import { Pages } from "./pages.svelte";
     import type { Draft, LogEntry } from "./types";
     import Card from "./Card.svelte";
+    import Filters from "./Filters.svelte";
     import PagedList from "./PagedList.svelte";
     import SlackText from "./SlackText.svelte";
     import { escape } from "./slack.svelte";
@@ -39,6 +41,8 @@
     const task = new Task();
     const drafts = new Load(fetch_drafts);
     drafts.run();
+    const admins = new Load(fetch_slack_admins);
+    admins.run();
     const log = new Pages<LogEntry>((before) => fetch_slack_log({ before }));
     log.reset();
 
@@ -159,6 +163,18 @@
                 onclick={to_one}>Send to Slack ID</button
             >
         </div>
+        {#if admins.data?.length}
+            <div class="admins">
+                <span class="note">Admins</span>
+                <Filters
+                    options={admins.data.map((admin) => [
+                        admin.slack_id,
+                        admin.name,
+                    ])}
+                    bind:value={slack_id}
+                />
+            </div>
+        {/if}
 
         <div class="all">
             <HoldButton
@@ -269,6 +285,14 @@
 
     .direct :global(.field) {
         flex: 1;
+    }
+
+    .admins {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: -0.25rem;
     }
 
     .all {
