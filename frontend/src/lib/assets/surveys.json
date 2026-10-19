@@ -29,7 +29,7 @@
       {
         "type": "text",
         "key": "other",
-        "label": "Anything else stopping you?",
+        "label": "Anything else stopping you, or is there anything else you were wanting to say?",
         "optional": true
       }
     ]

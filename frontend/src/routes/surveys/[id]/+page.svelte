@@ -157,6 +157,7 @@
     }
 
     .text :global(label) {
+        margin-bottom: 0.5rem;
         font-size: 1rem;
         font-weight: 700;
     }
@@ -180,6 +181,11 @@
 
         .text {
             padding: 0.85rem 0.9rem;
+        }
+
+        .text :global(label) {
+            margin-bottom: 0.4rem;
+            line-height: 1.3;
         }
 
         .text :global(textarea) {
