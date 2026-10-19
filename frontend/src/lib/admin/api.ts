@@ -76,7 +76,8 @@ export const cancel_order = async (id: number, reason: string) => {
 export const fetch_stickers = () =>
   get_json<Stickers>("/api/admin/stickers");
 
-export const create_wave = () => post<Stickers>("stickers/waves", {});
+export const create_wave = (body: { no_time: boolean; cap: number | null }) =>
+  post<Stickers>("stickers/waves", body);
 
 export const fulfill_wave = (id: number) =>
   post<Stickers>(`stickers/waves/${id}/fulfill`, {});

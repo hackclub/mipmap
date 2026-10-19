@@ -13,6 +13,19 @@
     load.run();
 
     let creating = $state(false);
+    let no_time = $state(false);
+    let cap = $state<number | null>(null);
+
+    const cap_valid = $derived(
+        cap == null || (Number.isInteger(cap) && cap >= 1),
+    );
+    const selected = $derived.by(() => {
+        if (!load.data) return 0;
+        const available = no_time
+            ? load.data.pending_no_time
+            : load.data.pending;
+        return cap_valid && cap != null ? Math.min(cap, available) : available;
+    });
     let fulfilling = $state<Wave | null>(null);
 
     const stickers = (count: number) =>
@@ -24,18 +37,34 @@
 {:else if !load.data}
     <p class="note">Loading…</p>
 {:else}
-    {@const { pending, waves } = load.data}
+    {@const { pending, pending_no_time, waves } = load.data}
     <div class="pending">
         <p>
             {pending
-                ? `${stickers(pending)} waiting for the next wave`
+                ? `${stickers(pending)} waiting for the next wave, ${pending_no_time} from users with no time logged`
                 : "No stickers waiting for a wave"}
         </p>
-        <button
-            type="button"
-            disabled={!pending}
-            onclick={() => (creating = true)}>Create wave</button
-        >
+        <div class="options">
+            <label class="check">
+                <input type="checkbox" bind:checked={no_time} />
+                Only users with no time logged
+            </label>
+            <label class="cap">
+                Cap
+                <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="None"
+                    bind:value={cap}
+                />
+            </label>
+            <button
+                type="button"
+                disabled={!selected || !cap_valid}
+                onclick={() => (creating = true)}>Create wave</button
+            >
+        </div>
     </div>
     <div class="list">
         {#each waves as wave (wave.id)}
@@ -71,10 +100,10 @@
     <ActionDialog
         title="Create a sticker wave?"
         submit="Create wave"
-        warning="{stickers(
-            load.data.pending,
-        )} waiting will go into this wave and won't be in later ones"
-        onsubmit={async () => load.set(await create_wave())}
+        warning="The {stickers(selected)} waiting longest{no_time
+            ? ' from users with no time logged'
+            : ''} will go into this wave and won't be in later ones"
+        onsubmit={async () => load.set(await create_wave({ no_time, cap }))}
         onclose={() => (creating = false)}
     />
 {:else if fulfilling}
@@ -101,6 +130,42 @@
         align-items: center;
         gap: 0.5rem 1rem;
         margin-bottom: 1rem;
+    }
+
+    .options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .check,
+    .cap {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+    }
+
+    .check input {
+        accent-color: #d6ab70;
+    }
+
+    .cap input {
+        box-sizing: border-box;
+        width: 5rem;
+        padding: 0.3rem 0.5rem;
+        background: #3d3029;
+        border: 1px solid #4f2f1f;
+        border-radius: 4px;
+        color: #ead7c2;
+        font: inherit;
+    }
+
+    .cap input:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 1px;
     }
 
     .pending p,

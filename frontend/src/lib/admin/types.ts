@@ -102,6 +102,7 @@ export type Wave = {
 
 export type Stickers = {
   pending: number;
+  pending_no_time: number;
   waves: Wave[];
 };
 

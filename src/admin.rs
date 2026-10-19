@@ -746,6 +746,9 @@ async fn get_audit(
 
 const PENDING_STICKERS: &str =
     "node_id = $1 AND deleted_at IS NULL AND NOT fulfilled AND sticker_wave_id IS NULL";
+const NO_TIME_LOGGED: &str = "NOT EXISTS (
+    SELECT 1 FROM project p WHERE p.user_id = \"order\".user_id AND p.deleted_at IS NULL AND p.total_seconds > 0
+)";
 const CSV_FIELDS: [&str; 9] = [
     "First Name",
     "Last Name",
@@ -770,12 +773,13 @@ struct Wave {
 #[derive(Serialize)]
 struct Stickers {
     pending: i64,
+    pending_no_time: i64,
     waves: Vec<Wave>,
 }
 
 async fn fetch_stickers(conn: &mut PgConnection) -> sqlx::Result<Stickers> {
-    let pending = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT count(*) FROM \"order\" WHERE {PENDING_STICKERS}"
+    let (pending, pending_no_time) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT count(*), count(*) FILTER (WHERE {NO_TIME_LOGGED}) FROM \"order\" WHERE {PENDING_STICKERS}"
     )))
     .bind(tree::STICKER as i32)
     .fetch_one(&mut *conn)
@@ -789,7 +793,7 @@ async fn fetch_stickers(conn: &mut PgConnection) -> sqlx::Result<Stickers> {
     )
     .fetch_all(conn)
     .await?;
-    Ok(Stickers { pending, waves })
+    Ok(Stickers { pending, pending_no_time, waves })
 }
 
 #[get("/stickers")]
@@ -798,17 +802,37 @@ async fn get_stickers(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse,
     Ok(HttpResponse::Ok().json(fetch_stickers(&mut conn).await?))
 }
 
+#[derive(Deserialize)]
+struct WaveRequest {
+    #[serde(default)]
+    no_time: bool,
+    cap: Option<i64>,
+}
+
 #[post("/stickers/waves")]
-async fn create_wave(Admin(admin_id): Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+async fn create_wave(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    body: web::Json<WaveRequest>,
+) -> Result<HttpResponse, ApiError> {
+    if body.cap.is_some_and(|cap| cap < 1) {
+        return Err(reject("The cap must be at least 1"));
+    }
+    let filter = if body.no_time { format!(" AND {NO_TIME_LOGGED}") } else { String::new() };
     let mut tx = pool.begin().await?;
     let orders: Vec<i32> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT id FROM \"order\" WHERE {PENDING_STICKERS} FOR UPDATE"
+        "SELECT id FROM \"order\" WHERE {PENDING_STICKERS}{filter} ORDER BY ordered_at, id LIMIT $2 FOR UPDATE"
     )))
     .bind(tree::STICKER as i32)
+    .bind(body.cap)
     .fetch_all(&mut *tx)
     .await?;
     if orders.is_empty() {
-        return Err(reject("No stickers are waiting for a wave"));
+        return Err(reject(if body.no_time {
+            "No stickers from users with no time logged are waiting for a wave"
+        } else {
+            "No stickers are waiting for a wave"
+        }));
     }
     let id: i32 = sqlx::query_scalar("INSERT INTO sticker_wave (admin_id) VALUES ($1) RETURNING id")
         .bind(admin_id)
@@ -823,7 +847,10 @@ async fn create_wave(Admin(admin_id): Admin, pool: web::Data<PgPool>) -> Result<
     let plural = if stickers == 1 { "" } else { "s" };
     sqlx::query("INSERT INTO admin_action (admin_id, action, summary) VALUES ($1, 'sticker_wave', $2)")
         .bind(admin_id)
-        .bind(format!("Created sticker wave #{id} with {stickers} sticker{plural}"))
+        .bind(format!(
+            "Created sticker wave #{id} with {stickers} sticker{plural}{}",
+            if body.no_time { " from users with no time logged" } else { "" }
+        ))
         .execute(&mut *tx)
         .await?;
     let body = fetch_stickers(&mut tx).await?;
