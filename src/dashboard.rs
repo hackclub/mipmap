@@ -4,7 +4,7 @@ use crate::{
         session::{self, User},
     },
     error::{ApiError, reject, reject_with},
-    projects, snapshots, tree,
+    projects, slack, snapshots, tree,
 };
 use actix_web::{HttpRequest, HttpResponse, get, http::StatusCode, post, web};
 use chrono::{DateTime, Utc};
@@ -233,10 +233,17 @@ async fn finish_onboarding(
     if !done && !onboarded {
         return Err(reject("Redeem the Mipmap sticker to finish the tutorial"));
     }
-    sqlx::query("UPDATE \"user\" SET onboarded_at = now() WHERE id = $1 AND onboarded_at IS NULL")
+    let mut tx = pool.begin().await?;
+    let finished = sqlx::query("UPDATE \"user\" SET onboarded_at = now() WHERE id = $1 AND onboarded_at IS NULL")
         .bind(user_id)
-        .execute(pool.get_ref())
-        .await?;
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+        > 0;
+    if finished {
+        slack::welcome(&mut *tx, user_id).await?;
+    }
+    tx.commit().await?;
     respond(&pool, user_id).await
 }
 

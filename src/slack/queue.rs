@@ -15,6 +15,7 @@ const PREFERENCE: &str = "CASE m.kind
     WHEN 'snapshot' THEN p.snapshot_reminders
     WHEN 'ship' THEN p.ship_updates
     WHEN 'inactivity' THEN p.inactivity_reminders
+    WHEN 'welcome' THEN true
     ELSE false END";
 
 pub fn spawn(pool: PgPool) {

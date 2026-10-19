@@ -6,7 +6,7 @@
     import { fetch_thread, fetch_threads, reply } from "./api";
     import type { SlackMessage, Thread } from "./types";
     import SlackText from "./SlackText.svelte";
-    import { decode, escape } from "./slack.svelte";
+    import { decode, mrkdwn } from "./slack.svelte";
 
     const limit = 3000;
 
@@ -18,7 +18,7 @@
     let text = $state("");
     const sending = new Task();
 
-    const length = $derived([...escape(text.trim())].length);
+    const length = $derived([...mrkdwn(text.trim())].length);
     const name = (thread: Thread) => thread.user_name || thread.slack_id;
 
     const select = (thread: Thread) => {

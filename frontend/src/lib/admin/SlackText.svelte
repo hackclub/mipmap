@@ -65,6 +65,16 @@
         color: #e8c58c;
     }
 
+    .slack :global(.channel) {
+        text-decoration: none;
+        transition: background-color 0.2s;
+    }
+
+    .slack :global(.channel:hover) {
+        background: #5f4838;
+        text-decoration: underline;
+    }
+
     .footer {
         margin-top: 0.5rem;
         color: #d6ab70;

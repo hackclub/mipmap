@@ -2,6 +2,7 @@ use crate::{accounts, env, http};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::PgPool;
+use std::{collections::HashMap, sync::LazyLock};
 
 mod admin;
 mod incoming;
@@ -12,12 +13,16 @@ mod queue;
 
 pub use admin::routes as admin_routes;
 pub use incoming::events;
-pub use notify::snapshot_reminder;
+pub use notify::{snapshot_reminder, welcome};
 pub use preferences::routes;
 
 pub const TEXT_LIMIT: usize = 3000;
+const CHANNELS_JSON: &str = include_str!("../../frontend/src/lib/assets/slack_channels.json");
 const RECIPIENTS: &str =
     "u.slack_id IS NOT NULL AND u.deleted_at IS NULL AND NOT u.is_banned AND p.enabled";
+
+static CHANNELS: LazyLock<HashMap<String, String>> =
+    LazyLock::new(|| serde_json::from_str(CHANNELS_JSON).expect("slack channels json must be valid"));
 
 fn token() -> Option<String> {
     env::var("SLACK_BOT_TOKEN")
@@ -49,7 +54,7 @@ struct Posted {
 
 pub async fn post(slack_id: &str, text: &str) -> Result<String, SendError> {
     let token = token().ok_or_else(|| SendError::Unavailable("SLACK_BOT_TOKEN isn't set".into()))?;
-    let text = escape(text);
+    let text = mrkdwn(text);
     let footer = format!(
         "Manage these DMs from your <{}|Mipmap dashboard>",
         accounts::site_url("/dashboard")
@@ -122,6 +127,59 @@ fn control(text: &str) -> Option<usize> {
     .then_some(end + 1)
 }
 
+fn code(text: &str) -> Option<usize> {
+    if let Some(rest) = text.strip_prefix("```") {
+        return rest.find("```").map(|end| end + 6);
+    }
+    let end = text[1..].find(['`', '\n'])? + 1;
+    text[end..].starts_with('`').then_some(end + 1)
+}
+
+fn channel(text: &str) -> Option<(usize, &'static str)> {
+    let name = &text[1..];
+    let name = &name[..name
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+        .unwrap_or(name.len())];
+    let id = CHANNELS.get(&name.to_ascii_lowercase())?;
+    Some((name.len() + 1, id))
+}
+
+fn channels(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    let mut prev: Option<char> = None;
+    while let Some(c) = rest.chars().next() {
+        let skip = match c {
+            '<' => control(rest),
+            '`' => code(rest),
+            _ => None,
+        };
+        if let Some(len) = skip {
+            out.push_str(&rest[..len]);
+            prev = rest[..len].chars().last();
+            rest = &rest[len..];
+            continue;
+        }
+        if c == '#'
+            && !prev.is_some_and(|p| p.is_alphanumeric() || "_-&/#:".contains(p))
+            && let Some((len, id)) = channel(rest)
+        {
+            out.push_str(&format!("<#{id}>"));
+            prev = Some('>');
+            rest = &rest[len..];
+            continue;
+        }
+        out.push(c);
+        prev = Some(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
+pub fn mrkdwn(text: &str) -> String {
+    escape(&channels(text))
+}
+
 pub fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
@@ -151,7 +209,7 @@ pub fn escape(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::escape;
+    use super::{escape, mrkdwn};
 
     #[test]
     fn escapes_outside_control_sequences() {
@@ -159,5 +217,14 @@ mod tests {
         assert_eq!(escape("<https://x.com|X> <@U123> <!here>"), "<https://x.com|X> <@U123> <!here>");
         assert_eq!(escape("> quote\n>>> rest"), "> quote\n>>> rest");
         assert_eq!(escape("&amp; <nope>"), "&amp; &lt;nope&gt;");
+    }
+
+    #[test]
+    fn links_known_channels() {
+        assert_eq!(mrkdwn("check out #mipmap!"), "check out <#C0C2UMX4S9E>!");
+        assert_eq!(mrkdwn("#Mipmap, #mipmap-help #other"), "<#C0C2UMX4S9E>, #mipmap-help #other");
+        assert_eq!(mrkdwn("a#mipmap `#mipmap` ```\n#mipmap```"), "a#mipmap `#mipmap` ```\n#mipmap```");
+        assert_eq!(mrkdwn("<https://x.com/#mipmap|#mipmap> (#mipmap)"), "<https://x.com/#mipmap|#mipmap> (<#C0C2UMX4S9E>)");
+        assert_eq!(mrkdwn("``` #mipmap"), "``` <#C0C2UMX4S9E>");
     }
 }

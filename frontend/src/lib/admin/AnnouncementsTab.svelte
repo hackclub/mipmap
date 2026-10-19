@@ -19,7 +19,7 @@
     import Filters from "./Filters.svelte";
     import PagedList from "./PagedList.svelte";
     import SlackText from "./SlackText.svelte";
-    import { escape } from "./slack.svelte";
+    import { mrkdwn } from "./slack.svelte";
 
     const limit = 3000;
     const kinds: Record<string, string> = {
@@ -29,6 +29,7 @@
         snapshot: "Snapshot reminder",
         ship: "Ship update",
         inactivity: "Inactivity reminder",
+        welcome: "Welcome",
         direct: "Direct message",
         reply: "Reply",
         admin: "Admin alert",
@@ -46,7 +47,7 @@
     const log = new Pages<LogEntry>((before) => fetch_slack_log({ before }));
     log.reset();
 
-    const length = $derived([...escape(text.trim())].length);
+    const length = $derived([...mrkdwn(text.trim())].length);
     const ready = $derived(length > 0 && length <= limit && !task.pending);
 
     const people = (count: number) =>
@@ -138,7 +139,7 @@
 
         <Field
             label="Message"
-            hint="Slack formatting: *bold*, _italic_, ~strike~, `code`, ```blocks```, > quotes, <https://link|text>, <@U0123ABCD>, :emoji:"
+            hint="Slack formatting: *bold*, _italic_, ~strike~, `code`, ```blocks```, > quotes, <https://link|text>, <@U0123ABCD>, #mipmap, :emoji:"
             multiline
             rows={8}
             bind:value={text}

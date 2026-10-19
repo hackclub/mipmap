@@ -7,7 +7,7 @@ use crate::{
 };
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use serde::Deserialize;
-use sqlx::PgPool;
+use sqlx::{PgExecutor, PgPool};
 use std::sync::LazyLock;
 
 const CHALLENGES_JSON: &str = include_str!("../../frontend/src/lib/assets/challenges.json");
@@ -199,6 +199,24 @@ pub async fn snapshot_reminder(pool: &PgPool, user_id: i32, totals: &Totals, pro
     .bind(user_id)
     .bind(messages::snapshot())
     .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn welcome(executor: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<()> {
+    if super::token().is_none() {
+        return Ok(());
+    }
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO slack_message (slack_id, user_id, kind, text, dedupe_key)
+         SELECT u.slack_id, u.id, 'welcome', $2, 'welcome:' || u.id
+         FROM \"user\" u JOIN slack_preference p ON p.user_id = u.id
+         WHERE u.id = $1 AND {RECIPIENTS}
+         ON CONFLICT (dedupe_key) DO NOTHING"
+    )))
+    .bind(user_id)
+    .bind(messages::welcome())
+    .execute(executor)
     .await?;
     Ok(())
 }

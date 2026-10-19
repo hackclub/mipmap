@@ -30,3 +30,7 @@ pub fn inactivity() -> String {
 pub fn draft_waiting(kind: &str, admin_url: &str) -> String {
     format!("A new {kind} message is waiting to be sent. <{admin_url}|Review it in the admin dashboard>")
 }
+
+pub fn welcome() -> String {
+    "Hey there! I'm Steve the Sprite, you might remember me from your Mipmap onboarding :D\n\nI'll be communicating all sorts of information about the program. If you've got any questions, check out #mipmap!".into()
+}

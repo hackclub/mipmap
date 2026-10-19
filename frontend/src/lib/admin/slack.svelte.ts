@@ -1,4 +1,10 @@
+import channel_ids from "$lib/assets/slack_channels.json";
+
 type Emoji = Record<string, string | string[]>;
+
+const channel_names = Object.fromEntries(
+  Object.entries(channel_ids as Record<string, string>).map(([name, id]) => [id, name]),
+);
 
 let emoji = $state.raw<Emoji>({});
 import("$lib/assets/slack_emoji.json").then((module) => {
@@ -31,6 +37,40 @@ export function escape(text: string) {
   return out;
 }
 
+const code = /^(?:```[\s\S]*?```|`[^`\n]*`)/;
+const channel_name = /^#([a-z0-9_-]+)/i;
+
+function channels(text: string) {
+  let out = "";
+  let prev = "";
+  let i = 0;
+  while (i < text.length) {
+    const rest = text.slice(i);
+    const skip =
+      rest[0] === "<" ? control.exec(rest) : rest[0] === "`" ? code.exec(rest) : null;
+    if (skip) {
+      out += skip[0];
+      prev = skip[0].at(-1)!;
+      i += skip[0].length;
+      continue;
+    }
+    const name = rest[0] === "#" && !/[\p{L}\p{N}_\-&/#:]/u.test(prev) ? channel_name.exec(rest) : null;
+    const id = name && (channel_ids as Record<string, string>)[name[1].toLowerCase()];
+    if (name && id) {
+      out += `<#${id}>`;
+      prev = ">";
+      i += name[0].length;
+      continue;
+    }
+    out += rest[0];
+    prev = rest[0];
+    i++;
+  }
+  return out;
+}
+
+export const mrkdwn = (text: string) => escape(channels(text));
+
 export const decode = (text: string) =>
   text.replace(/&(lt|gt|amp);/g, (_, entity) =>
     entity === "lt" ? "<" : entity === "gt" ? ">" : "&",
@@ -60,7 +100,12 @@ function sequence(inner: string) {
     inner.includes("|") ? inner.slice(inner.indexOf("|") + 1) : "",
   ];
   if (target.startsWith("@")) return mention(label ? `@${label}` : target);
-  if (target.startsWith("#")) return mention(`#${label || target.slice(1)}`);
+  if (target.startsWith("#")) {
+    const id = target.slice(1);
+    const name = `#${label || channel_names[id] || id}`;
+    if (!/^[A-Z0-9]+$/.test(id)) return mention(name);
+    return `<a class="mention channel" href="https://hackclub.enterprise.slack.com/archives/${id}" target="_blank" rel="noopener noreferrer">${text_html(name)}</a>`;
+  }
   if (target.startsWith("!")) {
     const command = target.slice(1);
     if (["here", "channel", "everyone"].includes(command))
@@ -144,7 +189,7 @@ function lines(mrkdwn: string) {
 }
 
 export function render(text: string) {
-  return escape(text.trim())
+  return mrkdwn(text.trim())
     .split(/```/)
     .map((part, i, parts) =>
       i % 2 && i < parts.length - 1

@@ -1,4 +1,4 @@
-use super::{RECIPIENTS, SendError, TEXT_LIMIT, escape};
+use super::{RECIPIENTS, SendError, TEXT_LIMIT, mrkdwn};
 use crate::{
     admin::{Admin, admin_ids},
     error::{ApiError, reject, reject_with},
@@ -23,7 +23,7 @@ fn text(text: &str) -> Result<&str, ApiError> {
     if text.is_empty() {
         return Err(reject("Write a message first"));
     }
-    if escape(text).chars().count() > TEXT_LIMIT {
+    if mrkdwn(text).chars().count() > TEXT_LIMIT {
         return Err(reject(format!("Messages can be at most {TEXT_LIMIT} characters")));
     }
     Ok(text)
