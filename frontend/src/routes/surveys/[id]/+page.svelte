@@ -156,6 +156,11 @@
         border-radius: 7px;
     }
 
+    .text :global(label) {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
     .actions {
         display: flex;
         flex-wrap: wrap;
