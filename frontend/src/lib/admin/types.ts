@@ -170,3 +170,9 @@ export type SurveyResults = {
       }
   )[];
 };
+
+export type SurveyResponse = {
+  id: number;
+  created_on: string;
+  answers: Record<string, Record<string, number | "unsure"> | string>;
+};

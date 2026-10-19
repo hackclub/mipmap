@@ -10,6 +10,7 @@ import type {
   Snapshot,
   SlackMessage,
   Stickers,
+  SurveyResponse,
   SurveyResults,
   Thread,
   User,
@@ -122,3 +123,16 @@ export const reply = (slack_id: string, text: string) =>
 
 export const fetch_surveys = () =>
   get_json<SurveyResults[]>("/api/admin/surveys");
+
+export const fetch_survey_responses = (
+  id: number,
+  params: { before?: number } = {},
+) => list<SurveyResponse>(`surveys/${id}/responses`)(params);
+
+export const delete_survey_response = async (id: number) => {
+  const response = await request(
+    `/api/admin/surveys/responses/${id}/delete`,
+    { method: "POST" },
+  );
+  if (!response.ok) await json(response);
+};

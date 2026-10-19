@@ -1,5 +1,5 @@
 use crate::{
-    admin::Admin,
+    admin::{Admin, PAGE},
     error::{ApiError, reject, reject_with},
     middleware,
 };
@@ -60,7 +60,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 }
 
 pub fn admin_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_results);
+    cfg.service((get_results, get_responses, delete_response));
 }
 
 pub fn pages(cfg: &mut web::ServiceConfig) {
@@ -187,7 +187,7 @@ struct TextAnswer {
 #[get("/surveys")]
 async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
     let totals: HashMap<i32, i64> = sqlx::query_as(
-        "SELECT survey_id, count(*) FROM survey_response GROUP BY survey_id",
+        "SELECT survey_id, count(*) FROM survey_response WHERE deleted_at IS NULL GROUP BY survey_id",
     )
     .fetch_all(pool.get_ref())
     .await?
@@ -198,6 +198,7 @@ async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
          FROM survey_response r
          CROSS JOIN LATERAL jsonb_each(r.answers) q
          CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(q.value) = 'object' THEN q.value ELSE '{}' END) i
+         WHERE r.deleted_at IS NULL
          GROUP BY 1, 2, 3, 4",
     )
     .fetch_all(pool.get_ref())
@@ -206,7 +207,7 @@ async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
         "SELECT r.survey_id, a.key AS question, r.created_on, a.value #>> '{}' AS text
          FROM survey_response r
          CROSS JOIN LATERAL jsonb_each(r.answers) a
-         WHERE jsonb_typeof(a.value) = 'string'
+         WHERE r.deleted_at IS NULL AND jsonb_typeof(a.value) = 'string'
          ORDER BY r.id DESC",
     )
     .fetch_all(pool.get_ref())
@@ -257,6 +258,62 @@ async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
         })
         .collect();
     Ok(HttpResponse::Ok().json(results))
+}
+
+#[derive(Deserialize)]
+struct ResponsesQuery {
+    before: Option<i32>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct SurveyResponse {
+    id: i32,
+    created_on: NaiveDate,
+    answers: Value,
+}
+
+#[get("/surveys/{id}/responses")]
+async fn get_responses(
+    _: Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+    query: web::Query<ResponsesQuery>,
+) -> Result<HttpResponse, ApiError> {
+    let responses: Vec<SurveyResponse> = sqlx::query_as(
+        "SELECT id, created_on, answers FROM survey_response
+         WHERE survey_id = $1 AND deleted_at IS NULL AND ($2::int IS NULL OR id < $2)
+         ORDER BY id DESC LIMIT $3",
+    )
+    .bind(id.into_inner())
+    .bind(query.before)
+    .bind(PAGE)
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(responses))
+}
+
+#[post("/surveys/responses/{id}/delete")]
+async fn delete_response(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let mut tx = pool.begin().await?;
+    let survey_id: i32 = sqlx::query_scalar(
+        "UPDATE survey_response SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING survey_id",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| reject_with(StatusCode::NOT_FOUND, "Response not found"))?;
+    sqlx::query("INSERT INTO admin_action (admin_id, action, summary) VALUES ($1, 'delete_survey_response', $2)")
+        .bind(admin_id)
+        .bind(format!("Deleted response #{id} to survey #{survey_id}"))
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[get("/surveys/{id}")]

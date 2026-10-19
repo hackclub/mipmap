@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use std::{future::Future, pin::Pin};
 
-const PAGE: i64 = 50;
+pub const PAGE: i64 = 50;
 const REASON_LIMIT: usize = 500;
 const TRACKING_LIMIT: usize = 200;
 const MAX_BONUS_PERCENT: f64 = 1000.0;

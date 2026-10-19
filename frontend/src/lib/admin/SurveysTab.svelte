@@ -4,6 +4,7 @@
     import LoadError from "$lib/ui/LoadError.svelte";
     import { fetch_surveys } from "./api";
     import Card from "./Card.svelte";
+    import SurveyResponses from "./SurveyResponses.svelte";
 
     const load = new Load(fetch_surveys);
     load.run();
@@ -83,6 +84,7 @@
                 {/if}
             {/each}
         </Card>
+        <SurveyResponses {survey} ondelete={load.run} />
     {/each}
 {/if}
 
