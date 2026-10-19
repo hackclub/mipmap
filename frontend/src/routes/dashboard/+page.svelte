@@ -104,6 +104,9 @@
             ? 1
             : 0,
     );
+    const sticker_done = $derived(
+        purchased.has(STICKER) || !!data?.user.sticker_skipped,
+    );
     const tutorial = (id: number) => id === STICKER || id === STICKER_TOKEN;
     const sticker_token_meta = {
         title: "Token",
@@ -242,7 +245,7 @@
     </div>
 
     <aside class="banners" class:touring aria-label="Notices">
-        {#if !touring && data.user.blocked}
+        {#if !touring && sticker_done && data.user.blocked}
             <div class="banner">
                 {data.user.blocked}
                 <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
