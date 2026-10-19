@@ -19,8 +19,8 @@
 
 {#each question.items as item (item.key)}
     {@const name = `${uid}-${item.key}`}
-    <fieldset>
-        <legend>{item.label}</legend>
+    <div class="item" role="radiogroup" aria-labelledby="{name}-label">
+        <p class="label" id="{name}-label">{item.label}</p>
         <div class="points">
             {#each points as point (point)}
                 <label class:chosen={ratings[item.key] === point}>
@@ -50,27 +50,23 @@
             />
             Unsure
         </label>
-    </fieldset>
+    </div>
 {/each}
 
 <style>
-    fieldset {
+    .item {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
         min-width: 0;
-        margin: 0;
         padding: 1rem 1.25rem;
         background: #74472a;
         border: 2px solid #4f2f1f;
         border-radius: 7px;
     }
 
-    legend {
-        float: left;
-        width: 100%;
-        padding: 0;
-        margin-bottom: 0.25rem;
+    .label {
+        margin: 0 0 0.25rem;
         font-weight: 700;
     }
 
@@ -126,12 +122,12 @@
     }
 
     @media (max-width: 30rem) {
-        fieldset {
+        .item {
             gap: 0.4rem;
             padding: 0.85rem 0.9rem;
         }
 
-        legend {
+        .label {
             line-height: 1.3;
         }
 
