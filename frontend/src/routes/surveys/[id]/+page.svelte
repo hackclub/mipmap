@@ -162,4 +162,30 @@
         align-items: center;
         gap: 1rem;
     }
+
+    @media (max-width: 30rem) {
+        main {
+            gap: 1.5rem;
+            padding: 2rem 1rem;
+        }
+
+        h1 {
+            font-size: clamp(1.5rem, 6.5vw, 1.75rem);
+        }
+
+        .text {
+            padding: 0.85rem 0.9rem;
+        }
+
+        .text :global(textarea) {
+            font-size: 1rem;
+        }
+
+        .actions {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.5rem;
+            text-align: center;
+        }
+    }
 </style>

@@ -124,4 +124,27 @@
         padding: 0.3rem 0.9rem;
         font-size: 0.85rem;
     }
+
+    @media (max-width: 30rem) {
+        fieldset {
+            gap: 0.4rem;
+            padding: 0.85rem 0.9rem;
+        }
+
+        legend {
+            line-height: 1.3;
+        }
+
+        .points {
+            gap: 0.35rem;
+        }
+
+        .points label {
+            padding: 0.7rem 0;
+        }
+
+        .unsure {
+            padding: 0.45rem 1rem;
+        }
+    }
 </style>
