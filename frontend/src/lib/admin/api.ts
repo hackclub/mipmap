@@ -10,6 +10,7 @@ import type {
   Snapshot,
   SlackMessage,
   Stickers,
+  SurveyResults,
   Thread,
   User,
 } from "./types";
@@ -118,3 +119,6 @@ export const reply = (slack_id: string, text: string) =>
     `slack/threads/${encodeURIComponent(slack_id)}/reply`,
     { text },
   );
+
+export const fetch_surveys = () =>
+  get_json<SurveyResults[]>("/api/admin/surveys");

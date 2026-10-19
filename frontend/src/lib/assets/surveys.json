@@ -1,0 +1,37 @@
+[
+  {
+    "id": 1,
+    "title": "What's stopping you?",
+    "heading": [
+      { "text": "Which of the following is stopping you from making " },
+      { "text": "regular progress", "colour": "#6fd69a" },
+      { "text": " towards an " },
+      { "text": "awesome game", "colour": "#7cc4f0" },
+      { "text": " for Mipmap?" }
+    ],
+    "questions": [
+      {
+        "type": "scale",
+        "key": "blockers",
+        "low": "No effect",
+        "high": "Strong effect",
+        "items": [
+          { "key": "prizes", "label": "Don't like the prizes" },
+          { "key": "no_engine", "label": "Not sure how to make a game without an engine" },
+          { "key": "no_idea", "label": "Don't have a good idea" },
+          { "key": "prize_system", "label": "Don't understand how Mipmap's prize systems work" },
+          { "key": "premise", "label": "Not interested in the premise" },
+          { "key": "getting_started", "label": "Not sure how to scope or start my game" },
+          { "key": "hackatime", "label": "Hackatime setup or tracking is confusing" },
+          { "key": "motivation", "label": "Lost motivation partway through" }
+        ]
+      },
+      {
+        "type": "text",
+        "key": "other",
+        "label": "Anything else stopping you?",
+        "optional": true
+      }
+    ]
+  }
+]

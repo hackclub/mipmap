@@ -6,6 +6,7 @@
     import OrdersTab from "$lib/admin/OrdersTab.svelte";
     import StickersTab from "$lib/admin/StickersTab.svelte";
     import FeedbackTab from "$lib/admin/FeedbackTab.svelte";
+    import SurveysTab from "$lib/admin/SurveysTab.svelte";
     import AuditTab from "$lib/admin/AuditTab.svelte";
     import AnnouncementsTab from "$lib/admin/AnnouncementsTab.svelte";
     import InboxTab from "$lib/admin/InboxTab.svelte";
@@ -17,6 +18,7 @@
         ["orders", "Orders"],
         ["stickers", "Stickers"],
         ["feedback", "Feedback"],
+        ["surveys", "Surveys"],
         ["announcements", "Announcements"],
         ["inbox", "Slack DMs"],
         ["audit", "Audit log"],
@@ -83,6 +85,8 @@
                         <StickersTab onchange={refresh} />
                     {:else if tab === "feedback"}
                         <FeedbackTab />
+                    {:else if tab === "surveys"}
+                        <SurveysTab />
                     {:else if tab === "announcements"}
                         <AnnouncementsTab />
                     {:else if tab === "inbox"}

@@ -20,6 +20,7 @@ mod projects;
 mod slack;
 mod snapshots;
 mod stats;
+mod surveys;
 mod tree;
 mod uploads;
 
@@ -96,6 +97,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(stats::api)
                     .configure(admin::api)
                     .configure(slack::routes)
+                    .configure(surveys::routes)
                     .service(snapshots::create_snapshot)
                     .service((feedback::create_feedback, feedback::visit_survey, feedback::dismiss_survey))
                     .service(accounts::session::logout),
@@ -106,6 +108,7 @@ async fn main() -> std::io::Result<()> {
             .configure(dashboard::pages)
             .configure(stats::pages)
             .configure(admin::pages)
+            .configure(surveys::pages)
             .service(docs)
             .service(
                 Files::new("/", FRONTEND_DIR)

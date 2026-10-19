@@ -151,3 +151,22 @@ export type SlackMessage = {
   at: string;
   admin_name: string | null;
 };
+
+export type SurveyResults = {
+  id: number;
+  title: string;
+  responses: number;
+  questions: (
+    | {
+        type: "scale";
+        key: string;
+        items: { key: string; label: string; counts: number[]; unsure: number }[];
+      }
+    | {
+        type: "text";
+        key: string;
+        label: string;
+        answers: { created_on: string; text: string }[];
+      }
+  )[];
+};
