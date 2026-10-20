@@ -7,6 +7,8 @@ export const category_colors: Record<string, string> = {
   Knickknacks: "#f0788a",
   VFX: "#ffe066",
   Books: "#c3a3e6",
+  Computer: "#6fd6c4",
+  Apple: "#dfe8f5",
 };
 
 export const token_color = "#e8c58c";

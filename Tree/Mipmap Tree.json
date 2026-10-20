@@ -23,6 +23,14 @@
     {
       "color": "#bf5af2",
       "name": "Books"
+    },
+    {
+      "color": "#ac8e68",
+      "name": "Computer"
+    },
+    {
+      "color": "#dfe8f5",
+      "name": "Apple"
     }
   ],
   "currency": "Mips",
@@ -258,6 +266,30 @@
     {
       "from": 7,
       "to": 46
+    },
+    {
+      "from": 26,
+      "to": 59
+    },
+    {
+      "from": 59,
+      "to": 60
+    },
+    {
+      "from": 60,
+      "to": 55
+    },
+    {
+      "from": 55,
+      "to": 56
+    },
+    {
+      "from": 38,
+      "to": 57
+    },
+    {
+      "from": 38,
+      "to": 58
     }
   ],
   "nodes": [
@@ -1256,6 +1288,138 @@
       "name": "Token",
       "price": 100,
       "requires": [53]
+    },
+    {
+      "beeline_path": [11, 19, 26, 41, 59, 60, 55],
+      "beeline_mips": 2775,
+      "category": "Computer",
+      "id": 55,
+      "kind": "item",
+      "name": "$200 Computer Grant",
+      "price": 1000,
+      "requires": [60],
+      "with_token_mips": {
+        "40": 3710,
+        "41": 2775,
+        "43": 3095,
+        "44": 3190,
+        "45": 2795,
+        "46": 3035,
+        "47": 4095,
+        "48": 2995,
+        "49": 3955,
+        "51": 3060
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 41, 59, 60, 55, 56],
+      "beeline_mips": 4175,
+      "category": "Computer",
+      "id": 56,
+      "kind": "item",
+      "name": "$300 Computer Grant",
+      "price": 1400,
+      "requires": [55],
+      "with_token_mips": {
+        "40": 5110,
+        "41": 4175,
+        "43": 4495,
+        "44": 4590,
+        "45": 4195,
+        "46": 4435,
+        "47": 5495,
+        "48": 4395,
+        "49": 5355,
+        "51": 4460
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 37, 38, 43, 57],
+      "beeline_mips": 4595,
+      "category": "Apple",
+      "id": 57,
+      "kind": "item",
+      "name": "MacBook Neo",
+      "price": 2000,
+      "requires": [38],
+      "with_token_mips": {
+        "40": 5560,
+        "41": 4625,
+        "43": 4595,
+        "44": 5040,
+        "45": 4645,
+        "46": 4695,
+        "47": 6445,
+        "48": 4845,
+        "49": 5255,
+        "51": 4910
+      }
+    },
+    {
+      "beeline_path": [11, 15, 19, 37, 38, 43, 58],
+      "beeline_mips": 7595,
+      "category": "Apple",
+      "id": 58,
+      "kind": "item",
+      "name": "MacBook Air",
+      "price": 5000,
+      "requires": [38],
+      "with_token_mips": {
+        "40": 8560,
+        "41": 7625,
+        "43": 7595,
+        "44": 8040,
+        "45": 7645,
+        "46": 7695,
+        "47": 9445,
+        "48": 7845,
+        "49": 8255,
+        "51": 7910
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 41, 59],
+      "beeline_mips": 1175,
+      "category": "Computer",
+      "id": 59,
+      "kind": "item",
+      "name": "Zimablade",
+      "price": 600,
+      "requires": [26],
+      "with_token_mips": {
+        "40": 2110,
+        "41": 1175,
+        "43": 1495,
+        "44": 1590,
+        "45": 1195,
+        "46": 1435,
+        "47": 2495,
+        "48": 1395,
+        "49": 2355,
+        "51": 1460
+      }
+    },
+    {
+      "beeline_path": [11, 19, 26, 41, 59, 60],
+      "beeline_mips": 1775,
+      "category": "Computer",
+      "id": 60,
+      "kind": "item",
+      "name": "$100 Computer Parts Grant",
+      "price": 600,
+      "requires": [59],
+      "with_token_mips": {
+        "40": 2710,
+        "41": 1775,
+        "43": 2095,
+        "44": 2190,
+        "45": 1795,
+        "46": 2035,
+        "47": 3095,
+        "48": 1995,
+        "49": 2955,
+        "51": 2060
+      }
     },
     {
       "category": null,
