@@ -6,7 +6,7 @@ pub fn challenge(name: &str, description: &str) -> String {
 
 pub fn round(ship_by: NaiveDate) -> String {
     format!(
-        "The next fulfillment round (date that you've gotta ship by in order for the project to be reviewed in a short timeframe) is coming up! Make sure you ship your project before the end of *{}*, UTC in order to get your prizes sooner",
+        "The next fulfillment round is coming up! Make sure you ship your project before the end of *{}*, UTC in order to get your prizes sooner",
         ship_by.format("%B %-d")
     )
 }
