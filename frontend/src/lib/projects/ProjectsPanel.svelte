@@ -18,6 +18,7 @@
         bounds,
         projects,
         hackatime,
+        linked,
         dialog = $bindable(null),
         touring = false,
         onsaved,
@@ -25,6 +26,7 @@
         bounds: Bounds;
         projects: Project[];
         hackatime: HackatimeProject[];
+        linked: boolean;
         dialog?: ProjectDialog;
         touring?: boolean;
         onsaved?: (kind: "new" | "edit") => void;
@@ -65,7 +67,7 @@
                 onship={() => (dialog = { kind: "ship", id: project.id })}
             />
         {:else}
-            <p class="empty">No projects yet</p>
+            <p class="empty">No projects yet. Press '+' to make one</p>
         {/each}
     </div>
 </Section>
@@ -80,6 +82,7 @@
     <EditProjectDialog
         project={active}
         {hackatime}
+        {linked}
         {touring}
         onsaved={() => onsaved?.("edit")}
         onclose={() => (dialog = null)}
