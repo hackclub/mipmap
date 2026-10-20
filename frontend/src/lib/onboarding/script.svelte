@@ -376,8 +376,8 @@
 {/snippet}
 
 {#snippet snapshots()}
-    One last thing, I promise! Making games is a super visual activity, so you
-    can be sharing regular Snapshots with everyone else
+    We're almost near the end, I promise! Making games is a super visual
+    activity, so you can be sharing regular Snapshots with everyone else
 {/snippet}
 
 {#snippet snapshot_info()}
