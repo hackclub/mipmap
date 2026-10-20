@@ -26,3 +26,8 @@ export const grant_mips = () =>
   mutate("/api/onboarding/grant", { method: "POST" });
 
 export const finish = () => mutate("/api/onboarding/finish", { method: "POST" });
+
+export const join_slack = () =>
+  request("/api/slack/join", { method: "POST" })
+    .then((response) => response.ok)
+    .catch(() => false);

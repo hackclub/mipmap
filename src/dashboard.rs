@@ -42,6 +42,7 @@ struct UserInfo {
     hackatime_linked: bool,
     #[sqlx(skip)]
     hackatime_revoked: bool,
+    slack_linked: bool,
     onboarding_step: Option<String>,
     onboarding_granted: bool,
     onboarded: bool,
@@ -79,7 +80,8 @@ pub struct Dashboard {
 pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<Dashboard> {
     let mut user: UserInfo = sqlx::query_as(
         "SELECT first_name, mips, referral_code, verification_status, ysws_eligible,
-             hackatime_user_id IS NOT NULL AS hackatime_linked, onboarding_step,
+             hackatime_user_id IS NOT NULL AS hackatime_linked, slack_id IS NOT NULL AS slack_linked,
+             onboarding_step,
              onboarding_granted_at IS NOT NULL AS onboarding_granted,
              onboarded_at IS NOT NULL AS onboarded, saw_old_onboarding,
              sticker_skipped_at IS NOT NULL AS sticker_skipped

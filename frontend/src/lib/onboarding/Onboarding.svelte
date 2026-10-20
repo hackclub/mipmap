@@ -8,10 +8,11 @@
     import { message } from "$lib/api";
     import { STICKER, STICKER_TOKEN } from "$lib/tree/tutorial";
     import Avatar from "$lib/onboarding/Avatar.svelte";
-    import { finish, grant_mips, save_step } from "$lib/onboarding/api";
+    import { finish, grant_mips, join_slack, save_step } from "$lib/onboarding/api";
     import {
         index,
         steps,
+        type Context,
         type Frame,
         type Hole,
         type Step,
@@ -50,6 +51,7 @@
         granted,
         mips,
         sticker_skipped = false,
+        slack_linked = false,
         returning = false,
         stored = null,
         replay = false,
@@ -68,6 +70,7 @@
         granted: boolean;
         mips: number;
         sticker_skipped?: boolean;
+        slack_linked?: boolean;
         returning?: boolean;
         stored?: string | null;
         replay?: boolean;
@@ -103,6 +106,8 @@
     let root: HTMLDivElement;
     let dialog_open = $state(false);
     let text = $state<HTMLDivElement>();
+    let choices = $state<HTMLDivElement>();
+    let slack_join = $state<Context["slack_join"]>(null);
     let picking = false;
     let shapes = $state<Shape[]>([]);
     let place = $state<Place>({
@@ -478,6 +483,8 @@
         granted,
         returning,
         sticker_skipped,
+        slack_linked,
+        slack_join,
         unlocked,
         purchased,
     });
@@ -513,6 +520,16 @@
         } finally {
             busy = false;
         }
+    }
+
+    async function answer(join: boolean) {
+        if (!talking || busy) return;
+        if (join) {
+            busy = true;
+            slack_join = (await join_slack()) ? "joined" : "failed";
+            busy = false;
+        } else slack_join = null;
+        go(at + 1);
     }
 
     function next() {
@@ -724,7 +741,7 @@
     function usable(target: Node | null) {
         const step = current;
         if (!target || !step) return false;
-        if (controls.contains(target)) return true;
+        if (controls.contains(target) || choices?.contains(target)) return true;
         if (!blocking && !step.interactive) return false;
         const open = modal();
         if (item_wait(step) && open?.contains(target)) return true;
@@ -766,6 +783,8 @@
         e.stopImmediatePropagation();
         if (!e.repeat && (e.key === " " || e.key === "Enter")) next();
     }
+
+    const focus = (node: HTMLElement) => node.focus({ preventScroll: true });
 
     function portal(node: HTMLElement) {
         document.body.appendChild(node);
@@ -956,6 +975,20 @@
                     <p class="hint">
                         {failure.text}. {touch ? "Tap" : "Click"} to try again
                     </p>
+                {:else if current.wait === "slack-answer"}
+                    <div
+                        class="choices"
+                        tabindex="-1"
+                        bind:this={choices}
+                        {@attach focus}
+                    >
+                        <button type="button" disabled={busy} onclick={() => answer(true)}>
+                            Yay
+                        </button>
+                        <button type="button" disabled={busy} onclick={() => answer(false)}>
+                            Nay
+                        </button>
+                    </div>
                 {:else if !blocking && !busy}
                     <p class="hint">
                         {touch
@@ -1126,6 +1159,18 @@
         flex: none;
     }
 
+    .choices {
+        flex: none;
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        pointer-events: auto;
+    }
+
+    .choices:focus {
+        outline: none;
+    }
+
     .controls {
         position: absolute;
         right: 1rem;
@@ -1154,26 +1199,41 @@
         color: #ff9a3d;
     }
 
-    .controls button {
+    .choices button {
+        padding: 0.4rem 1.1rem;
+        background: #5f4838;
+        border: 2px solid #4f2f1f;
+        border-radius: 7px;
+        color: #ead7c2;
+        font: inherit;
+        font-size: 0.9em;
+        font-weight: 700;
+    }
+
+    .controls button,
+    .choices button {
         cursor: pointer;
         transition:
             background-color 0.3s,
             color 0.3s;
     }
 
-    .controls button:focus-visible {
+    .controls button:focus-visible,
+    .choices button:focus-visible {
         background-color: #ead7c2;
         color: #4f2f1f;
     }
 
     @media (hover: hover) {
-        .controls button:hover:not(:disabled) {
+        .controls button:hover:not(:disabled),
+        .choices button:hover:not(:disabled) {
             background-color: #ead7c2;
             color: #4f2f1f;
         }
     }
 
-    .controls button:disabled {
+    .controls button:disabled,
+    .choices button:disabled {
         color: rgba(234, 215, 194, 0.4);
         cursor: default;
     }

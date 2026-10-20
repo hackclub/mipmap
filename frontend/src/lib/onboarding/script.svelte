@@ -28,13 +28,16 @@
         | "saved"
         | "sticker-unlocked"
         | "token-unlocked"
-        | "sticker-redeemed";
+        | "sticker-redeemed"
+        | "slack-answer";
 
     export interface Context {
         editable: boolean;
         granted: boolean;
         returning: boolean;
         sticker_skipped: boolean;
+        slack_linked: boolean;
+        slack_join: "joined" | "failed" | null;
         unlocked: Set<number>;
         purchased: Set<number>;
     }
@@ -207,6 +210,29 @@
             holes: ["snapshots"],
         },
         { key: "Other panels", say: side, frame: "side", holes: ["side"] },
+        { key: "Slack", say: slack, center: true, frame: "home" },
+        {
+            key: "Join Slack",
+            say: join_slack,
+            center: true,
+            frame: "home",
+            wait: "slack-answer",
+            skip: (ctx) => !ctx.slack_linked,
+        },
+        {
+            key: "Joined Slack",
+            say: joined_slack,
+            center: true,
+            frame: "home",
+            skip: (ctx) => ctx.slack_join !== "joined",
+        },
+        {
+            key: "Join failed",
+            say: join_failed,
+            center: true,
+            frame: "home",
+            skip: (ctx) => ctx.slack_join !== "failed",
+        },
         { key: "Goodbye", say: goodbye, center: true, frame: "home" },
     ];
 
@@ -368,6 +394,40 @@
 {#snippet side()}
     And that's about it for now! You can find some details on the right side,
     like limited time challenges and referrals.
+{/snippet}
+
+{#snippet slack()}
+    If you're wanting to meet a bunch of people also interested in Mipmap,
+    we've got a channel in the Hack Club Slack! Join
+    <a
+        href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
+        target="_blank"
+        rel="noopener">#mipmap</a
+    > to:
+    <ul>
+        <li>Meet some other teens interested in this just as much as you are</li>
+        <li>Ask for some help when you're stuck</li>
+        <li>Get inspiration and ideas for projects to build</li>
+        <li>Much more!</li>
+    </ul>
+{/snippet}
+
+{#snippet join_slack()}
+    Do you want me to automatically join you to this channel?
+{/snippet}
+
+{#snippet joined_slack()}
+    Done, see you in
+    <a
+        href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
+        target="_blank"
+        rel="noopener">#mipmap</a
+    >!
+{/snippet}
+
+{#snippet join_failed()}
+    Oh, looks like something went wrong and I wasn't able to add you. You can
+    still join on your own!
 {/snippet}
 
 {#snippet goodbye()}

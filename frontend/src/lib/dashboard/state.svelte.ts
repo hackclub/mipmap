@@ -19,6 +19,7 @@ export interface User {
   blocked: string | null;
   hackatime_linked: boolean;
   hackatime_revoked: boolean;
+  slack_linked: boolean;
   onboarding_step: string | null;
   onboarding_granted: boolean;
   onboarded: boolean;

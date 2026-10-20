@@ -285,6 +285,7 @@
             granted={data.user.onboarding_granted}
             mips={data.user.mips}
             sticker_skipped={data.user.sticker_skipped}
+            slack_linked={data.user.slack_linked}
             returning={data.user.saw_old_onboarding}
             stored={data.user.onboarding_step}
             replay={touring === "replay"}

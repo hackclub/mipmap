@@ -1,4 +1,5 @@
 use crate::{accounts, env, http};
+use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::PgPool;
@@ -122,6 +123,25 @@ pub async fn post(slack_id: &str, text: &str) -> Result<String, SendError> {
             Err(SendError::Failed(anyhow::anyhow!("Slack returned {error}")))
         }
         (_, _, error) => Err(SendError::Rejected(error.unwrap_or_else(|| "unknown_error".into()))),
+    }
+}
+
+pub async fn invite(slack_id: &str, channel: &str) -> anyhow::Result<()> {
+    let token = token().context("SLACK_BOT_TOKEN isn't set")?;
+    let channel = CHANNELS.get(channel).with_context(|| format!("No Slack channel named {channel}"))?;
+    let invited: Posted = http::CLIENT
+        .post("https://slack.com/api/conversations.invite")
+        .bearer_auth(token)
+        .json(&json!({ "channel": channel, "users": slack_id }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    match invited.error.as_deref() {
+        _ if invited.ok => Ok(()),
+        Some("already_in_channel") => Ok(()),
+        error => anyhow::bail!("Slack returned {}", error.unwrap_or("unknown_error")),
     }
 }
 

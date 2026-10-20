@@ -1,10 +1,14 @@
-use crate::{accounts::session::User, error::ApiError};
+use crate::{
+    accounts::session::User,
+    error::{ApiError, reject},
+};
 use actix_web::{HttpResponse, get, post, web};
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service((get_preferences, set_preferences));
+    cfg.service((get_preferences, set_preferences, join_channel));
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -64,4 +68,17 @@ async fn set_preferences(
     .execute(pool.get_ref())
     .await?;
     Ok(HttpResponse::Ok().json(fetch(&pool, user_id).await?))
+}
+
+#[post("/slack/join")]
+async fn join_channel(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let slack_id: Option<String> = sqlx::query_scalar("SELECT slack_id FROM \"user\" WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(pool.get_ref())
+        .await?;
+    let slack_id = slack_id.ok_or_else(|| reject("Link your Slack account first"))?;
+    super::invite(&slack_id, "mipmap")
+        .await
+        .with_context(|| format!("Adding user {user_id} ({slack_id}) to #mipmap failed"))?;
+    Ok(HttpResponse::NoContent().finish())
 }
