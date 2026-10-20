@@ -264,8 +264,9 @@
         left: 50%;
         z-index: 1;
         padding: 0.35rem 0.7rem;
-        background-color: #ead7c2;
-        color: #4f2f1f;
+        background-color: #74472a;
+        color: #ead7c2;
+        border: 2px solid #4f2f1f;
         border-radius: 7px;
         font-size: 0.9rem;
         font-weight: 400;
@@ -273,14 +274,24 @@
         transform: translateX(-50%);
     }
 
+    .bubble::before,
     .bubble::after {
         content: "";
         position: absolute;
         top: 100%;
         left: 50%;
-        border: 0.4rem solid transparent;
-        border-top-color: #ead7c2;
+        border: solid transparent;
         transform: translateX(-50%);
+    }
+
+    .bubble::before {
+        border-width: 0.5rem;
+        border-top-color: #4f2f1f;
+    }
+
+    .bubble::after {
+        border-width: calc(0.5rem - 3px);
+        border-top-color: #74472a;
     }
 
     .hint {
