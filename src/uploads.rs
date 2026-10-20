@@ -11,7 +11,7 @@ use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     io::Cursor,
     sync::{LazyLock, Mutex, PoisonError},
     thread,
@@ -113,49 +113,59 @@ struct Moderation {
 #[derive(Deserialize)]
 struct ModerationResult {
     flagged: bool,
+    #[serde(default)]
+    categories: BTreeMap<String, bool>,
 }
 
-pub async fn upload(_slot: &Slot, bytes: &[u8]) -> Result<String, ApiError> {
-    let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
-    let bytes = bytes.to_vec();
-    let permit = COMPRESSING.acquire().await.map_err(anyhow::Error::from)?;
-    let webp = web::block(move || {
-        let _permit = permit;
-        compress(&bytes)
-    })
-    .await
-    .map_err(anyhow::Error::from)??;
-    let input = json!([{
-        "type": "image_url",
-        "image_url": { "url": format!("data:image/webp;base64,{}", STANDARD.encode(&webp)) },
-    }]);
-    let flagged = moderate(&key, input).await.map_err(|e| {
-        log::warn!("Image moderation failed: {e:#}");
-        reject("Couldn't check your image. Please try again")
-    })?;
-    if flagged {
+pub async fn upload(slot: &Slot, bytes: &[u8]) -> Result<String, ApiError> {
+    let webp = prepare(slot, bytes).await?;
+    if !image_flags(&webp).await?.is_empty() {
         return Err(reject("This image isn't allowed"));
     }
     Ok(store(webp).await?)
 }
 
-pub async fn ensure_text_allowed(texts: &[&str]) -> Result<(), ApiError> {
+pub async fn prepare(_slot: &Slot, bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
+    let bytes = bytes.to_vec();
+    let permit = COMPRESSING.acquire().await.map_err(anyhow::Error::from)?;
+    Ok(web::block(move || {
+        let _permit = permit;
+        compress(&bytes)
+    })
+    .await
+    .map_err(anyhow::Error::from)??)
+}
+
+pub async fn image_flags(webp: &[u8]) -> Result<BTreeSet<String>, ApiError> {
+    let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
+    let input = json!([{
+        "type": "image_url",
+        "image_url": { "url": format!("data:image/webp;base64,{}", STANDARD.encode(webp)) },
+    }]);
+    let flags = moderate(&key, input).await.map_err(|e| {
+        log::warn!("Image moderation failed: {e:#}");
+        reject("Couldn't check your image. Please try again")
+    })?;
+    Ok(flags.into_iter().flatten().collect())
+}
+
+pub async fn text_flags(texts: &[&str]) -> Result<Vec<BTreeSet<String>>, ApiError> {
     let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
     let input = texts
         .iter()
         .map(|text| json!({ "type": "text", "text": text }))
         .collect();
-    let flagged = moderate(&key, Value::Array(input)).await.map_err(|e| {
+    let flags = moderate(&key, Value::Array(input)).await.map_err(|e| {
         log::warn!("Text moderation failed: {e:#}");
         reject("Couldn't check your text. Please try again")
     })?;
-    if flagged {
-        return Err(reject("This text isn't allowed"));
+    if flags.len() != texts.len() {
+        return Err(anyhow::anyhow!("moderation returned {} results for {} texts", flags.len(), texts.len()).into());
     }
-    Ok(())
+    Ok(flags)
 }
 
-async fn moderate(key: &str, input: Value) -> anyhow::Result<bool> {
+async fn moderate(key: &str, input: Value) -> anyhow::Result<Vec<BTreeSet<String>>> {
     let response = http::CLIENT
         .post(MODERATION_URL)
         .bearer_auth(key)
@@ -169,7 +179,21 @@ async fn moderate(key: &str, input: Value) -> anyhow::Result<bool> {
     }
     let moderation: Moderation = response.json().await?;
     anyhow::ensure!(!moderation.results.is_empty(), "moderation returned no results");
-    Ok(moderation.results.iter().any(|result| result.flagged))
+    Ok(moderation
+        .results
+        .into_iter()
+        .map(|result| {
+            let mut flags: BTreeSet<String> = result
+                .categories
+                .into_iter()
+                .filter_map(|(category, hit)| hit.then_some(category))
+                .collect();
+            if result.flagged && flags.is_empty() {
+                flags.insert("flagged".to_owned());
+            }
+            flags
+        })
+        .collect())
 }
 
 fn compress(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -198,7 +222,7 @@ fn compress(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     }
 }
 
-async fn store(webp: Vec<u8>) -> anyhow::Result<String> {
+pub async fn store(webp: Vec<u8>) -> anyhow::Result<String> {
     let key = env::var("CDN_API_KEY").context("CDN_API_KEY not set")?;
     let file = Part::bytes(webp).file_name("image.webp").mime_str("image/webp")?;
     let response = http::CLIENT

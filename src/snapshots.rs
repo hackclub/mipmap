@@ -3,13 +3,13 @@ use crate::{
         hackatime::{self, Totals},
         session::User,
     },
-    dashboard,
-    error::{ApiError, reject},
+    admin, dashboard, env,
+    error::{ApiError, reject, reject_with},
     projects::{self, Project},
     uploads,
 };
 use actix_multipart::form::{MultipartForm, bytes::Bytes, text::Text};
-use actix_web::{HttpResponse, post, web};
+use actix_web::{HttpRequest, HttpResponse, get, http::StatusCode, post, web};
 use rustrict::{Censor, CensorStr, Trie, Type};
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool, types::Json};
@@ -26,6 +26,7 @@ const NAME_TAKEN: &str = "Someone else already uses that name";
 const MAX_MARKS: usize = 3;
 const RESERVED_NAMES: [&str; 2] = ["hackclub", "mipmap"];
 const RESERVED_WORDS: [&str; 4] = ["admin", "staff", "moderator", "official"];
+const MINORS: &str = "sexual/minors";
 
 #[derive(Serialize, sqlx::FromRow)]
 struct Snapshot {
@@ -62,27 +63,31 @@ pub async fn overview(
 ) -> sqlx::Result<Overview> {
     Ok(Overview {
         status: status(pool, user_id, current, projects).await?,
-        everyone: everyone(pool).await?,
+        everyone: everyone(pool, user_id).await?,
         mine: mine(pool, user_id).await?,
     })
 }
 
-async fn everyone(pool: &PgPool) -> sqlx::Result<Vec<Snapshot>> {
+async fn everyone(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Snapshot>> {
     sqlx::query_as(
-        "SELECT snapshot.id, image_url AS image, caption, display_name AS author
+        "SELECT snapshot.id,
+         CASE WHEN held_image IS NULL THEN image_url ELSE '/api/snapshots/' || snapshot.id || '/image' END AS image,
+         caption, display_name AS author
          FROM snapshot JOIN \"user\" ON \"user\".id = snapshot.user_id
          WHERE snapshot.deleted_at IS NULL AND \"user\".deleted_at IS NULL AND NOT \"user\".is_banned
-         AND snapshot.shadowbanned_at IS NULL
+         AND snapshot.shadowbanned_at IS NULL AND (snapshot.held_image IS NULL OR snapshot.user_id = $2)
          ORDER BY snapshot.created_at DESC LIMIT $1",
     )
     .bind(FEED_SIZE)
+    .bind(user_id)
     .fetch_all(pool)
     .await
 }
 
 async fn mine(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Snapshot>> {
     sqlx::query_as(
-        "SELECT id, image_url AS image, caption, display_name AS author FROM snapshot
+        "SELECT id, CASE WHEN held_image IS NULL THEN image_url ELSE '/api/snapshots/' || id || '/image' END AS image,
+         caption, display_name AS author FROM snapshot
          WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
     )
     .bind(user_id)
@@ -277,12 +282,6 @@ pub async fn create_snapshot(
     if caption.chars().any(|c| invisible(c) && !matches!(c, '\n' | '\r')) {
         return Err(reject("Captions can't contain invisible characters"));
     }
-    if !name_allowed(display_name) {
-        return Err(reject("That name isn't allowed"));
-    }
-    if caption.is_inappropriate() {
-        return Err(reject("This caption isn't allowed"));
-    }
     let key = name_key(display_name);
     if name_taken(pool.get_ref(), user_id, &key).await? {
         return Err(reject(NAME_TAKEN));
@@ -303,8 +302,40 @@ pub async fn create_snapshot(
     }
 
     let slot = uploads::reserve(user_id)?;
-    uploads::ensure_text_allowed(&[display_name, caption]).await?;
-    let url = uploads::upload(&slot, &form.image.data).await?;
+    let mut reasons = Vec::new();
+    if !name_allowed(display_name) {
+        reasons.push("Name word filter".to_owned());
+    }
+    if caption.is_inappropriate() {
+        reasons.push("Caption word filter".to_owned());
+    }
+    let text = uploads::text_flags(&[display_name, caption]).await?;
+    let text: Vec<String> = ["Name", "Caption"]
+        .iter()
+        .zip(&text)
+        .flat_map(|(label, flags)| flags.iter().map(move |flag| format!("{label}: {flag}")))
+        .collect();
+    if text.iter().any(|flag| flag.ends_with(MINORS)) {
+        reject_minors(&pool, user_id, display_name, caption, "text", &text).await?;
+        return Err(reject("This text isn't allowed"));
+    }
+    reasons.extend(text);
+    let webp = uploads::prepare(&slot, &form.image.data).await?;
+    let image: Vec<String> = uploads::image_flags(&webp)
+        .await?
+        .into_iter()
+        .map(|flag| format!("Image: {flag}"))
+        .collect();
+    if image.iter().any(|flag| flag.ends_with(MINORS)) {
+        reject_minors(&pool, user_id, display_name, caption, "image", &image).await?;
+        return Err(reject("This image isn't allowed"));
+    }
+    reasons.extend(image);
+    let (url, held) = if reasons.is_empty() {
+        (uploads::store(webp).await?, None)
+    } else {
+        (String::new(), Some(webp))
+    };
     let mut tx = pool.begin().await?;
     sqlx::query("SELECT 1 FROM \"user\" WHERE id = $1 FOR UPDATE")
         .bind(user_id)
@@ -329,8 +360,8 @@ pub async fn create_snapshot(
         return Err(reject(NAME_TAKEN));
     }
     sqlx::query(
-        "INSERT INTO snapshot (user_id, display_name, name_key, caption, image_url, hackatime_totals)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO snapshot (user_id, display_name, name_key, caption, image_url, hackatime_totals, held_image, hold_reasons)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(user_id)
     .bind(display_name)
@@ -338,10 +369,84 @@ pub async fn create_snapshot(
     .bind(caption)
     .bind(url)
     .bind(Json(&totals))
+    .bind(held)
+    .bind(&reasons)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
     dashboard::respond(&pool, user_id).await
+}
+
+async fn reject_minors(
+    pool: &PgPool,
+    user_id: i32,
+    display_name: &str,
+    caption: &str,
+    kind: &str,
+    categories: &[String],
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO snapshot_rejection (user_id, display_name, caption, kind, categories)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(user_id)
+    .bind(display_name)
+    .bind(caption)
+    .bind(kind)
+    .bind(categories)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[get("/snapshots/{id}/image")]
+pub async fn held_image(
+    req: HttpRequest,
+    User(user_id): User,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<HttpResponse, ApiError> {
+    let not_found = || reject_with(StatusCode::NOT_FOUND, "Not Found");
+    let (owner, image): (i32, Vec<u8>) = sqlx::query_as(
+        "SELECT user_id, held_image FROM snapshot
+         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL",
+    )
+    .bind(id.into_inner())
+    .fetch_optional(pool.get_ref())
+    .await?
+    .ok_or_else(not_found)?;
+    if owner != user_id && admin::lookup(&req).await?.is_none() {
+        return Err(not_found());
+    }
+    Ok(HttpResponse::Ok()
+        .content_type("image/webp")
+        .insert_header(("Cache-Control", "private, no-store"))
+        .body(image))
+}
+
+pub fn spawn_purge(pool: PgPool) {
+    actix_web::rt::spawn(async move {
+        let mut interval = env::interval_secs("SNAPSHOT_PURGE_INTERVAL_SECS", 3600);
+        loop {
+            interval.tick().await;
+            if let Err(e) = purge(&pool).await {
+                log::error!("Snapshot purge failed: {e:#}");
+            }
+        }
+    });
+}
+
+async fn purge(pool: &PgPool) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE snapshot SET deleted_at = now(), held_image = NULL
+         WHERE held_image IS NOT NULL AND deleted_at IS NULL AND created_at < now() - interval '90 days'",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query("DELETE FROM snapshot_rejection WHERE created_at < now() - interval '90 days'")
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]

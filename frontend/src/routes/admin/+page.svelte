@@ -2,6 +2,7 @@
     import Overview from "$lib/admin/Overview.svelte";
     import ShipsTab from "$lib/admin/ShipsTab.svelte";
     import SnapshotsTab from "$lib/admin/SnapshotsTab.svelte";
+    import RejectedSnapshotsTab from "$lib/admin/RejectedSnapshotsTab.svelte";
     import UsersTab from "$lib/admin/UsersTab.svelte";
     import OrdersTab from "$lib/admin/OrdersTab.svelte";
     import StickersTab from "$lib/admin/StickersTab.svelte";
@@ -15,6 +16,7 @@
     const tabs = [
         ["ships", "Ships"],
         ["snapshots", "Snapshots"],
+        ["rejected", "Rejected Snapshots"],
         ["users", "Users"],
         ["orders", "Orders"],
         ["stickers", "Stickers"],
@@ -84,6 +86,8 @@
                         <ShipsTab onchange={refresh} />
                     {:else if tab === "snapshots"}
                         <SnapshotsTab />
+                    {:else if tab === "rejected"}
+                        <RejectedSnapshotsTab />
                     {:else if tab === "users"}
                         <UsersTab onchange={refresh} initial={lookup} />
                     {:else if tab === "orders"}

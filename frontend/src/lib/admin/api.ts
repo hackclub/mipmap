@@ -4,12 +4,14 @@ import type {
   AdminContact,
   Draft,
   Feedback,
+  HeldSnapshot,
   LocatedPerson,
   Locations,
   LogEntry,
   Order,
   Ship,
   Snapshot,
+  SnapshotRejection,
   SlackMessage,
   Stickers,
   SurveyResponse,
@@ -40,6 +42,9 @@ export const fetch_overview = () =>
 
 export const fetch_ships = list<Ship>("ships");
 export const fetch_snapshots = list<Snapshot>("snapshots");
+export const fetch_held_snapshots = list<HeldSnapshot>("snapshots/held");
+export const fetch_snapshot_rejections =
+  list<SnapshotRejection>("snapshots/rejections");
 export const fetch_users = list<User>("users");
 export const fetch_orders = list<Order>("orders");
 export const fetch_feedback = list<Feedback>("feedback");
@@ -54,6 +59,14 @@ export const set_shadowban = (
   id: number,
   body: { shadowbanned: boolean; reason: string },
 ) => post<Snapshot>(`snapshots/${id}/shadowban`, body);
+
+export const review_snapshot = async (id: number, approve: boolean) => {
+  const response = await request(
+    `/api/admin/snapshots/${id}/review`,
+    send_json("POST", { approve }),
+  );
+  if (!response.ok) await json(response);
+};
 
 export const set_mips = (id: number, body: { mips: number; reason: string }) =>
   post<User>(`users/${id}/mips`, body);
@@ -88,7 +101,7 @@ export const fulfill_wave = (id: number) =>
 export const wave_csv = (id: number) => `/api/admin/stickers/waves/${id}/csv`;
 
 export const safe_url = (url: string | null) =>
-  url && /^https?:\/\//i.test(url) ? url : undefined;
+  url && /^(?:https?:\/\/|\/(?!\/))/i.test(url) ? url : undefined;
 
 export const display_name = (name: string, id: number) =>
   name.trim() || `User #${id}`;

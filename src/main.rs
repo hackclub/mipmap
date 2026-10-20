@@ -67,6 +67,7 @@ async fn main() -> std::io::Result<()> {
     projects::review::spawn(database_pool.clone());
     projects::ship::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
+    snapshots::spawn_purge(database_pool.clone());
     slack::spawn(database_pool.clone());
     tree::spawn_images();
     uploads::warn_unconfigured();
@@ -99,7 +100,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(admin::api)
                     .configure(slack::routes)
                     .configure(surveys::routes)
-                    .service(snapshots::create_snapshot)
+                    .service((snapshots::create_snapshot, snapshots::held_image))
                     .service((feedback::create_feedback, feedback::visit_survey, feedback::dismiss_survey))
                     .service(accounts::session::logout),
             )

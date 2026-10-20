@@ -36,6 +36,28 @@ export type Snapshot = {
   shadowbanned: boolean;
 };
 
+export type HeldSnapshot = {
+  id: number;
+  image: string;
+  caption: string;
+  author: string;
+  user_id: number;
+  user_name: string;
+  created_at: string;
+  reasons: string[];
+};
+
+export type SnapshotRejection = {
+  id: number;
+  caption: string;
+  author: string;
+  user_id: number;
+  user_name: string;
+  kind: "text" | "image";
+  categories: string[];
+  created_at: string;
+};
+
 export type User = {
   id: number;
   hca_id: string;

@@ -32,6 +32,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
             .service((get_overview, get_ships, set_bonus, get_snapshots, shadowban, get_users))
             .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
             .service((get_stickers, create_wave, fulfill_wave, wave_csv))
+            .service((get_held_snapshots, review_snapshot, get_snapshot_rejections))
             .configure(crate::slack::admin_routes)
             .configure(crate::surveys::admin_routes)
             .configure(crate::locations::admin_routes),
@@ -54,7 +55,7 @@ pub fn admin_ids() -> Vec<String> {
         .unwrap_or_default()
 }
 
-async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<i32>> {
+pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<i32>> {
     let ids = admin_ids();
     if ids.is_empty() {
         return Ok(None);
@@ -318,7 +319,8 @@ struct Snapshot {
     shadowbanned: bool,
 }
 
-const SNAPSHOT_SELECT: &str = "SELECT s.id, s.image_url AS image, s.caption, s.display_name AS author, s.user_id,
+const SNAPSHOT_SELECT: &str = "SELECT s.id,
+     CASE WHEN s.held_image IS NULL THEN s.image_url ELSE '/api/snapshots/' || s.id || '/image' END AS image, s.caption, s.display_name AS author, s.user_id,
      concat_ws(' ', u.first_name, u.last_name) AS user_name, s.created_at,
      s.shadowbanned_at IS NOT NULL AS shadowbanned
      FROM snapshot s JOIN \"user\" u ON u.id = s.user_id";
@@ -378,6 +380,117 @@ async fn shadowban(
         .await?;
     tx.commit().await?;
     Ok(HttpResponse::Ok().json(snapshot))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct HeldSnapshot {
+    id: i32,
+    image: String,
+    caption: String,
+    author: String,
+    user_id: i32,
+    user_name: String,
+    created_at: DateTime<Utc>,
+    reasons: Vec<String>,
+}
+
+#[get("/snapshots/held")]
+async fn get_held_snapshots(
+    _: Admin,
+    pool: web::Data<PgPool>,
+    query: web::Query<PageQuery>,
+) -> Result<HttpResponse, ApiError> {
+    let snapshots: Vec<HeldSnapshot> = sqlx::query_as(
+        "SELECT s.id, '/api/snapshots/' || s.id || '/image' AS image, s.caption, s.display_name AS author,
+         s.user_id, concat_ws(' ', u.first_name, u.last_name) AS user_name, s.created_at, s.hold_reasons AS reasons
+         FROM snapshot s JOIN \"user\" u ON u.id = s.user_id
+         WHERE s.held_image IS NOT NULL AND s.deleted_at IS NULL AND ($1::int IS NULL OR s.id < $1)
+         ORDER BY s.id DESC LIMIT $2",
+    )
+    .bind(query.before)
+    .bind(PAGE)
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(snapshots))
+}
+
+#[derive(Deserialize)]
+struct ReviewRequest {
+    approve: bool,
+}
+
+#[post("/snapshots/{id}/review")]
+async fn review_snapshot(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+    body: web::Json<ReviewRequest>,
+) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let unknown = || reject("Unknown Snapshot");
+    let url = if body.approve {
+        let image: Vec<u8> = sqlx::query_scalar(
+            "SELECT held_image FROM snapshot WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL",
+        )
+        .bind(id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .ok_or_else(unknown)?;
+        Some(crate::uploads::store(image).await?)
+    } else {
+        None
+    };
+    let mut tx = pool.begin().await?;
+    let (user_id, author): (i32, String) = sqlx::query_as(
+        "UPDATE snapshot SET held_image = NULL, image_url = COALESCE($2, image_url),
+         deleted_at = CASE WHEN $2 IS NULL THEN now() END
+         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL RETURNING user_id, display_name",
+    )
+    .bind(id)
+    .bind(&url)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(unknown)?;
+    let (action, verb) = if url.is_some() {
+        ("approve_snapshot", "Approved")
+    } else {
+        ("reject_snapshot", "Rejected")
+    };
+    record(&mut tx, admin_id, action, user_id, format!("{verb} Snapshot #{id} by {author}"), None).await?;
+    tx.commit().await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct SnapshotRejection {
+    id: i32,
+    caption: String,
+    author: String,
+    user_id: i32,
+    user_name: String,
+    kind: String,
+    categories: Vec<String>,
+    created_at: DateTime<Utc>,
+}
+
+#[get("/snapshots/rejections")]
+async fn get_snapshot_rejections(
+    _: Admin,
+    pool: web::Data<PgPool>,
+    query: web::Query<PageQuery>,
+) -> Result<HttpResponse, ApiError> {
+    let rejections: Vec<SnapshotRejection> = sqlx::query_as(
+        "SELECT r.id, r.caption, r.display_name AS author, r.user_id,
+         concat_ws(' ', u.first_name, u.last_name) AS user_name, r.kind, r.categories, r.created_at
+         FROM snapshot_rejection r JOIN \"user\" u ON u.id = r.user_id
+         WHERE ($1::int IS NULL OR r.id < $1)
+         ORDER BY r.id DESC LIMIT $2",
+    )
+    .bind(query.before)
+    .bind(PAGE)
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(rejections))
 }
 
 #[derive(Serialize, sqlx::FromRow)]
