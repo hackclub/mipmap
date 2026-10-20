@@ -182,3 +182,35 @@ export type SurveyResponse = {
   created_on: string;
   answers: Record<string, Record<string, number | "unsure"> | string>;
 };
+
+export type LocationCountry = {
+  code: string;
+  users: number;
+  onboarded: number;
+  shipped: number;
+  hours: number;
+  mips: number;
+};
+
+export type Place = {
+  country: string;
+  name: string;
+  users: number;
+};
+
+export type Locations = {
+  unknown: number;
+  countries: LocationCountry[];
+  regions: Place[];
+  cities: Place[];
+  weeks: { week: string; country: string; users: number }[];
+};
+
+export type LocatedPerson = {
+  id: number;
+  hca_id: string;
+  name: string;
+  region: string | null;
+  city: string | null;
+  signup_at: string;
+};

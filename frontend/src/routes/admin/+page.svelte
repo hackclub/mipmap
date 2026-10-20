@@ -10,6 +10,7 @@
     import AuditTab from "$lib/admin/AuditTab.svelte";
     import AnnouncementsTab from "$lib/admin/AnnouncementsTab.svelte";
     import InboxTab from "$lib/admin/InboxTab.svelte";
+    import LocationTab from "$lib/admin/location/LocationTab.svelte";
 
     const tabs = [
         ["ships", "Ships"],
@@ -19,12 +20,14 @@
         ["stickers", "Stickers"],
         ["feedback", "Feedback"],
         ["surveys", "Surveys"],
+        ["location", "Location"],
         ["announcements", "Announcements"],
         ["inbox", "Slack DMs"],
         ["audit", "Audit log"],
     ] as const;
 
     let tab = $state<(typeof tabs)[number][0]>("ships");
+    let lookup = $state("");
     let overview = $state<Overview>();
     const refresh = () => overview?.refresh();
 
@@ -34,6 +37,7 @@
         e.preventDefault();
         const next = (i + step + tabs.length) % tabs.length;
         tab = tabs[next][0];
+        lookup = "";
         document.getElementById(`tab-${tab}`)?.focus();
     }
 </script>
@@ -61,7 +65,10 @@
                         aria-controls="panel"
                         tabindex={tab === key ? 0 : -1}
                         class:active={tab === key}
-                        onclick={() => (tab = key)}
+                        onclick={() => {
+                            tab = key;
+                            lookup = "";
+                        }}
                         onkeydown={(e) => keydown(e, i)}>{label}</button
                     >
                 {/each}
@@ -78,7 +85,7 @@
                     {:else if tab === "snapshots"}
                         <SnapshotsTab />
                     {:else if tab === "users"}
-                        <UsersTab onchange={refresh} />
+                        <UsersTab onchange={refresh} initial={lookup} />
                     {:else if tab === "orders"}
                         <OrdersTab onchange={refresh} />
                     {:else if tab === "stickers"}
@@ -87,6 +94,13 @@
                         <FeedbackTab />
                     {:else if tab === "surveys"}
                         <SurveysTab />
+                    {:else if tab === "location"}
+                        <LocationTab
+                            onopenuser={(hca_id) => {
+                                lookup = hca_id;
+                                tab = "users";
+                            }}
+                        />
                     {:else if tab === "announcements"}
                         <AnnouncementsTab />
                     {:else if tab === "inbox"}

@@ -9,10 +9,11 @@
     import Card from "./Card.svelte";
     import PagedList from "./PagedList.svelte";
 
-    let { onchange }: { onchange: () => void } = $props();
+    let { onchange, initial = "" }: { onchange: () => void; initial?: string } =
+        $props();
 
-    let search = $state("");
-    let query = $state("");
+    let search = $state(untrack(() => initial));
+    let query = $state(untrack(() => initial));
     const pages = new Pages<User>((before) => fetch_users({ before, q: query }));
 
     $effect(() => {

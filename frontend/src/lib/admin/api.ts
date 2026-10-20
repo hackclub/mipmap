@@ -4,6 +4,8 @@ import type {
   AdminContact,
   Draft,
   Feedback,
+  LocatedPerson,
+  Locations,
   LogEntry,
   Order,
   Ship,
@@ -107,6 +109,12 @@ export const send_announcement = (text: string) =>
   post_empty("slack/announcements", { text });
 export const send_direct = (slack_id: string, text: string) =>
   post_empty("slack/direct", { slack_id, text });
+
+export const fetch_locations = () => get_json<Locations>("/api/admin/locations");
+export const fetch_located_people = (country: string) =>
+  get_json<LocatedPerson[]>(
+    `/api/admin/locations/people?${new URLSearchParams({ country })}`,
+  );
 
 export const fetch_slack_admins = () =>
   get_json<AdminContact[]>("/api/admin/slack/admins");

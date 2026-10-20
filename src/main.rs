@@ -14,6 +14,7 @@ mod env;
 mod error;
 mod feedback;
 mod http;
+mod locations;
 mod middleware;
 mod mirror;
 mod projects;

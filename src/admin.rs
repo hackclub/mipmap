@@ -33,7 +33,8 @@ pub fn api(cfg: &mut web::ServiceConfig) {
             .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
             .service((get_stickers, create_wave, fulfill_wave, wave_csv))
             .configure(crate::slack::admin_routes)
-            .configure(crate::surveys::admin_routes),
+            .configure(crate::surveys::admin_routes)
+            .configure(crate::locations::admin_routes),
     );
 }
 
