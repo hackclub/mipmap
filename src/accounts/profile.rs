@@ -5,8 +5,8 @@ use hc_helper::auth::data::{Address, AuthData, forget_auth_token, get_auth_data_
 use serde::Deserialize;
 use sqlx::{PgExecutor, PgPool};
 
-pub const INELIGIBLE: &str = "Your Hack Club account isn't eligible for YSWS prizes";
-pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club account";
+pub const INELIGIBLE: &str = "Your Hack Club Auth account isn't eligible for prizes";
+pub const NO_ADDRESS: &str = "Add a shipping address to your Hack Club Auth account";
 
 pub fn address(data: &AuthData) -> Option<Address> {
     data.primary_address().or_else(|| data.addresses.first().cloned())
@@ -103,11 +103,11 @@ pub async fn ysws_eligible(hca_id: &str) -> anyhow::Result<bool> {
 }
 
 pub fn shop_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
-    blocked(verification_status, ysws_eligible, "Verify your identity to unlock and purchase items")
+    blocked(verification_status, ysws_eligible, "Verify your identity in Hack Club Auth to unlock and redeem items")
 }
 
 pub fn ship_blocked(verification_status: Option<&str>, ysws_eligible: bool) -> Option<&'static str> {
-    blocked(verification_status, ysws_eligible, "Verify your identity to ship projects")
+    blocked(verification_status, ysws_eligible, "Verify your identity in Hack Club Auth to ship projects")
 }
 
 pub fn verifying(verification_status: &str) -> bool {

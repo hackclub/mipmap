@@ -4,6 +4,7 @@
     import { Task } from "$lib/load.svelte";
     import { price_label } from "$lib/tree/style";
     import HoldButton from "$lib/tree/HoldButton.svelte";
+    import AuthText from "$lib/ui/AuthText.svelte";
     import { STICKER } from "$lib/tree/tutorial";
     import type { ItemMeta, TreeNode } from "$lib/tree/types";
 
@@ -54,7 +55,7 @@
         !unlocked || (node.kind === "item" && !purchased),
     );
     const label = $derived(
-        unlocked ? "Unlocked!" : available ? "Unlock" : "Prerequisite Missing",
+        unlocked ? "Unlocked!" : available ? "Unlock" : "Prerequisite missing",
     );
 
     const task = new Task();
@@ -73,8 +74,17 @@
 <Dialog labelledby="{uid}-title" {onclose}>
     <div class="content" class:has-image={has_image}>
         <h2 id="{uid}-title">{title}</h2>
-        {#if description}
-            <p class="description">{description}</p>
+        {#if description || meta?.facts}
+            <div class="description">
+                {#if description}
+                    <p>
+                        {#if node.kind === "item"}<em>{description}</em>{:else}{description}{/if}
+                    </p>
+                {/if}
+                {#if meta?.facts}
+                    <p>{meta.facts}</p>
+                {/if}
+            </div>
         {/if}
         {#if has_image}
             <div class="image">
@@ -123,26 +133,29 @@
                     fees that I may be charged to receive this item
                 </label>
                 <p class="skip">
-                    This prize will ship to the primary address set in Hack Club
-                    Auth
+                    This prize will be sent to the primary address set in
+                    <a href="https://auth.hackclub.com" target="_blank" rel="noopener">Hack Club Auth</a>
                 </p>
                 <HoldButton
-                    label="Purchase with Token ({tokens})"
+                    label="Redeem with Token ({tokens} {tokens === 1 ? 'token' : 'tokens'})"
                     disabled={tokens === 0 || !customs || !!blocked || task.pending}
                     autofocus
                     onconfirm={() => act(onpurchase)}
                 />
                 {#if tokens === 0}
-                    <p class="skip">You need a Token to redeem this item</p>
+                    <p class="skip">
+                        You need a Token to redeem this item. Unlock them in the
+                        tree!
+                    </p>
                 {/if}
                 {#if onskip}
                     <p class="skip">
                         If you don't want to actually receive the sticker, use
                         this button. The Token will still be lost for the
-                        purposes of this tutorial.
+                        purposes of this onboarding.
                     </p>
                     <HoldButton
-                        label="Skip"
+                        label="Skip getting sticker"
                         disabled={tokens === 0 || task.pending}
                         onconfirm={() => act(onskip)}
                     />
@@ -150,15 +163,17 @@
             {/if}
             {#if blocked && actionable}
                 <div class="note">
-                    {blocked}
-                    <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
+                    <AuthText text={blocked} />
+                    <a href="https://auth.hackclub.com" target="_blank" rel="noopener">
+                        Visit Hack Club Auth and verify your ID or add an address
+                    </a>
                 </div>
             {/if}
             {#if task.error}
                 <div class="note" role="alert">
-                    {task.error}
-                    {#if task.error.includes("Hack Club account")}
-                        <a href="https://auth.hackclub.com">
+                    <AuthText text={task.error} />
+                    {#if task.error.includes("Hack Club Auth account")}
+                        <a href="https://auth.hackclub.com" target="_blank" rel="noopener">
                             Visit Hack Club Auth in order to receive prizes{node.id ===
                             STICKER
                                 ? " such as this sticker"
@@ -199,6 +214,14 @@
         grid-area: description;
         margin: 0.75rem 0 0;
         font-size: 0.85em;
+    }
+
+    .description p {
+        margin: 0;
+    }
+
+    .description p + p {
+        margin-top: 0.5rem;
     }
 
     .image {

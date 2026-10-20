@@ -421,7 +421,7 @@
       "category": "Equipment",
       "id": 12,
       "kind": "item",
-      "name": "Classic Swiss Army Knife",
+      "name": "Logic Analyzer",
       "price": 80,
       "requires": [17],
       "with_token_mips": {

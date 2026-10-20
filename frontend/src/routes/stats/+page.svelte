@@ -56,7 +56,7 @@
                     ? "–"
                     : `${Math.round(onboarding.median_minutes)}m`,
             ],
-            ["Stickers claimed", onboarding.stickers.toLocaleString()],
+            ["Stickers redeemed", onboarding.stickers.toLocaleString()],
             [
                 "Still onboarding",
                 (onboarding.started - onboarding.finished).toLocaleString(),

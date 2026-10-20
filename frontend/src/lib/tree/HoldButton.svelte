@@ -23,8 +23,11 @@
     let shake = $state("");
     let width = $state(0);
     let height = $state(0);
+    let bubble = $state(false);
     let holding = false;
+    let confirmed = false;
     let frame_id = 0;
+    let bubble_timer = 0;
     let last = 0;
 
     function tick(now: number) {
@@ -34,6 +37,7 @@
             progress = Math.min(1, progress + step / duration);
             if (progress >= 1) {
                 holding = false;
+                confirmed = true;
                 onconfirm();
             }
         } else {
@@ -56,7 +60,15 @@
     function press() {
         if (disabled) return;
         holding = true;
+        confirmed = false;
+        bubble = false;
         run();
+    }
+
+    function nudge() {
+        bubble = true;
+        clearTimeout(bubble_timer);
+        bubble_timer = window.setTimeout(() => (bubble = false), 2000);
     }
 
     function release() {
@@ -145,7 +157,10 @@
         }
     });
 
-    $effect(() => () => cancelAnimationFrame(frame_id));
+    $effect(() => () => {
+        cancelAnimationFrame(frame_id);
+        clearTimeout(bubble_timer);
+    });
 </script>
 
 <button
@@ -170,7 +185,11 @@
         release();
     }}
     onclick={(e) => {
-        if (e.detail === 0 && !disabled) onconfirm();
+        if (e.detail === 0) {
+            if (!disabled) onconfirm();
+        } else if (!confirmed) {
+            nudge();
+        }
     }}
     onblur={release}
     oncontextmenu={(e) => e.preventDefault()}
@@ -182,6 +201,9 @@
     <span class="fill" aria-hidden="true" style:clip-path={spiral}>
         <span>{label}</span>
     </span>
+    {#if bubble}
+        <span class="bubble" aria-hidden="true">Press and hold to confirm</span>
+    {/if}
 </button>
 <span id="{uid}-hint" class="hint">Press and hold to confirm</span>
 
@@ -234,6 +256,31 @@
         background-color: #d6ab70;
         color: #4f2f1f;
         pointer-events: none;
+    }
+
+    .bubble {
+        position: absolute;
+        bottom: calc(100% + 0.6rem);
+        left: 50%;
+        z-index: 1;
+        padding: 0.35rem 0.7rem;
+        background-color: #ead7c2;
+        color: #4f2f1f;
+        border-radius: 7px;
+        font-size: 0.9rem;
+        font-weight: 400;
+        pointer-events: none;
+        transform: translateX(-50%);
+    }
+
+    .bubble::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        border: 0.4rem solid transparent;
+        border-top-color: #ead7c2;
+        transform: translateX(-50%);
     }
 
     .hint {

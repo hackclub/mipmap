@@ -3,7 +3,14 @@
         name: string;
         description: string;
         note?: string;
+        tier: "window" | "romeo" | "sierra";
         links: { text: string; href: string }[];
+    };
+
+    export const tier_labels = {
+        window: "Window library",
+        romeo: "Tier Romeo",
+        sierra: "Tier Sierra",
     };
 </script>
 
@@ -128,9 +135,10 @@
                 <p class="description">{picks[language].tip}</p>
             {/if}
             <div class="results">
-                {#each results as { name, description, links }}
+                {#each results as { name, description, tier, links }}
                     <section>
                         <h3>{name}</h3>
+                        <p class="tier">{tier_labels[tier]}</p>
                         <p class="description">{description}</p>
                         <ul>
                             {#each links as { text, href }}
@@ -218,6 +226,16 @@
     h3 {
         margin: 0;
         font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .tier {
+        display: inline-block;
+        margin: 0.35rem 0 0;
+        padding: 0.1rem 0.6rem;
+        background-color: #4f2f1f;
+        border-radius: 999px;
+        font-size: 0.85rem;
         font-weight: 700;
     }
 

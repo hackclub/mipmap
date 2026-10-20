@@ -184,7 +184,9 @@ async fn ensure_hackatime_free(
     .fetch_optional(pool)
     .await?;
     match taken {
-        Some(name) => Err(reject(format!("{name} is already linked to another of your projects"))),
+        Some(name) => Err(reject(format!(
+            "This Hackatime project ({name}) is already linked to another one of your Mipmap projects"
+        ))),
         None => Ok(()),
     }
 }
@@ -281,7 +283,9 @@ async fn update_project(
         return Err(reject(format!("Link at most {HACKATIME_LIMIT} Hackatime projects")));
     }
     if hackatime.iter().any(|name| name.chars().count() > LINK_LIMIT) {
-        return Err(reject("Hackatime project name is too long"));
+        return Err(reject(format!(
+            "Hackatime project name must be at most {LINK_LIMIT} characters"
+        )));
     }
     let mut current: Reviewed = sqlx::query_as(
         "SELECT description, COALESCE(repo_url, '') AS repo, COALESCE(demo_url, '') AS demo, tier,

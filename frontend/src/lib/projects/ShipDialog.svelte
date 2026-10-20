@@ -2,6 +2,7 @@
     import { tick } from "svelte";
     import { message } from "$lib/api";
     import { dashboard } from "$lib/dashboard/state.svelte";
+    import AuthText from "$lib/ui/AuthText.svelte";
     import Cog from "$lib/ui/Cog.svelte";
     import Dialog, { refocus } from "$lib/ui/Dialog.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
@@ -62,12 +63,11 @@
     <h2 id="{uid}-title">Ship {project.name}</h2>
     {#if !started}
         <p class="note">
-            Shipping sends your project for review
+            It'll be reviewed during the next fulfillment round
         </p>
         <label class="agree">
             <input type="checkbox" bind:checked={agreed} />
-            I agree that I am not willingly and obviously attempting to cheat the
-            review process
+            I'm not willingly trying to cheat the review process
         </label>
     {/if}
     {#if running}
@@ -96,7 +96,7 @@
                     </span>
                     <span class="label">{entry.label ?? entry.check}</span>
                     {#if (entry.status === "failed" || entry.status === "unverified") && entry.message && entry.check !== "submit"}
-                        <span class="note detail">{entry.message}</span>
+                        <span class="note detail"><AuthText text={entry.message} /></span>
                     {/if}
                 </li>
             {/each}
@@ -106,7 +106,8 @@
         <p class="note">
             Your ship will be automatically submitted as soon as your ID
             verification comes through. This won't affect the date and time
-            when you pressed the button
+            when you pressed the button, so you'll still count for previous
+            Limited Time Challenges and Fulfillment Rounds
         </p>
     {:else if shipped}
         <p class="note">Shipped! It's waiting for review</p>

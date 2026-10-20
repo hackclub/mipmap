@@ -216,17 +216,22 @@
 
 {#snippet welcome()}
     Hi, I'm Steve the Sprite, and welcome to Mipmap!
-    I'm here to show you how everything works
+    I'm here to show you how everything works internally. This is how you will
+    track the time of your game made without an engine and earn prizes!
 {/snippet}
 
 {#snippet improved()}
-    New onboarding flow, make sure you're super familiar with Mipmap's systems.
-    Also, you get a sticker for it!
+    The onboarding flow is rebuilt to minimize confusion. I've heard there's a
+    free sticker at the end...
 {/snippet}
 
 {#snippet projects()}
     If you want to claim your time for prizes, you've
-    gotta first set up a project
+    gotta first set up a project. You'll track this time with a tool called
+    <a href="https://hackatime.hackclub.com/" target="_blank" rel="noopener"
+        >Hackatime</a
+    > (which we'll link afterwards) and it'll be submitted for Mips (which
+    we'll get to in a moment)
 {/snippet}
 
 {#snippet plus()}
@@ -243,8 +248,7 @@
 
 {#snippet tiers()}
     Pick the tier that matches how deep your project
-    goes. Higher tiers earn
-    Mips faster
+    goes. Higher tiers earn more points towards prizes
     <ul>
         <li>
             Tier Quebec: 2D games without an engine,
@@ -267,9 +271,9 @@
 {/snippet}
 
 {#snippet hackatime()}
-    When you start tracking your project using
-    Hackatime, make sure to tick it off here!
-    We'll link it at the end of this onboarding then you'll be able to actually see the project list
+    Hackatime is Hack Club's tool for tracking coding time. Once you've linked
+    it and tracked time towards projects, make sure to come here and tick them
+    off! I'll link it at the end of this onboarding then you'll be able to actually see the project list
 {/snippet}
 
 {#snippet save()}
@@ -278,7 +282,7 @@
 
 {#snippet ship()}
     Whenever your project's good to go, click "Ship" to send it off for review!
-    This'll get you Mips to use in your
+    After we review your project, you get your Mips to use in your
     Tech Tree. Speaking of which...
 {/snippet}
 
@@ -299,9 +303,9 @@
 {/snippet}
 
 {#snippet tokens()}
-    But to actually redeem prizes to your door,
-    you've gotta unlock one of these Tokens scattered through
-    the tree
+    Now, unlocking a node doesn't immediately send that prize to your door.
+    You've got to also unlock a Token, then use that Token on an unlocked node
+    to actually get the prize sent to you
 {/snippet}
 
 {#snippet token_use()}
@@ -313,13 +317,13 @@
 {/snippet}
 
 {#snippet practice()}
-    I'll give you 120 Mips to practice!
+    I'll give you 120 Mips for the sticker!
 {/snippet}
 
 {#snippet unlock_sticker()}
     First, unlock the Mipmap sticker with your
-    Mips! (click the cog to open, then press and hold
-    on the button)
+    Mips! (click the node to open, then press and hold
+    the 'Unlock' button)
 {/snippet}
 
 {#snippet unlock_token()}
@@ -334,12 +338,15 @@
 
 {#snippet redeem_note()}
     Normally any Token can be used for any
-    prize, though you do have to spend this one on
-    the sticker to proceed
+    prize. You will have to tick a customs agreement box, and then the sticker
+    will be sent to your door!
 {/snippet}
 
 {#snippet sent()}
-    Awesome! We'll send you the sticker in the mail
+    Awesome! We'll send you the sticker in the mail (you can track it at
+    <a href="https://mail.hackclub.com" target="_blank" rel="noopener"
+        >mail.hackclub.com</a
+    >)
 {/snippet}
 
 {#snippet snapshots()}
@@ -350,7 +357,7 @@
 {#snippet snapshot_info()}
     A Snapshot is a screenshot + a caption. You
     don't have to do this, but it does give you a sweet
-    Mips multiplier!
+    Mips multiplier to your ships!
 {/snippet}
 
 {#snippet snapshot_rules()}
@@ -359,11 +366,12 @@
 {/snippet}
 
 {#snippet side()}
-    And that's about it for now! I've brought you to some of the more boring
-    stuff that you might want to check out
+    And that's about it for now! You can find some details on the right side,
+    like limited time challenges and referrals.
 {/snippet}
 
 {#snippet goodbye()}
     I'm super looking forward to what you create. If you don't know where to
-    start, check out the bottom right of this canvas. Happy Hacking!
+    start, check out the bottom right of this canvas (you might have to scroll
+    to find it). Happy Hacking!
 {/snippet}

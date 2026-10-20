@@ -6,11 +6,12 @@
 
     let { bounds, code }: { bounds: Bounds; code: string } = $props();
 
-    const labels = { idle: "Copy", copied: "Copied!", manual: "Press Ctrl+C" };
+    const shortcut = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "Cmd+C" : "Ctrl+C";
+    const labels = { idle: "Copy", copied: "Copied!", manual: `Press ${shortcut}` };
     const announcements = {
         idle: "",
         copied: "Link copied",
-        manual: "Press Ctrl+C to copy the link",
+        manual: `Press ${shortcut} to copy the link`,
     };
 
     const link = $derived(`${location.origin}/?ref=${code}`);
@@ -34,7 +35,7 @@
     }
 </script>
 
-<Section title="Referral" {bounds} zoom={3} padded>
+<Section title="Referrals" {bounds} zoom={3} padded>
     <p>
         Here's your referral link. If someone signs up with it and
         gets a project approved, you get 100 Mips and they get 20 bonus Mips!

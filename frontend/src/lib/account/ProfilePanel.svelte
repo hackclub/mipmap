@@ -38,7 +38,7 @@
         </dl>
         <div class="logout">
             <MipmapButton type="button" onclick={() => (slack = true)}>
-                Manage Slack bot DMs
+                Manage your Slack DMs from Mipmap
             </MipmapButton>
             <MipmapButton
                 type="button"

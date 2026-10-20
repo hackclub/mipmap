@@ -13,13 +13,13 @@
                 <li>
                     <strong>{order.item_name}</strong>
                     <div>
-                        Ordered {new Date(order.ordered_at).toLocaleDateString()}
+                        Redeemed {new Date(order.ordered_at).toLocaleDateString()}
                     </div>
                     <div>
                         {#if order.fulfilled && order.tracking_number}
-                            Shipped, tracking number {order.tracking_number}
+                            Fulfilled, tracking number {order.tracking_number}
                         {:else if order.fulfilled}
-                            Shipped
+                            Fulfilled
                         {:else}
                             Waiting for the next fulfillment round
                         {/if}

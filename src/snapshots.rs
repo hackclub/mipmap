@@ -290,7 +290,7 @@ pub async fn create_snapshot(
     uploads::ensure_image(&form.image.data)?;
 
     let Some(hackatime) = hackatime::summaries(&pool, user_id, false).await else {
-        return Err(reject("Link Hackatime first"));
+        return Err(reject("Link your Hackatime account first"));
     };
     let totals = hackatime::totals(&hackatime);
     let projects = projects::list(&pool, user_id).await?;

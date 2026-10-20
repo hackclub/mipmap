@@ -135,7 +135,7 @@
             {status.sent_today
                 ? "You've gotta wait for tomorrow to send the next one!"
                 : status.tracked_seconds < status.required_seconds
-                  ? "Make sure you've got 15 minutes in projects tracked by Hackatime first!"
+                  ? "Make sure you've got 15 minutes in projects tracked by Hackatime and linked to a Mipmap project first!"
                   : "You can still send a Snapshot today!"}
         </div>
         {#if ready && missing.length}
@@ -198,6 +198,7 @@
         display: grid;
         place-items: center;
         min-height: 0;
+        margin: 2.5rem 1.5rem;
         padding: 0;
         overflow: hidden;
         background: #4f2f1f;

@@ -587,7 +587,7 @@
         aria-label="Zoom out"
         onclick={() => zoom(1 / button_zoom)}>−</button
     >
-    <button type="button" aria-label="Recenter" onclick={() => recenter()}>
+    <button type="button" aria-label="Recenter View" onclick={() => recenter()}>
         <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">
             <circle
                 cx="12"

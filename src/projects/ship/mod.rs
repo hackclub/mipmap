@@ -189,7 +189,11 @@ async fn run(
         .check("details", "Project details", async { checks::details(project) })
         .await;
     let account = events
-        .check("account", "Hack Club account", checks::account(pool, user_id))
+        .check(
+            "account",
+            "Hack Club Auth account has address, birthday, ID verified, etc.",
+            checks::account(pool, user_id),
+        )
         .await;
     let hackatime = events
         .check("hackatime", "Hackatime", checks::hackatime(pool, user_id, project))
@@ -201,7 +205,7 @@ async fn run(
         .advise(
             "readme",
             "Repository has a README",
-            "Couldn't verify a README",
+            "Couldn't verify a README. You can still ship, but ensure your README is detailed",
             checks::readme(&project.repo),
         )
         .await;

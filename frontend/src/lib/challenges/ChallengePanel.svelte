@@ -28,14 +28,14 @@
     }
 </script>
 
-<Section title="Limited Time Challenge" {bounds} zoom={3} padded>
+<Section title="Challenges" {bounds} zoom={3} padded>
     {#each running as challenge}
         <article>
             <h3>{challenge.name}</h3>
             <p class="countdown">Ends in {countdown(challenge.ends)}</p>
             <p>{challenge.description}</p>
             <p class="fine">
-                Project must be shipped before the Challenge deadline. Reviewers
+                Project must be shipped before the Challenge's countdown deadline. Reviewers
                 have discretion on whether or not this project meets the criteria
             </p>
         </article>

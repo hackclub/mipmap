@@ -54,7 +54,7 @@
         ship.rejected
             ? "Rejected"
             : ship.awaiting_id
-              ? "Waiting for ID"
+              ? "Waiting for ID verification"
               : ship.review_status === "2–Submitted"
                 ? "Approved"
                 : "Pending";

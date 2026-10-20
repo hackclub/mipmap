@@ -83,7 +83,7 @@ pub async fn account(pool: &PgPool, user_id: i32) -> Result<Account, ApiError> {
         return Err(reject(profile::NO_ADDRESS));
     }
     if data.birthday.trim().is_empty() {
-        return Err(reject("Add your birthday to your Hack Club account"));
+        return Err(reject("Add your birthday to your Hack Club Auth account"));
     }
     Ok(Account { token, verified })
 }
@@ -200,7 +200,10 @@ pub async fn demo(link: &str) -> Result<(), ApiError> {
         }
     })?;
     if !response.status().is_success() {
-        return Err(reject(format!("The demo link returned {}", response.status())));
+        return Err(reject(format!(
+            "The demo link returned {}. Make sure the page is public",
+            response.status()
+        )));
     }
     Ok(())
 }

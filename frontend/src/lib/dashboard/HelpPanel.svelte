@@ -19,7 +19,7 @@
                     />
                 </svg>
             </span>
-            <span class="caption">Redo the tutorial</span>
+            <span class="caption">Redo the onboarding</span>
         </button>
         <a class="guide" href="/docs" target="_blank" rel="noopener">
             <span class="icon">

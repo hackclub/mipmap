@@ -25,6 +25,7 @@
         type ProjectDialog,
     } from "$lib/projects/ProjectsPanel.svelte";
     import ItemModal from "$lib/tree/ItemModal.svelte";
+    import AuthText from "$lib/ui/AuthText.svelte";
     import TechTree from "$lib/tree/TechTree.svelte";
     import item_metadata from "$lib/assets/item_metadata.json";
     import {
@@ -183,6 +184,7 @@
                 bounds={sections.projects}
                 projects={data.projects}
                 hackatime={data.hackatime_projects}
+                linked={data.user.hackatime_linked}
                 bind:dialog={project_dialog}
                 touring={!!touring}
                 onsaved={(kind) => onboarding?.saved(kind)}
@@ -226,7 +228,7 @@
     <div class="nav" inert={!!touring}>
         <NavMenu
             items={[
-                { label: "Project", onselect: () => go(sections.projects) },
+                { label: "Projects", onselect: () => go(sections.projects) },
                 {
                     label: "Fulfillment Rounds",
                     onselect: () => go(sections.fulfillment),
@@ -247,8 +249,10 @@
     <aside class="banners" class:touring aria-label="Notices">
         {#if !touring && sticker_done && data.user.blocked}
             <div class="banner">
-                {data.user.blocked}
-                <a href="https://auth.hackclub.com">Visit Hack Club Auth</a>
+                <AuthText text={data.user.blocked} />
+                <a href="https://auth.hackclub.com" target="_blank" rel="noopener">
+                    Visit Hack Club Auth and verify your ID or add an address
+                </a>
             </div>
         {/if}
         {#if !touring && data.user.hackatime_revoked}
@@ -300,7 +304,7 @@
         <Dialog labelledby="reset-title" width="28rem">
             <p id="reset-title" class="reset">
                 Your onboarding progress couldn't be saved so you were reset to
-                the start
+                the start. Unlocks have been kept.
             </p>
             <div class="actions">
                 <MipmapButton

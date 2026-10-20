@@ -98,7 +98,7 @@
                 >
                 <p class="note" aria-live="polite">
                     {missing
-                        ? `Rate ${missing} more ${missing === 1 ? "topic" : "topics"} to submit`
+                        ? `Rate ${missing} more`
                         : send.error}
                 </p>
             </div>

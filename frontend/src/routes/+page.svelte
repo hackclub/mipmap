@@ -178,7 +178,7 @@
     });
 
     const description =
-        "Hack Club Mipmap is a program for teenagers by the nonprofit Hack Club where you can ship a game made without an engine to progress your tech tree and unlock free prizes!";
+        "Hack Club Mipmap is a program for teenagers by the nonprofit Hack Club where you can ship a game made without an engine to progress your Tech Tree and unlock free prizes!";
     const structured = JSON.stringify({
         "@context": "https://schema.org",
         "@type": "WebSite",
@@ -273,19 +273,19 @@
             </div>
             <div class="start">
                 <form class="signup" aria-label="Sign up" onsubmit={sign_up}>
-                    <label for="signup-email">Sign up with your email!</label>
+                    <label for="signup-email">Start with your email!</label>
                     <div class="email">
                         <input
                             id="signup-email"
                             type="email"
                             autocomplete="email"
-                            placeholder="heidi@hackclub.com"
+                            placeholder="orpheus@example.com"
                             maxlength={254}
                             size={1}
                             required
                             bind:value={email}
                         />
-                        <button type="submit" aria-label="Continue">
+                        <button type="submit" aria-label="Continue with email">
                             <svg viewBox="0 0 16 16" aria-hidden="true">
                                 <path
                                     d="M8.47 2.47a.75.75 0 0 1 1.06 0l5 5a.75.75 0 0 1 0 1.06l-5 5a.75.75 0 1 1-1.06-1.06l3.72-3.72H2a.75.75 0 0 1 0-1.5h10.19L8.47 3.53a.75.75 0 0 1 0-1.06Z"
@@ -321,16 +321,16 @@
                 chance to find out! Hack Club Mipmap is a program for teenagers
                 (13-18 inclusive) by the nonprofit <a href="https://hackclub.com"
                     >Hack Club</a
-                > where you can ship a game made without an engine to progress your tech
-                tree and unlock free prizes!
+                > where you can ship a game made without an engine to progress your Tech
+                Tree and unlock free prizes!
             </p>
             <p>&ThickSpace;</p>
             <p>
-                Got no idea how to even get started? That's totally fine! Mipmap's
-                got a video designed to get you up to speed with the
+                Got no idea how to even get started? That's totally fine! The Mipmap
+                Docs have a video designed to get you up to speed with the
                 basics in one sitting. After that, you know exactly what
                 to look for when you're going through guides for the specific
-                graphics library you're using. Just click the "Learn here!" button
+                graphics library (you use these to talk to the GPU!) you're using. Just click the "Learn here!" button
                 above!
             </p>
         </TextBlock>

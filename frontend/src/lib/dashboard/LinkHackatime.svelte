@@ -6,7 +6,7 @@
 </script>
 
 <Dialog labelledby="{uid}-title" width="32rem">
-    <h2 id="{uid}-title">Linking Hackatime</h2>
+    <h2 id="{uid}-title">Link your Hackatime account</h2>
     <p>This lets you track your hours for prizes!</p>
     <p>Features like Snapshots won't work until you do this</p>
     <div class="actions">
@@ -15,7 +15,7 @@
             data-autofocus
             onclick={() => (location.href = "/hackatime/login")}
         >
-            Link
+            Click to Link!
         </MipmapButton>
     </div>
 </Dialog>

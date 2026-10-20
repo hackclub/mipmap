@@ -128,7 +128,7 @@
 	</svg>
 {/snippet}
 
-<div class="logo" role="img" aria-label="Mipmap" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width} bind:this={root}>
+<div class="logo" role="img" aria-label="Hack Club Mipmap" style:aspect-ratio="{view_width} / {view_height}" bind:clientWidth={width} bind:this={root}>
 	<img
 		class="static"
 		class:hidden={live}

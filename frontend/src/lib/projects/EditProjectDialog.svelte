@@ -15,12 +15,14 @@
     let {
         project,
         hackatime,
+        linked,
         touring = false,
         onsaved,
         onclose,
     }: {
         project: Project;
         hackatime: HackatimeProject[];
+        linked: boolean;
         touring?: boolean;
         onsaved?: () => void;
         onclose: () => void;
@@ -129,8 +131,8 @@
     >
         <h3 id="{uid}-hackatime">Hackatime projects</h3>
         <p class="hint" id="{uid}-hackatime-hint">
-            The Hackatime projects that track your time on this. Each one can
-            only belong to one project
+            The Hackatime projects that track your time on this. Each Hackatime
+            project can only be linked to one Mipmap project
         </p>
         <Field
             type="search"
@@ -156,7 +158,9 @@
                     </label>
                 </li>
             {:else}
-                <li class="empty">No matching projects</li>
+                <li class="empty">
+                    {linked ? "No matching projects" : "Link Hackatime to select projects"}
+                </li>
             {/each}
         </ul>
         {#if fields.hackatime.length}

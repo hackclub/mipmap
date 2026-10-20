@@ -1,12 +1,12 @@
 use chrono::NaiveDate;
 
 pub fn challenge(name: &str, description: &str) -> String {
-    format!("New limited time challenge just dropped:\n*{name}*\n{description}")
+    format!("New limited time challenge just dropped:\n*{name}*\n{description}\nCheck it out in the Dashboard!")
 }
 
 pub fn round(ship_by: NaiveDate) -> String {
     format!(
-        "The next fulfillment round is coming up! Make sure you ship your project before the end of *{}* in order to get your prizes sooner",
+        "The next fulfillment round (date that you've gotta ship by in order for the project to be reviewed in a short timeframe) is coming up! Make sure you ship your project before the end of *{}*, UTC in order to get your prizes sooner",
         ship_by.format("%B %-d")
     )
 }
@@ -20,7 +20,7 @@ pub fn ship_approved(project: &str, mips: i32) -> String {
 }
 
 pub fn ship_rejected(project: &str) -> String {
-    format!("*{project}* wasn't approved this time. Check your dashboard for details.")
+    format!("*{project}* wasn't approved this time. A rejection reason should come to these DMs shortly.")
 }
 
 pub fn inactivity() -> String {

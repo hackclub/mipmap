@@ -548,7 +548,7 @@
                 if (missing >= 0) go(missing);
                 else
                     failure = {
-                        text: `Couldn't finish the tutorial: ${message(e)}`,
+                        text: `Couldn't finish the onboarding: ${message(e)}`,
                         retry: end,
                     };
                 return;
@@ -881,7 +881,7 @@
     class="onboarding"
     class:out={phase === "out"}
     role="region"
-    aria-label="Tutorial"
+    aria-label="Onboarding"
     bind:this={root}
     bind:clientWidth={view_width}
     bind:clientHeight={view_height}
@@ -986,7 +986,7 @@
             disabled={at <= first || busy}
             onclick={() => rewind(first)}
         >
-            Restart
+            Restart Onboarding
         </button>
     </div>
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
     import SiteHead from "$lib/SiteHead.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
-    import LibraryPicker, { type Library } from "$lib/docs/LibraryPicker.svelte";
+    import LibraryPicker, { tier_labels, type Library } from "$lib/docs/LibraryPicker.svelte";
 
     let { data } = $props();
 
@@ -28,7 +28,8 @@
         {
             name: "SDL",
             description: "Cross-platform windows, input and audio",
-            note: "for doing window stuff",
+            tier: "window",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "SDL website", href: "https://www.libsdl.org/" },
                 { text: "SDL3 documentation", href: "https://wiki.libsdl.org/SDL3/FrontPage" },
@@ -37,7 +38,8 @@
         {
             name: "GLFW",
             description: "Lightweight windows and input for OpenGL and Vulkan",
-            note: "for doing window stuff",
+            tier: "window",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "GLFW website", href: "https://www.glfw.org/" },
                 { text: "GLFW quick guide", href: "https://www.glfw.org/docs/latest/quick_guide.html" },
@@ -46,6 +48,7 @@
         {
             name: "OpenGL",
             description: "Cross-platform graphics library",
+            tier: "romeo",
             links: [
                 { text: "LearnOpenGL", href: "https://learnopengl.com/" },
                 { text: "docs.gl API reference", href: "https://docs.gl/" },
@@ -55,6 +58,7 @@
         {
             name: "Vulkan",
             description: "Low-level cross-platform graphics library",
+            tier: "sierra",
             links: [
                 { text: "How to Vulkan", href: "https://howtovulkan.com/" },
                 { text: "Vulkan Guide", href: "https://vkguide.dev/" },
@@ -64,6 +68,7 @@
         {
             name: "Direct3D",
             description: "Microsoft's graphics library",
+            tier: "romeo",
             links: [
                 { text: "Direct3D 12 programming guide", href: "https://learn.microsoft.com/en-us/windows/win32/direct3d12/directx-12-programming-guide" },
                 { text: "Learning DirectX 12 (3D Game Engine Programming)", href: "https://www.3dgep.com/learning-directx-12-1/" },
@@ -72,6 +77,7 @@
         {
             name: "wgpu",
             description: "Rust graphics library based on WebGPU",
+            tier: "romeo",
             links: [
                 { text: "wgpu website", href: "https://wgpu.rs/" },
                 { text: "Learn Wgpu", href: "https://sotrh.github.io/learn-wgpu/" },
@@ -81,6 +87,7 @@
         {
             name: "bgfx",
             description: "C/C++ graphics library that runs on top of every major API",
+            tier: "romeo",
             links: [
                 { text: "bgfx documentation", href: "https://bkaradzic.github.io/bgfx/" },
                 { text: "bgfx examples", href: "https://bkaradzic.github.io/bgfx/examples.html" },
@@ -90,6 +97,8 @@
         {
             name: "sokol",
             description: "Single-header C libraries for windows, graphics and audio",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "sokol on GitHub", href: "https://github.com/floooh/sokol" },
                 { text: "sokol samples", href: "https://floooh.github.io/sokol-html5/" },
@@ -99,6 +108,8 @@
         {
             name: "miniquad",
             description: "Minimal cross-platform Rust rendering library",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "miniquad on GitHub", href: "https://github.com/not-fl3/miniquad" },
                 { text: "miniquad documentation", href: "https://docs.rs/miniquad" },
@@ -107,6 +118,7 @@
         {
             name: "Metal",
             description: "Apple's graphics library",
+            tier: "romeo",
             links: [
                 { text: "Metal overview", href: "https://developer.apple.com/metal/" },
                 { text: "Metal documentation", href: "https://developer.apple.com/documentation/metal" },
@@ -115,6 +127,7 @@
         {
             name: "Software renderer",
             description: "Drawing every pixel yourself on the CPU",
+            tier: "sierra",
             links: [
                 { text: "tinyrenderer: build a software renderer in a few hundred lines", href: "https://github.com/ssloy/tinyrenderer/wiki" },
                 { text: "Scratchapixel", href: "https://www.scratchapixel.com/" },
@@ -123,6 +136,7 @@
         {
             name: "Bare metal",
             description: "Drawing straight to the hardware, no OS",
+            tier: "sierra",
             links: [
                 { text: "Hack Club Genesis", href: "https://genesis.hackclub.com" },
                 { text: "Writing an OS in Rust", href: "https://os.phil-opp.com/" },
@@ -133,6 +147,7 @@
         {
             name: "WebGL",
             description: "OpenGL in the browser",
+            tier: "romeo",
             links: [
                 { text: "WebGL Fundamentals", href: "https://webglfundamentals.org/" },
                 { text: "MDN WebGL API", href: "https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API" },
@@ -141,6 +156,8 @@
         {
             name: "LWJGL",
             description: "Java bindings for OpenGL, Vulkan, GLFW and more",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "LWJGL website", href: "https://www.lwjgl.org/" },
                 { text: "LWJGL getting started guide", href: "https://www.lwjgl.org/guide" },
@@ -150,6 +167,8 @@
         {
             name: "Silk.NET",
             description: "C# bindings for OpenGL, Vulkan, GLFW and more",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "Silk.NET website", href: "https://dotnet.github.io/Silk.NET/" },
                 { text: "Silk.NET OpenGL tutorial", href: "https://dotnet.github.io/Silk.NET/docs/opengl/c1/1-hello-window.html" },
@@ -159,6 +178,8 @@
         {
             name: "OpenTK",
             description: "C# bindings for OpenGL, OpenAL and windowing",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "OpenTK website", href: "https://opentk.net/" },
                 { text: "OpenTK tutorials", href: "https://opentk.net/learn/index.html" },
@@ -168,6 +189,8 @@
         {
             name: "go-gl",
             description: "Go bindings for OpenGL and GLFW",
+            tier: "romeo",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "go-gl OpenGL bindings", href: "https://github.com/go-gl/gl" },
                 { text: "go-gl GLFW bindings", href: "https://github.com/go-gl/glfw" },
@@ -177,6 +200,7 @@
         {
             name: "moderngl",
             description: "Python wrapper for modern OpenGL",
+            tier: "romeo",
             links: [
                 { text: "moderngl documentation", href: "https://moderngl.readthedocs.io/" },
                 { text: "moderngl on GitHub", href: "https://github.com/moderngl/moderngl" },
@@ -185,6 +209,8 @@
         {
             name: "winit",
             description: "Rust library for windows and input",
+            tier: "window",
+            note: "for opening the window and managing events such as input",
             links: [
                 { text: "winit documentation", href: "https://docs.rs/winit" },
                 { text: "winit on GitHub", href: "https://github.com/rust-windowing/winit" },
@@ -193,6 +219,7 @@
         {
             name: "glow",
             description: "Rust bindings for OpenGL, OpenGL ES and WebGL",
+            tier: "romeo",
             links: [
                 { text: "glow documentation", href: "https://docs.rs/glow" },
                 { text: "glow on GitHub", href: "https://github.com/grovesNL/glow" },
@@ -246,9 +273,10 @@
             <h2>More Specific Resources</h2>
         </header>
         <div class="libraries">
-            {#each libraries as { name, note, description, links }}
+            {#each libraries as { name, note, description, tier, links }}
                 <section class="card">
                     <h3>{name}{#if note} ({note}){/if}</h3>
+                    <p class="tier">{tier_labels[tier]}</p>
                     <p class="description">{description}</p>
                     {#if links.length}
                         <ul>
@@ -263,7 +291,7 @@
             {/each}
         </div>
         <header class="card section">
-            <h2>Misc</h2>
+            <h2>Other things that might help you out</h2>
         </header>
         <section class="card wide">
             <ul>
@@ -425,6 +453,16 @@
 
     .description + ul {
         margin-top: 0.5rem;
+    }
+
+    .tier {
+        display: inline-block;
+        margin: 0.35rem 0 0;
+        padding: 0.1rem 0.6rem;
+        background-color: #4f2f1f;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 700;
     }
 
     h3 {

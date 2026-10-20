@@ -148,7 +148,7 @@ pub async fn purchase_item(
             .fetch_all(&mut *tx)
             .await?;
     if ordered.contains(&(node.id as i32)) {
-        return Err(reject("item already purchased"));
+        return Err(reject("Item already redeemed"));
     }
     let available = if sticker {
         !locked.sticker_skipped && unlocked.contains(&(STICKER_TOKEN as i32))
@@ -186,7 +186,9 @@ pub async fn purchase_item(
 #[post("/skip-sticker")]
 pub async fn skip_sticker(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
     let mut tx = pool.begin().await?;
-    lock_user(&mut tx, user_id, false).await?;
+    if lock_user(&mut tx, user_id, false).await?.sticker_skipped {
+        return Err(reject("Sticker already skipped"));
+    }
     if !unlocked(&mut *tx, user_id).await?.contains(&(STICKER_TOKEN as i32)) {
         return Err(reject("No Tokens available"));
     }
@@ -200,7 +202,7 @@ pub async fn skip_sticker(User(user_id): User, pool: web::Data<PgPool>) -> Resul
     .execute(&mut *tx)
     .await?;
     if skipped.rows_affected() == 0 {
-        return Err(reject("item already purchased"));
+        return Err(reject("Item already redeemed"));
     }
     tx.commit().await?;
     dashboard::respond(&pool, user_id).await

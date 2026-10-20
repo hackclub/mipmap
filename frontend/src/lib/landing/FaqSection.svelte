@@ -83,11 +83,13 @@
     <div>
         Yep! Hack Club Mipmap is a free online
         program where you track time towards engine-less games to accumulate
-        Mips, which you can then put towards unlocking
-        prizes in your Tech Tree. You can get
+        Mips (one of Hack Club Mipmap's currencies - you'll learn about this in
+        the onboarding!), which you can then put towards unlocking
+        prizes in order along your Tech Tree. You can get
         things like video games, books, monitors, tools, and a bunch of other
         goodies thrown in there. You can also boost how many
-        Mips you get through a bunch of means.
+        Mips you get through a bunch of means (Snapshots, referrals, limited time
+        challenges, feedback opportunities, and more).
     </div>
 {/snippet}
 {@render faq_card(0, faq_1)}
@@ -105,36 +107,37 @@
             <li>
                 <h3>Tier Quebec</h3>
                 <p>
-                    This tier is for custom 2D game engines. Maybe you're doing
-                    it in something like the JavaScript canvas; something that
-                    lets you draw a few basic shapes but beyond that, you're on
-                    your own.
+                    This tier is for custom 2D games without a real game
+                    engine. Maybe you're doing it in something like the
+                    JavaScript canvas; something that lets you draw a few basic
+                    shapes but beyond that, you're on your own. This tier is
+                    really open in what it accepts.
                 </p>
             </li>
             <li>
                 <h3>Tier Romeo</h3>
                 <p>
-                    This tier covers 3D games made with a low-level graphics
+                    This tier covers 2D or 3D games made with a low-level graphics
                     library. This includes OpenGL, DirectX, Metal, BGFX, and
                     more. Libraries in this tier must be only for talking to the
-                    GPU, they mustn't provide things like lighting. Ask in <a
+                    GPU, they mustn't provide things like lighting. Ask in the <a
                         href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
                         >#mipmap</a
-                    > if you're curious!
+                    > Slack channel if you're curious!
                 </p>
             </li>
             <li>
                 <h3>Tier Sierra</h3>
                 <p>
                     Projects in this tier use trickier graphics technologies and
-                    get a bit of a Mip boost compared
+                    get a bit of a Mips boost compared
                     to projects in
                     Tier Romeo. The only projects that
                     qualify are those that meet one of the following criteria:
                 </p>
                 <ul>
                     <li>Written using Vulkan</li>
-                    <li>Written on bare metal</li>
+                    <li>Written on bare metal (no operating system!)</li>
                     <li>
                         3D game written in a software renderer, that is using no
                         GPU library at all
@@ -155,7 +158,7 @@
 {#snippet faq_4()}
     <strong>But I don't know how to do any of this!</strong>
     <div>
-        That's totally alright. It's exactly why Hack Club Mipmap has a video series to teach the basics of graphics programming, along with
+        That's totally alright. It's exactly why Hack Club Mipmap has the Mipmap Docs, with a video to teach the basics of graphics programming, along with
         a few other notes. Scroll up a bit and click the big "Learn here!" button
         to find them.
     </div>
@@ -165,7 +168,7 @@
 {#snippet faq_5()}
     <strong>How do I track my time?</strong>
     <div>
-        In the dashboard, you'll link your <a
+        After you sign in and work through the onboarding, you'll link your <a
             href="https://hackatime.hackclub.com/">Hackatime</a
         >
         account. This is how your time is tracked so we know how many
@@ -186,8 +189,9 @@
         </p>
         <p>
             So here's the rule. You may use as much or as little AI as you feel
-            is necessary, but time spent AI coding will count for less than time
-            spent coding by hand. Note that Hackatime and the Mipmap dashboard will show all of your time by default, AI and all.
+            is necessary, but time spent AI coding will count for about a third less than
+            time spent coding by hand. Note that the hour tracking in Hackatime
+            does not take into account this deflation.
         </p>
         <p>
             You are welcome and encouraged to use these powerful new tools in
@@ -213,11 +217,11 @@
 {#snippet faq_8()}
     <strong>I have more questions!</strong>
     <div>
-        Ask in <a
+        Ask in the <a
             href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
             >#mipmap</a
         >
-        or shoot an <a href="mailto:brendan@hackclub.com">email</a>
+        Slack channel or shoot me an <a href="mailto:brendan@hackclub.com">email</a>.
     </div>
 {/snippet}
 {@render faq_card(7, faq_8)}

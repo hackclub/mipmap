@@ -61,11 +61,15 @@
         {#if load.data === false}
             <p class="note">
                 Your Hack Club account doesn't have a Slack account linked yet,
-                so the bot can't DM you
+                so the bot can't DM you (do it in <a
+                    href="https://auth.hackclub.com"
+                    target="_blank"
+                    rel="noopener">Hack Club Auth</a
+                >)
             </p>
         {/if}
         <label class="all">
-            <span>Enable all messages</span>
+            <span>Allow DMs from Steve the Sprite (Mipmap bot)</span>
             <input type="checkbox" bind:checked={fields.enabled} />
         </label>
         <ul>

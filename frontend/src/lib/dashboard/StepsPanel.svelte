@@ -13,7 +13,7 @@
         </li>
         <li>
             <h3>Step 2</h3>
-            <p>Get Mips</p>
+            <p>Get Mips after the project's reviewed</p>
         </li>
         <li>
             <h3>Step 3</h3>
@@ -27,7 +27,7 @@
             <h3>Step 4</h3>
             <p>
                 Use a Token to redeem a
-                prize and get it shipped to your
+                prize and get it sent to your
                 door!
             </p>
         </li>

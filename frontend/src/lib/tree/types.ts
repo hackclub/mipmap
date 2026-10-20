@@ -17,6 +17,7 @@ export interface Tree {
 export interface ItemMeta {
   title: string;
   description: string;
+  facts?: string;
   image: string;
 }
 

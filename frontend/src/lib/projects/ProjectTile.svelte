@@ -19,13 +19,16 @@
         onship: () => void;
     } = $props();
 
+    const round = $derived.by(() => {
+        const shipped_on = project.shipped_at?.slice(0, 10) ?? "";
+        return rounds.find((round) => round.ship_by >= shipped_on);
+    });
+
     const status_line = $derived.by(() => {
         if (project.status === "draft") return "";
-        const shipped_on = project.shipped_at?.slice(0, 10) ?? "";
-        const round = rounds.find((round) => round.ship_by >= shipped_on);
         const parts =
             project.status === "rejected"
-                ? ["Rejected"]
+                ? ["Rejected, check your Slack DMs for more details"]
                 : project.awaiting_id
                   ? ["Waiting for ID verification"]
                   : project.status === "shipped"
@@ -34,11 +37,15 @@
         if (round) {
             parts.unshift(`Round ${rounds.indexOf(round) + 1}`);
             if (project.status === "shipped") {
-                const started = new Date().toISOString().slice(0, 10) >= round.ship_by;
+                const today = new Date().toISOString().slice(0, 10);
                 parts.push(
-                    `reviewed in ${started ? days_left(round.review_by) : "--"}`,
+                    today > round.review_by
+                        ? "review running late"
+                        : `reviewed in ${today >= round.ship_by ? days_left(round.review_by) : "--"}`,
                 );
             }
+        } else if (project.status === "shipped") {
+            parts.push("Next round TBA");
         }
         return parts.join(" · ");
     });
@@ -103,7 +110,7 @@
     {#if status_line}
         <p class="status">
             {status_line}
-            {#if project.status === "shipped"}
+            {#if project.status === "shipped" && round}
                 <span class="note">
                     Reviews start once the round's ship-by date passes
                 </span>
@@ -130,7 +137,7 @@
                 />
             </svg>
         </button>
-        <span>{hours(seconds)} tracked</span>
+        <span>{hours(seconds)} tracked in total</span>
     </div>
     <button
         type="button"
@@ -159,11 +166,14 @@
     />
     <div class="ship" data-tour-ship={project.id}>
         {#if project.status === "shipped"}
-            <MipmapButton type="button" disabled>Reviewing</MipmapButton>
+            <MipmapButton type="button" disabled>In review</MipmapButton>
         {:else}
             <MipmapButton type="button" onclick={onship}>
                 {project.status === "draft" ? "Ship" : "Re-ship"}
             </MipmapButton>
+            {#if project.status !== "draft"}
+                <span class="reship">Pays out hours since last ship</span>
+            {/if}
         {/if}
     </div>
     {#if upload.error}
@@ -309,8 +319,15 @@
     .ship {
         grid-area: ship;
         display: flex;
-        justify-content: flex-end;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.25rem;
         align-self: end;
+    }
+
+    .reship {
+        font-size: 0.75em;
+        opacity: 0.8;
     }
 
     .error {

@@ -9,14 +9,15 @@
     const columns: [keyof (typeof rounds)[number], string][] = [
         ["ship_by", "You ship a project by..."],
         ["review_by", "We'll get it reviewed by..."],
-        ["fulfill_by", "After you claim prizes, they'll be shipped out by..."],
+        ["fulfill_by", "After you redeem prizes, they'll be sent out by..."],
     ];
 </script>
 
 <Section title="Fulfillment Rounds" {bounds} zoom={3} padded>
     <p>
-        You ship a project each of these dates, we'll make sure we review your
-        project and fulfill claimed prizes by the specified dates.
+        If you ship a project by each of these dates (end of day, UTC), we'll
+        make sure we review your project and fulfill redeemed prizes by the
+        specified dates.
     </p>
     <table>
         <thead>
@@ -36,7 +37,10 @@
             {/each}
         </tbody>
     </table>
-    <p>Maybe more to come...</p>
+    <p>
+        Maybe more to come...     ...gotta see how well Mipmap's doing so get your
+        friends to join!
+    </p>
 </Section>
 
 <style>

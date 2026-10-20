@@ -130,7 +130,7 @@ pub async fn same_origin(
                 })
         });
     if cross_site {
-        return Err(reject("Cross-site request blocked").into());
+        return Err(reject("Cross-site request blocked. Reload the page and try again").into());
     }
     next.call(req).await
 }
