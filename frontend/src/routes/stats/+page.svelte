@@ -104,6 +104,7 @@
     let clock = $state(Date.now());
     let attempted = 0;
     let timer = 0;
+    let destroyed = false;
 
     const ago = $derived.by(() => {
         const seconds = Math.max(0, Math.floor((clock - refreshed) / 1000));
@@ -114,7 +115,7 @@
 
     function schedule() {
         clearTimeout(timer);
-        if (document.hidden || refreshing) return;
+        if (destroyed || refreshing || !document.hasFocus()) return;
         timer = window.setTimeout(refresh, Math.max(0, attempted + refresh_ms - Date.now()));
     }
 
@@ -132,13 +133,19 @@
         refresh();
         const tick = setInterval(() => (clock = Date.now()), 1000);
         return () => {
+            destroyed = true;
             clearTimeout(timer);
             clearInterval(tick);
         };
     });
 </script>
 
-<svelte:document onvisibilitychange={schedule} />
+<svelte:window
+    onfocus={() => {
+        if (!refreshing) refresh();
+    }}
+    onblur={() => clearTimeout(timer)}
+/>
 
 <SiteHead
     title="Stats - Hack Club Mipmap"

@@ -83,6 +83,17 @@ pub fn spawn(pool: PgPool) {
 }
 
 async fn release(pool: &PgPool, table: &AirtableTable) -> anyhow::Result<()> {
+    let expired: Vec<String> = sqlx::query_scalar(
+        "UPDATE submission SET deleted_at = now()
+         WHERE record_id IS NULL AND queued IS NOT NULL AND sending_at IS NULL AND deleted_at IS NULL
+         AND created_at < now() - interval '30 days'
+         RETURNING id::text",
+    )
+    .fetch_all(pool)
+    .await?;
+    if !expired.is_empty() {
+        log::info!("Cancelled ships {} after 30 days waiting on ID verification", expired.join(", "));
+    }
     let stuck: Vec<String> = sqlx::query_scalar(
         "SELECT id::text FROM submission WHERE record_id IS NULL AND sending_at IS NOT NULL AND deleted_at IS NULL",
     )

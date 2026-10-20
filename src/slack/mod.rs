@@ -37,12 +37,15 @@ pub fn spawn(pool: PgPool) {
     notify::spawn(pool);
 }
 
+pub const UNCONFIRMED: &str = "Slack didn't confirm it, so it may have been sent and wasn't retried";
+
 pub enum SendError {
     RateLimited(u64),
     Unavailable(String),
     Down(anyhow::Error),
     Failed(anyhow::Error),
     Rejected(String),
+    Unconfirmed(anyhow::Error),
 }
 
 #[derive(Deserialize)]
@@ -74,7 +77,13 @@ pub async fn post(slack_id: &str, text: &str) -> Result<String, SendError> {
         }))
         .send()
         .await
-        .map_err(|e| SendError::Down(e.into()))?;
+        .map_err(|e| {
+            if e.is_connect() {
+                SendError::Down(e.into())
+            } else {
+                SendError::Unconfirmed(e.into())
+            }
+        })?;
     let status = response.status();
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         let wait = response
@@ -86,31 +95,30 @@ pub async fn post(slack_id: &str, text: &str) -> Result<String, SendError> {
         return Err(SendError::RateLimited(wait));
     }
     if status.is_server_error() {
-        return Err(SendError::Down(anyhow::anyhow!("Slack returned HTTP {status}")));
+        return Err(SendError::Unconfirmed(anyhow::anyhow!("Slack returned HTTP {status}")));
     }
     let posted: Posted = response
         .error_for_status()
         .map_err(|e| SendError::Failed(e.into()))?
         .json()
         .await
-        .map_err(|e| SendError::Down(e.into()))?;
+        .map_err(|e| SendError::Unconfirmed(e.into()))?;
     match (posted.ok, posted.ts, posted.error) {
         (true, Some(ts), _) => Ok(ts),
+        (true, None, _) => Err(SendError::Unconfirmed(anyhow::anyhow!("Slack didn't return a timestamp"))),
         (_, _, Some(error))
             if matches!(
                 error.as_str(),
                 "not_authed" | "invalid_auth" | "account_inactive" | "token_revoked" | "token_expired"
-                    | "missing_scope" | "no_permission" | "team_access_not_granted" | "access_denied"
+                    | "missing_scope"
             ) =>
         {
             Err(SendError::Unavailable(error))
         }
-        (_, _, Some(error))
-            if matches!(
-                error.as_str(),
-                "fatal_error" | "internal_error" | "service_unavailable" | "request_timeout"
-            ) =>
-        {
+        (_, _, Some(error)) if matches!(error.as_str(), "fatal_error" | "internal_error") => {
+            Err(SendError::Unconfirmed(anyhow::anyhow!("Slack returned {error}")))
+        }
+        (_, _, Some(error)) if matches!(error.as_str(), "service_unavailable" | "request_timeout") => {
             Err(SendError::Failed(anyhow::anyhow!("Slack returned {error}")))
         }
         (_, _, error) => Err(SendError::Rejected(error.unwrap_or_else(|| "unknown_error".into()))),

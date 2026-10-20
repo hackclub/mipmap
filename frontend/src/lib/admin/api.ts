@@ -70,6 +70,10 @@ export const review_snapshot = async (id: number, approve: boolean) => {
 
 export const set_mips = (id: number, body: { mips: number; reason: string }) =>
   post<User>(`users/${id}/mips`, body);
+export const adjust_mips = (
+  id: number,
+  body: { change: number; reason: string },
+) => post<User>(`users/${id}/mips/adjust`, body);
 
 export const set_banned = (
   id: number,
@@ -118,10 +122,12 @@ const post_empty = (path: string, body: unknown) =>
     if (!r.ok) await json(r);
   });
 
-export const send_announcement = (text: string) =>
-  post_empty("slack/announcements", { text });
-export const send_direct = (slack_id: string, text: string) =>
-  post_empty("slack/direct", { slack_id, text });
+export const send_key = (..._inputs: unknown[]) => crypto.randomUUID();
+
+export const send_announcement = (text: string, key: string) =>
+  post_empty("slack/announcements", { text, key });
+export const send_direct = (slack_id: string, text: string, key: string) =>
+  post_empty("slack/direct", { slack_id, text, key });
 
 export const fetch_locations = () => get_json<Locations>("/api/admin/locations");
 export const fetch_located_people = (country: string) =>
@@ -140,10 +146,10 @@ export const fetch_thread = (slack_id: string) =>
   get_json<SlackMessage[]>(
     `/api/admin/slack/threads/${encodeURIComponent(slack_id)}`,
   );
-export const reply = (slack_id: string, text: string) =>
+export const reply = (slack_id: string, text: string, key: string) =>
   post<SlackMessage[]>(
     `slack/threads/${encodeURIComponent(slack_id)}/reply`,
-    { text },
+    { text, key },
   );
 
 export const fetch_surveys = () =>

@@ -13,6 +13,7 @@
         send_announcement,
         send_direct,
         send_draft,
+        send_key,
     } from "./api";
     import { Pages } from "./pages.svelte";
     import type { Draft, LogEntry } from "./types";
@@ -40,6 +41,8 @@
     let text = $state("");
     let slack_id = $state("");
     let notice = $state("");
+    let sent = $state(0);
+    const key = $derived(send_key(text, slack_id, sent));
     const task = new Task();
     const drafts = new Load(fetch_drafts);
     drafts.run();
@@ -60,18 +63,22 @@
         task.run(async () => {
             notice = "";
             await action();
+            sent++;
             notice = done;
             log.reset();
         });
 
     const to_all = () =>
         run(async () => {
-            await send_announcement(text);
+            await send_announcement(text, key);
             text = "";
         }, "Announcement queued for everyone who gets announcements");
 
     const to_one = () =>
-        run(() => send_direct(slack_id, text), `Sent to ${slack_id.trim()}`);
+        run(
+            () => send_direct(slack_id, text, key),
+            `Sent to ${slack_id.trim()}`,
+        );
 
     const draft_action = (action: () => Promise<Draft[]>) =>
         task.run(async () => {
@@ -120,13 +127,13 @@
                         {/snippet}
                         <SlackText text={draft.text} footer />
                         {#snippet actions()}
-                            <button
-                                type="button"
+                            <HoldButton
+                                label="Send"
+                                duration={2000}
                                 disabled={task.pending}
-                                onclick={() =>
+                                onconfirm={() =>
                                     draft_action(() => send_draft(draft.id))}
-                                >Send</button
-                            >
+                            />
                             <button
                                 type="button"
                                 disabled={task.pending}

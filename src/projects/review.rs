@@ -74,6 +74,22 @@ impl Review {
         }
     }
 
+    fn status(&self) -> Option<Option<&str>> {
+        match &self.status {
+            None | Some(Value::Null) => Some(None),
+            Some(Value::String(status)) => Some(Some(status)),
+            _ => None,
+        }
+    }
+
+    fn code_url(&self) -> Option<&str> {
+        match &self.code_url {
+            None | Some(Value::Null) => Some(""),
+            Some(Value::String(url)) => Some(url),
+            _ => None,
+        }
+    }
+
     fn tier(&self) -> Option<Option<&'static str>> {
         match &self.tier {
             None | Some(Value::Null) => Some(None),
@@ -284,13 +300,31 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     let mut rejected = Vec::new();
     let mut tiers = Vec::new();
     let mut rates = Vec::new();
+    let superseded: HashSet<String> = sqlx::query_scalar(
+        "SELECT s.record_id FROM submission s
+         WHERE s.record_id = ANY($1) AND s.deleted_at IS NOT NULL
+         AND EXISTS (SELECT 1 FROM submission n WHERE n.project_id = s.project_id AND n.deleted_at IS NULL AND n.id > s.id)",
+    )
+    .bind(&present)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .collect();
     for (record_id, review) in reviews {
-        let (Some(record_hours), Some(record_rejected), Some(record_tier)) =
-            (review.hours(), review.rejected(), review.tier())
+        if superseded.contains(&record_id) {
+            if REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(record_id.clone()) {
+                log::warn!("Review {record_id} came back after its project reshipped, leaving it deleted");
+            }
+            continue;
+        }
+        let (Some(record_status), Some(record_hours), Some(record_code_url), Some(record_rejected), Some(record_tier)) =
+            (review.status(), review.hours(), review.code_url(), review.rejected(), review.tier())
         else {
             log::error!(
-                "Review {record_id} has unreadable hours ({:?}), rejected ({:?}) or tier ({:?}), skipping it",
+                "Review {record_id} has an unreadable status ({:?}), hours ({:?}), code URL ({:?}), rejected ({:?}) or tier ({:?}), skipping it",
+                review.status,
                 review.hours,
+                review.code_url,
                 review.rejected,
                 review.tier
             );
@@ -304,16 +338,9 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
             }
         };
         found.push(record_id);
-        statuses.push(review.status.as_ref().and_then(Value::as_str).map(str::to_string));
+        statuses.push(record_status.map(str::to_string));
         hours.push(record_hours);
-        code_urls.push(
-            review
-                .code_url
-                .as_ref()
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-        );
+        code_urls.push(record_code_url.to_string());
         rejected.push(record_rejected);
         tiers.push(record_tier);
         rates.push(rate);

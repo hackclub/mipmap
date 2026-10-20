@@ -14,6 +14,10 @@ enum Host {
 }
 
 const HOSTS: [Host; 3] = [Host::GitHub, Host::GitLab, Host::Codeberg];
+const GITLAB_ROUTES: [&str; 18] = [
+    "-", "badges", "blame", "blob", "builds", "commits", "create", "create_dir", "edit", "files",
+    "find_file", "new", "preview", "raw", "refs", "tree", "update", "wikis",
+];
 
 impl Host {
     fn domain(self) -> &'static str {
@@ -71,8 +75,12 @@ pub fn parse(link: &str) -> Result<Repo, ApiError> {
         .collect();
     match host {
         Host::GitLab => {
-            if let Some(end) = segments.iter().position(|segment| *segment == "-") {
-                segments.truncate(end);
+            if let Some(end) = segments
+                .iter()
+                .skip(2)
+                .position(|segment| GITLAB_ROUTES.contains(segment))
+            {
+                segments.truncate(end + 2);
             }
         }
         _ => segments.truncate(2),
@@ -162,5 +170,7 @@ mod tests {
         }
         assert_eq!(repo("gitlab.com/a/b/c").root(), "gitlab.com/a/b");
         assert!(repo("github.com/a/b/tree/main").overlaps(&repo("https://github.com/A/B")));
+        assert!(repo("gitlab.com/a/b/tree/main").overlaps(&repo("gitlab.com/a/b/blob/main/x")));
+        assert_eq!(repo("gitlab.com/a/b/c/raw/main/x").key(), "gitlab.com/a/b/c");
     }
 }

@@ -9,6 +9,8 @@ struct Source {
     changed: &'static str,
 }
 
+const HIDDEN: &[&str] = &["changed_at", "held_image", "hold_reasons"];
+
 const fn table(name: &'static str) -> Source {
     Source { name, table: name, changed: "updated_at" }
 }
@@ -93,10 +95,11 @@ fn field(name: &str, data_type: &str) -> Value {
 async fn set_up(pool: &PgPool, token: &str, base_id: &str) -> anyhow::Result<()> {
     let columns: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT table_name::text, column_name::text, data_type::text FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = ANY($1) AND column_name <> 'changed_at'
+         WHERE table_schema = 'public' AND table_name = ANY($1) AND column_name <> ALL($2)
          ORDER BY table_name, column_name <> 'id', ordinal_position",
     )
     .bind(SOURCES.iter().map(|source| source.name).collect::<Vec<_>>())
+    .bind(HIDDEN)
     .fetch_all(pool)
     .await?;
     let existing = tables(token, base_id).await?;
@@ -188,11 +191,12 @@ async fn sync(
 ) -> anyhow::Result<()> {
     let Source { name, table, changed } = source;
     let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
-        "SELECT (to_jsonb(t) - 'changed_at')::text FROM \"{name}\" t
+        "SELECT (to_jsonb(t) - $2::text[])::text FROM \"{name}\" t
          WHERE t.{changed} > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'
          ORDER BY t.id"
     )))
     .bind(name)
+    .bind(HIDDEN)
     .fetch_all(pool)
     .await?;
     if !rows.is_empty() {

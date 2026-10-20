@@ -67,7 +67,6 @@ async fn main() -> std::io::Result<()> {
     projects::review::spawn(database_pool.clone());
     projects::ship::spawn(database_pool.clone());
     stats::spawn(database_pool.clone());
-    snapshots::spawn_purge(database_pool.clone());
     slack::spawn(database_pool.clone());
     tree::spawn_images();
     uploads::warn_unconfigured();
@@ -78,6 +77,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(database_pool.clone())
+            .wrap(from_fn(accounts::session::migrate_cookie))
             .wrap(from_fn(middleware::cloudflare_only))
             .wrap(
                 DefaultHeaders::new()

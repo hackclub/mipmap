@@ -1,16 +1,19 @@
 use crate::error::{ApiError, reject_with};
 use actix_web::{
     FromRequest, HttpRequest, HttpResponse,
+    body::MessageBody,
     cookie::{Cookie, SameSite, time::Duration},
-    dev::Payload,
+    dev::{Payload, ServiceRequest, ServiceResponse},
     http::StatusCode,
+    middleware::Next,
     post, web,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{PgExecutor, PgPool};
 use std::{future::Future, pin::Pin};
 
-const COOKIE: &str = "session";
+const COOKIE: &str = "__Host-session";
+const LEGACY_COOKIE: &str = "session";
 
 fn hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
@@ -25,25 +28,55 @@ pub async fn create(executor: impl PgExecutor<'_>, user_id: i32) -> anyhow::Resu
     .bind(hash(&token))
     .execute(executor)
     .await?;
-    Ok(Cookie::build(COOKIE, token)
+    Ok(cookie(token))
+}
+
+fn cookie(token: String) -> Cookie<'static> {
+    Cookie::build(COOKIE, token)
         .path("/")
         .http_only(true)
         .secure(true)
         .same_site(SameSite::Lax)
         .max_age(Duration::days(400))
-        .finish())
+        .finish()
+}
+
+fn token(req: &HttpRequest) -> Option<Cookie<'static>> {
+    req.cookie(COOKIE).or_else(|| req.cookie(LEGACY_COOKIE))
+}
+
+pub async fn migrate_cookie(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let legacy = req.cookie(LEGACY_COOKIE);
+    let upgrade = req.cookie(COOKIE).is_none();
+    let mut res = next.call(req).await?;
+    let sets_session = res
+        .response()
+        .cookies()
+        .any(|cookie| cookie.name() == COOKIE || cookie.name() == LEGACY_COOKIE);
+    if let Some(legacy) = legacy.filter(|_| !sets_session) {
+        let response = res.response_mut();
+        if upgrade {
+            let _ = response.add_cookie(&cookie(legacy.value().to_string()));
+        }
+        let _ = response.add_removal_cookie(&Cookie::build(LEGACY_COOKIE, "").path("/").finish());
+    }
+    Ok(res)
 }
 
 #[post("/logout")]
 pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
-    if let Some(cookie) = req.cookie(COOKIE) {
+    if let Some(cookie) = token(&req) {
         sqlx::query("DELETE FROM session WHERE token_hash = $1")
             .bind(hash(cookie.value()))
             .execute(pool.get_ref())
             .await?;
     }
     let mut response = HttpResponse::NoContent().finish();
-    let _ = response.add_removal_cookie(&Cookie::build(COOKIE, "").path("/").finish());
+    let _ = response.add_removal_cookie(&Cookie::build(COOKIE, "").path("/").secure(true).finish());
+    let _ = response.add_removal_cookie(&Cookie::build(LEGACY_COOKIE, "").path("/").finish());
     Ok(response)
 }
 
@@ -60,7 +93,7 @@ pub struct Session {
 }
 
 pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<Session>> {
-    let Some(cookie) = req.cookie(COOKIE) else {
+    let Some(cookie) = token(req) else {
         return Ok(None);
     };
     let pool = req

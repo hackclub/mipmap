@@ -3,7 +3,7 @@
     import { Load, Task } from "$lib/load.svelte";
     import Field from "$lib/ui/Field.svelte";
     import LoadError from "$lib/ui/LoadError.svelte";
-    import { fetch_thread, fetch_threads, reply } from "./api";
+    import { fetch_thread, fetch_threads, reply, send_key } from "./api";
     import type { SlackMessage, Thread } from "./types";
     import SlackText from "./SlackText.svelte";
     import { decode, mrkdwn } from "./slack.svelte";
@@ -19,6 +19,7 @@
     const sending = new Task();
 
     const length = $derived([...mrkdwn(text.trim())].length);
+    const key = $derived(send_key(text, open?.slack_id));
     const name = (thread: Thread) => thread.user_name || thread.slack_id;
 
     const select = (thread: Thread) => {
@@ -36,7 +37,7 @@
         const load = conversation;
         if (!thread || !load || !length || length > limit) return;
         sending.run(async () => {
-            load.set(await reply(thread.slack_id, text));
+            load.set(await reply(thread.slack_id, text, key));
             text = "";
             threads.run();
         });

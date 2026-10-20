@@ -151,11 +151,7 @@ pub async fn image_flags(webp: &[u8]) -> Result<BTreeSet<String>, ApiError> {
 
 pub async fn text_flags(texts: &[&str]) -> Result<Vec<BTreeSet<String>>, ApiError> {
     let key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
-    let input = texts
-        .iter()
-        .map(|text| json!({ "type": "text", "text": text }))
-        .collect();
-    let flags = moderate(&key, Value::Array(input)).await.map_err(|e| {
+    let flags = moderate(&key, json!(texts)).await.map_err(|e| {
         log::warn!("Text moderation failed: {e:#}");
         reject("Couldn't check your text. Please try again")
     })?;

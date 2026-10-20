@@ -1,6 +1,7 @@
 <script lang="ts">
     import { message } from "$lib/api";
     import { short_time } from "$lib/format";
+    import HoldButton from "$lib/tree/HoldButton.svelte";
     import {
         display_name,
         fetch_held_snapshots,
@@ -69,16 +70,18 @@
                     <p class="caption">{snapshot.caption}</p>
                 </div>
                 {#snippet actions()}
-                    <button
-                        type="button"
+                    <HoldButton
+                        label="Approve"
+                        duration={500}
                         disabled={busy !== null}
-                        onclick={() => review(snapshot.id, true)}>Approve</button
-                    >
-                    <button
-                        type="button"
+                        onconfirm={() => review(snapshot.id, true)}
+                    />
+                    <HoldButton
+                        label="Reject"
+                        duration={500}
                         disabled={busy !== null}
-                        onclick={() => review(snapshot.id, false)}>Reject</button
-                    >
+                        onconfirm={() => review(snapshot.id, false)}
+                    />
                 {/snippet}
             </Card>
         {/snippet}
@@ -173,10 +176,5 @@
 
     .body .caption {
         flex: 1 1 12rem;
-    }
-
-    button:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
     }
 </style>

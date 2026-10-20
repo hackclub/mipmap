@@ -3,7 +3,7 @@ use crate::{
         hackatime::{self, Totals},
         session::User,
     },
-    admin, dashboard, env,
+    admin, dashboard,
     error::{ApiError, reject, reject_with},
     projects::{self, Project},
     uploads,
@@ -422,31 +422,6 @@ pub async fn held_image(
         .content_type("image/webp")
         .insert_header(("Cache-Control", "private, no-store"))
         .body(image))
-}
-
-pub fn spawn_purge(pool: PgPool) {
-    actix_web::rt::spawn(async move {
-        let mut interval = env::interval_secs("SNAPSHOT_PURGE_INTERVAL_SECS", 3600);
-        loop {
-            interval.tick().await;
-            if let Err(e) = purge(&pool).await {
-                log::error!("Snapshot purge failed: {e:#}");
-            }
-        }
-    });
-}
-
-async fn purge(pool: &PgPool) -> sqlx::Result<()> {
-    sqlx::query(
-        "UPDATE snapshot SET deleted_at = now(), held_image = NULL
-         WHERE held_image IS NOT NULL AND deleted_at IS NULL AND created_at < now() - interval '90 days'",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DELETE FROM snapshot_rejection WHERE created_at < now() - interval '90 days'")
-        .execute(pool)
-        .await?;
-    Ok(())
 }
 
 #[cfg(test)]

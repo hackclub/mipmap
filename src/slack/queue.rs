@@ -1,4 +1,4 @@
-use super::{RECIPIENTS, SendError};
+use super::{RECIPIENTS, SendError, UNCONFIRMED};
 use actix_web::rt::time::sleep;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -39,65 +39,98 @@ async fn send_next(pool: &PgPool) -> anyhow::Result<Duration> {
          LEFT JOIN \"user\" u ON u.id = m.user_id
          LEFT JOIN slack_preference p ON p.user_id = m.user_id
          WHERE NOT m.incoming AND m.sent_at IS NULL AND m.skipped_at IS NULL AND m.failed_at IS NULL
+         AND m.sending_at IS NULL
          ORDER BY m.announcement_id IS NOT NULL, m.id LIMIT 1
          FOR UPDATE OF m SKIP LOCKED"
     )))
     .fetch_optional(&mut *tx)
     .await?;
     let Some((id, slack_id, text, attempts, allowed)) = next else {
+        tx.commit().await?;
+        abandon_stuck(pool).await?;
         return Ok(IDLE);
     };
+    let column = if allowed { "sending_at" } else { "skipped_at" };
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE slack_message SET {column} = now() WHERE id = $1")))
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
     if !allowed {
-        sqlx::query("UPDATE slack_message SET skipped_at = now() WHERE id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
         return Ok(Duration::ZERO);
     }
-    let wait = match super::post(&slack_id, &text).await {
+    let release = || {
+        sqlx::query("UPDATE slack_message SET sending_at = NULL WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+    };
+    let fail = |error: String| {
+        sqlx::query("UPDATE slack_message SET failed_at = now(), error = $2, attempts = attempts + 1 WHERE id = $1")
+            .bind(id)
+            .bind(error)
+            .execute(pool)
+    };
+    Ok(match super::post(&slack_id, &text).await {
         Ok(ts) => {
             sqlx::query("UPDATE slack_message SET sent_at = now(), ts = $2, attempts = attempts + 1 WHERE id = $1")
                 .bind(id)
                 .bind(ts)
-                .execute(&mut *tx)
+                .execute(pool)
                 .await?;
             SEND_EVERY
         }
-        Err(SendError::RateLimited(secs)) => return Ok(Duration::from_secs(secs)),
+        Err(SendError::RateLimited(secs)) => {
+            release().await?;
+            Duration::from_secs(secs)
+        }
         Err(SendError::Unavailable(error)) => {
             log::error!("Slack is unavailable, pausing DMs: {error}");
-            return Ok(UNAVAILABLE_WAIT);
+            release().await?;
+            UNAVAILABLE_WAIT
         }
         Err(SendError::Down(error)) => {
-            log::warn!("Slack didn't respond to message {id}, trying again soon: {error:#}");
-            return Ok(RETRY_WAIT);
+            log::warn!("Couldn't reach Slack for message {id}, trying again soon: {error:#}");
+            release().await?;
+            RETRY_WAIT
         }
         Err(SendError::Rejected(error)) => {
-            sqlx::query(
-                "UPDATE slack_message SET failed_at = now(), error = $2, attempts = attempts + 1 WHERE id = $1",
-            )
-            .bind(id)
-            .bind(error)
-            .execute(&mut *tx)
-            .await?;
+            fail(error).await?;
             SEND_EVERY
+        }
+        Err(SendError::Unconfirmed(error)) => {
+            log::warn!("Slack didn't confirm message {id}, not retrying it: {error:#}");
+            fail(UNCONFIRMED.to_string()).await?;
+            RETRY_WAIT
         }
         Err(SendError::Failed(error)) => {
             log::warn!("Sending Slack message {id} failed: {error:#}");
             sqlx::query(
-                "UPDATE slack_message SET attempts = attempts + 1, error = $2,
+                "UPDATE slack_message SET sending_at = NULL, attempts = attempts + 1, error = $2,
                      failed_at = CASE WHEN attempts + 1 >= $3 THEN now() END
                  WHERE id = $1",
             )
             .bind(id)
             .bind(format!("{error:#}"))
             .bind(MAX_ATTEMPTS)
-            .execute(&mut *tx)
+            .execute(pool)
             .await?;
             if attempts + 1 >= MAX_ATTEMPTS { SEND_EVERY } else { RETRY_WAIT }
         }
-    };
-    tx.commit().await?;
-    Ok(wait)
+    })
+}
+
+async fn abandon_stuck(pool: &PgPool) -> sqlx::Result<()> {
+    let stuck = sqlx::query(
+        "UPDATE slack_message SET failed_at = now(), error = $1
+         WHERE sending_at < now() - interval '5 minutes'
+         AND sent_at IS NULL AND skipped_at IS NULL AND failed_at IS NULL",
+    )
+    .bind(UNCONFIRMED)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    if stuck > 0 {
+        log::warn!("Gave up on {stuck} Slack messages that were interrupted while sending");
+    }
+    Ok(())
 }

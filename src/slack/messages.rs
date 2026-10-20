@@ -15,12 +15,19 @@ pub fn snapshot() -> String {
     "You've tracked enough time to send a Snapshot today!".into()
 }
 
+fn literal(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
 pub fn ship_approved(project: &str, mips: i32) -> String {
-    format!("*{project}* was approved! You earned {mips} Mips.")
+    format!("*{}* was approved! You earned {mips} Mips.", literal(project))
 }
 
 pub fn ship_rejected(project: &str) -> String {
-    format!("*{project}* wasn't approved this time. A rejection reason should come to these DMs shortly.")
+    format!(
+        "*{}* wasn't approved this time. A rejection reason should come to these DMs shortly.",
+        literal(project)
+    )
 }
 
 pub fn inactivity() -> String {

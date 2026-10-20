@@ -1,4 +1,4 @@
-use super::{RECIPIENTS, SendError, TEXT_LIMIT, mrkdwn};
+use super::{RECIPIENTS, SendError, TEXT_LIMIT, UNCONFIRMED, mrkdwn};
 use crate::{
     admin::{Admin, admin_ids},
     error::{ApiError, reject, reject_with},
@@ -40,6 +40,14 @@ fn slack_id(slack_id: &str) -> Result<&str, ApiError> {
     Ok(slack_id)
 }
 
+fn dedupe_key(key: &str) -> Result<String, ApiError> {
+    let valid = (1..=64).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    if !valid {
+        return Err(reject("Reload the page and try again"));
+    }
+    Ok(format!("admin:{key}"))
+}
+
 fn configured() -> Result<(), ApiError> {
     super::token()
         .map(|_| ())
@@ -61,6 +69,10 @@ fn send_error(error: SendError) -> ApiError {
             log::warn!("Sending a Slack message failed: {error:#}");
             reject("Slack had a temporary problem, try again in a minute")
         }
+        SendError::Unconfirmed(error) => {
+            log::warn!("Slack didn't confirm a message: {error:#}");
+            reject("Slack didn't confirm the message, so it may have been sent. Check Slack before sending it again")
+        }
     }
 }
 
@@ -81,31 +93,74 @@ async fn audit(
     Ok(())
 }
 
-async fn send_now(pool: &PgPool, admin_id: i32, slack_id: &str, kind: &str, text: &str) -> Result<(), ApiError> {
-    let mut tx = pool.begin().await?;
-    let (id, user_id): (i32, Option<i32>) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "INSERT INTO slack_message (slack_id, user_id, kind, text, admin_id)
-         VALUES ($1, {USER_FOR_SLACK_ID}, $2, $3, $4) RETURNING id, user_id"
+async fn send_now(
+    pool: &PgPool,
+    admin_id: i32,
+    slack_id: &str,
+    kind: &str,
+    text: &str,
+    key: &str,
+) -> Result<(), ApiError> {
+    let key = dedupe_key(key)?;
+    let claimed: Option<(i32, Option<i32>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "INSERT INTO slack_message (slack_id, user_id, kind, text, admin_id, dedupe_key, sending_at)
+         VALUES ($1, {USER_FOR_SLACK_ID}, $2, $3, $4, $5, now())
+         ON CONFLICT (dedupe_key) DO NOTHING RETURNING id, user_id"
     )))
     .bind(slack_id)
     .bind(kind)
     .bind(text)
     .bind(admin_id)
-    .fetch_one(&mut *tx)
+    .bind(&key)
+    .fetch_optional(pool)
     .await?;
-    let summary = match kind {
-        "reply" => format!("Replied to {slack_id} on Slack"),
-        _ => format!("Sent a Slack DM to {slack_id}"),
-    };
-    audit(&mut *tx, admin_id, &format!("slack_{kind}"), user_id, summary).await?;
-    let ts = super::post(slack_id, text).await.map_err(send_error)?;
-    sqlx::query("UPDATE slack_message SET sent_at = now(), ts = $2 WHERE id = $1")
-        .bind(id)
-        .bind(ts)
-        .execute(&mut *tx)
+    let Some((id, user_id)) = claimed else {
+        let (sent, failed): (bool, bool) = sqlx::query_as(
+            "SELECT sent_at IS NOT NULL, failed_at IS NOT NULL FROM slack_message WHERE dedupe_key = $1",
+        )
+        .bind(&key)
+        .fetch_one(pool)
         .await?;
-    tx.commit().await?;
-    Ok(())
+        return match (sent, failed) {
+            (true, _) => Ok(()),
+            (_, true) => Err(reject(
+                "This message may have been sent already. Check Slack, then change the message to send it again",
+            )),
+            _ => Err(reject_with(StatusCode::CONFLICT, "This message is still sending")),
+        };
+    };
+    match super::post(slack_id, text).await {
+        Ok(ts) => {
+            let mut tx = pool.begin().await?;
+            sqlx::query("UPDATE slack_message SET sent_at = now(), ts = $2 WHERE id = $1")
+                .bind(id)
+                .bind(ts)
+                .execute(&mut *tx)
+                .await?;
+            let summary = match kind {
+                "reply" => format!("Replied to {slack_id} on Slack"),
+                _ => format!("Sent a Slack DM to {slack_id}"),
+            };
+            audit(&mut *tx, admin_id, &format!("slack_{kind}"), user_id, summary).await?;
+            tx.commit().await?;
+            Ok(())
+        }
+        Err(error @ SendError::Unconfirmed(_)) => {
+            sqlx::query("UPDATE slack_message SET failed_at = now(), error = $2 WHERE id = $1")
+                .bind(id)
+                .bind(UNCONFIRMED)
+                .execute(pool)
+                .await?;
+            Err(send_error(error))
+        }
+        Err(error) => {
+            sqlx::query("DELETE FROM slack_message WHERE id = $1")
+                .bind(id)
+                .execute(pool)
+                .await?;
+            Err(send_error(error))
+        }
+    }
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -194,6 +249,7 @@ async fn broadcast(conn: &mut PgConnection, admin_id: i32, id: i32, kind: &str, 
 #[derive(Deserialize)]
 struct AnnouncementRequest {
     text: String,
+    key: String,
 }
 
 #[post("/slack/announcements")]
@@ -204,15 +260,21 @@ async fn create_announcement(
 ) -> Result<HttpResponse, ApiError> {
     configured()?;
     let text = text(&body.text)?;
+    let key = dedupe_key(&body.key)?;
     let mut tx = pool.begin().await?;
-    let id: i32 = sqlx::query_scalar(
-        "INSERT INTO slack_announcement (kind, text, admin_id, sent_at)
-         VALUES ('announcement', $1, $2, now()) RETURNING id",
+    let Some(id): Option<i32> = sqlx::query_scalar(
+        "INSERT INTO slack_announcement (kind, text, admin_id, sent_at, dedupe_key)
+         VALUES ('announcement', $1, $2, now(), $3)
+         ON CONFLICT (dedupe_key) DO NOTHING RETURNING id",
     )
     .bind(text)
     .bind(admin_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    .bind(key)
+    .fetch_optional(&mut *tx)
+    .await?
+    else {
+        return Ok(HttpResponse::NoContent().finish());
+    };
     let recipients = broadcast(&mut tx, admin_id, id, "announcement", text).await?;
     let summary = format!("Sent Slack announcement #{id} to {}", people(recipients));
     audit(&mut *tx, admin_id, "slack_announcement", None, summary).await?;
@@ -289,6 +351,7 @@ async fn dismiss_draft(
 struct DirectRequest {
     slack_id: String,
     text: String,
+    key: String,
 }
 
 #[post("/slack/direct")]
@@ -299,7 +362,7 @@ async fn send_direct(
 ) -> Result<HttpResponse, ApiError> {
     configured()?;
     let slack_id = slack_id(&body.slack_id)?;
-    send_now(&pool, admin_id, slack_id, "direct", text(&body.text)?).await?;
+    send_now(&pool, admin_id, slack_id, "direct", text(&body.text)?, &body.key).await?;
     Ok(HttpResponse::NoContent().finish())
 }
 
@@ -409,6 +472,7 @@ async fn get_thread(_: Admin, pool: web::Data<PgPool>, path: web::Path<String>) 
 #[derive(Deserialize)]
 struct ReplyRequest {
     text: String,
+    key: String,
 }
 
 #[post("/slack/threads/{slack_id}/reply")]
@@ -420,6 +484,6 @@ async fn reply(
 ) -> Result<HttpResponse, ApiError> {
     configured()?;
     let slack_id = slack_id(&path)?;
-    send_now(&pool, admin_id, slack_id, "reply", text(&body.text)?).await?;
+    send_now(&pool, admin_id, slack_id, "reply", text(&body.text)?, &body.key).await?;
     Ok(HttpResponse::Ok().json(thread(&pool, slack_id).await?))
 }

@@ -30,7 +30,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
         web::scope("/admin")
             .wrap(DefaultHeaders::new().add((header::CACHE_CONTROL, "no-store")))
             .service((get_overview, get_ships, set_bonus, get_snapshots, shadowban, get_users))
-            .service((set_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
+            .service((set_mips, adjust_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
             .service((get_stickers, create_wave, fulfill_wave, wave_csv))
             .service((get_held_snapshots, review_snapshot, get_snapshot_rejections))
             .configure(crate::slack::admin_routes)
@@ -427,30 +427,29 @@ async fn review_snapshot(
     body: web::Json<ReviewRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let id = id.into_inner();
-    let unknown = || reject("Unknown Snapshot");
+    let mut tx = pool.begin().await?;
+    let (user_id, author, image): (i32, String, Vec<u8>) = sqlx::query_as(
+        "SELECT user_id, display_name, held_image FROM snapshot
+         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| reject("Unknown Snapshot"))?;
     let url = if body.approve {
-        let image: Vec<u8> = sqlx::query_scalar(
-            "SELECT held_image FROM snapshot WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL",
-        )
-        .bind(id)
-        .fetch_optional(pool.get_ref())
-        .await?
-        .ok_or_else(unknown)?;
         Some(crate::uploads::store(image).await?)
     } else {
         None
     };
-    let mut tx = pool.begin().await?;
-    let (user_id, author): (i32, String) = sqlx::query_as(
+    sqlx::query(
         "UPDATE snapshot SET held_image = NULL, image_url = COALESCE($2, image_url),
          deleted_at = CASE WHEN $2 IS NULL THEN now() END
-         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL RETURNING user_id, display_name",
+         WHERE id = $1",
     )
     .bind(id)
     .bind(&url)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(unknown)?;
+    .execute(&mut *tx)
+    .await?;
     let (action, verb) = if url.is_some() {
         ("approve_snapshot", "Approved")
     } else {
@@ -613,6 +612,46 @@ async fn set_mips(
         Some(reason),
     )
     .await?;
+    let user = fetch_user(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(HttpResponse::Ok().json(user))
+}
+
+#[derive(Deserialize)]
+struct AdjustMipsRequest {
+    change: i32,
+    reason: String,
+}
+
+#[post("/users/{id}/mips/adjust")]
+async fn adjust_mips(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+    body: web::Json<AdjustMipsRequest>,
+) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let reason = reason(&body.reason)?;
+    if body.change == 0 {
+        return Err(reject("Enter how many Mips to add or remove"));
+    }
+    not_self(admin_id, id)?;
+    let mut tx = pool.begin().await?;
+    let (name, before, _) = lock_user(&mut tx, id).await?;
+    let after = i64::from(before) + i64::from(body.change);
+    if !(0..=i64::from(MAX_MIPS)).contains(&after) {
+        return Err(reject(format!("That would leave them with {after} Mips, it has to be from 0 to {MAX_MIPS}")));
+    }
+    sqlx::query("UPDATE \"user\" SET mips = $2 WHERE id = $1")
+        .bind(id)
+        .bind(after as i32)
+        .execute(&mut *tx)
+        .await?;
+    let summary = match body.change {
+        change if change > 0 => format!("Added {change} Mips to {}", label(&name, id)),
+        change => format!("Removed {} Mips from {}", change.unsigned_abs(), label(&name, id)),
+    };
+    record(&mut tx, admin_id, "adjust_mips", id, format!("{summary} ({before} to {after})"), Some(reason)).await?;
     let user = fetch_user(&mut tx, id).await?;
     tx.commit().await?;
     Ok(HttpResponse::Ok().json(user))
@@ -858,8 +897,8 @@ async fn get_audit(
     Ok(HttpResponse::Ok().json(actions))
 }
 
-const PENDING_STICKERS: &str =
-    "node_id = $1 AND deleted_at IS NULL AND NOT fulfilled AND sticker_wave_id IS NULL";
+const PENDING_STICKERS: &str = "node_id = $1 AND deleted_at IS NULL AND NOT fulfilled AND sticker_wave_id IS NULL
+    AND EXISTS (SELECT 1 FROM \"user\" u WHERE u.id = \"order\".user_id AND NOT u.is_banned AND u.deleted_at IS NULL)";
 const NO_TIME_LOGGED: &str = "NOT EXISTS (
     SELECT 1 FROM project p WHERE p.user_id = \"order\".user_id AND p.deleted_at IS NULL AND p.total_seconds > 0
 )";
@@ -1007,10 +1046,15 @@ fn csv_line<S: AsRef<str>>(fields: impl IntoIterator<Item = S>) -> String {
         .into_iter()
         .map(|field| {
             let field = field.as_ref();
+            let field = if field.starts_with(['=', '+', '-', '@', '\t', '\r']) {
+                format!("'{field}")
+            } else {
+                field.to_string()
+            };
             if field.contains([',', '"', '\n', '\r']) {
                 format!("\"{}\"", field.replace('"', "\"\""))
             } else {
-                field.to_string()
+                field
             }
         })
         .collect();
