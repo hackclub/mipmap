@@ -11,8 +11,8 @@
     {@html rendered}
     {#if footer}
         <p class="footer">
-            Manage these DMs from your
-            <a href="/dashboard" target="_blank">Mipmap dashboard</a>
+            <a href="/notifications" target="_blank">Manage these DMs</a> ·
+            <span class="link">Unsubscribe</span>
         </p>
     {/if}
 </div>
@@ -29,8 +29,13 @@
         margin: 0;
     }
 
-    .slack :global(a) {
+    .slack :global(a),
+    .link {
         color: #a2b8eb;
+    }
+
+    .link {
+        text-decoration: underline;
     }
 
     .slack :global(code) {

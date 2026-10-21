@@ -1,14 +1,30 @@
 use crate::{
-    accounts::session::User,
+    accounts::{
+        login_redirect,
+        session::{self, User},
+    },
     error::{ApiError, reject},
 };
-use actix_web::{HttpResponse, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, get, post, web};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service((get_preferences, set_preferences, join_channel));
+    cfg.service((get_preferences, set_preferences, unsubscribe, join_channel));
+}
+
+pub fn pages(cfg: &mut web::ServiceConfig) {
+    cfg.service(page);
+}
+
+#[get("/notifications")]
+async fn page(req: HttpRequest) -> HttpResponse {
+    match session::lookup_page(&req).await {
+        Ok(Some(_)) => crate::html(&req, "notifications").await,
+        Ok(None) => login_redirect(&req),
+        Err(response) => *response,
+    }
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -67,6 +83,15 @@ async fn set_preferences(
     .bind(body.inactivity_reminders)
     .execute(pool.get_ref())
     .await?;
+    Ok(HttpResponse::Ok().json(fetch(&pool, user_id).await?))
+}
+
+#[post("/slack/unsubscribe")]
+async fn unsubscribe(User(user_id): User, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    sqlx::query("UPDATE slack_preference SET enabled = false WHERE user_id = $1")
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
     Ok(HttpResponse::Ok().json(fetch(&pool, user_id).await?))
 }
 

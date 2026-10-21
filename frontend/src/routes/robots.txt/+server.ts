@@ -6,6 +6,7 @@ export const GET = () =>
   new Response(
     `User-agent: *
 Disallow: /dashboard
+Disallow: /notifications
 Disallow: /api/
 Disallow: /login
 Disallow: /callback

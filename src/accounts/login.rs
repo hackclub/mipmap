@@ -4,7 +4,7 @@ use super::{
 };
 use actix_web::{
     HttpRequest, HttpResponse,
-    cookie::Cookie,
+    cookie::{Cookie, SameSite, time::Duration},
     get,
     http::header::{self, HeaderValue},
     web::{self, Query},
@@ -19,10 +19,26 @@ use sqlx::PgPool;
 
 const CALLBACK: &str = "/callback";
 const REFERRAL_COOKIE: &str = "ref";
+const NEXT_COOKIE: &str = "next";
+
+fn local_path(path: &str) -> bool {
+    path.starts_with('/')
+        && !path.starts_with("//")
+        && path.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"/?=&_.-%".contains(&byte))
+}
+
+pub fn login_redirect(req: &HttpRequest) -> HttpResponse {
+    let next = req.uri().path_and_query().map_or(req.path(), |path| path.as_str());
+    match Url::parse_with_params(&site_url("/login"), [("next", next)]) {
+        Ok(url) if local_path(next) => super::redirect(url.as_str()),
+        _ => super::redirect("/login"),
+    }
+}
 
 #[derive(Deserialize)]
 pub struct LoginQuery {
     email: Option<String>,
+    next: Option<String>,
 }
 
 #[get("/login")]
@@ -56,6 +72,22 @@ pub async fn start(req: HttpRequest, query: Query<LoginQuery>) -> HttpResponse {
             response.headers_mut().insert(header::LOCATION, location);
         }
     }
+    match query.next.as_deref().filter(|next| local_path(next)) {
+        Some(next) => {
+            let cookie = Cookie::build(NEXT_COOKIE, next.to_string())
+                .path("/")
+                .http_only(true)
+                .secure(true)
+                .same_site(SameSite::Lax)
+                .max_age(Duration::minutes(30))
+                .finish();
+            let _ = response.add_cookie(&cookie);
+        }
+        None if req.cookie(NEXT_COOKIE).is_some() => {
+            let _ = response.add_removal_cookie(&Cookie::build(NEXT_COOKIE, "").path("/").finish());
+        }
+        None => {}
+    }
     response
 }
 
@@ -66,15 +98,19 @@ pub async fn callback(
     pool: web::Data<PgPool>,
 ) -> HttpResponse {
     let (token, sink) = token_sink();
+    let next = req.cookie(NEXT_COOKIE).map(|cookie| cookie.value().to_string());
     let mut response = login::handle_callback(
         &req,
         query,
         site_url(CALLBACK),
-        "/dashboard".to_string(),
+        next.clone().filter(|next| local_path(next)).unwrap_or_else(|| "/dashboard".to_string()),
         Some(sink),
         false,
     )
     .await;
+    if next.is_some() {
+        let _ = response.add_removal_cookie(&Cookie::build(NEXT_COOKIE, "").path("/").finish());
+    }
     let Some(token) = token.take() else {
         return response;
     };

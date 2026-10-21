@@ -7,6 +7,8 @@ pub mod profile;
 pub mod session;
 pub mod tokens;
 
+pub use login::login_redirect;
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((login::start, login::callback, hackatime::start, hackatime::callback));
 }

@@ -111,6 +111,7 @@ async fn main() -> std::io::Result<()> {
             .configure(stats::pages)
             .configure(admin::pages)
             .configure(surveys::pages)
+            .configure(slack::pages)
             .service(docs)
             .service(
                 Files::new("/", FRONTEND_DIR)

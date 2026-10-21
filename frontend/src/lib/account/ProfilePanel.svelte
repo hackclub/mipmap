@@ -1,7 +1,6 @@
 <script lang="ts">
     import Section from "$lib/dashboard/Section.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
-    import SlackDialog from "./SlackDialog.svelte";
     import { json, request } from "$lib/api";
     import { Task } from "$lib/load.svelte";
     import type { User } from "$lib/dashboard/state.svelte";
@@ -16,7 +15,6 @@
         $props();
 
     const logout = new Task("Couldn't log out");
-    let slack = $state(false);
 
     const log_out = () =>
         logout.run(async () => {
@@ -37,7 +35,10 @@
             <dd>{tokens} left to spend</dd>
         </dl>
         <div class="logout">
-            <MipmapButton type="button" onclick={() => (slack = true)}>
+            <MipmapButton
+                type="button"
+                onclick={() => (location.href = "/notifications")}
+            >
                 Manage your Slack DMs from Mipmap
             </MipmapButton>
             <MipmapButton
@@ -53,10 +54,6 @@
         </div>
     </div>
 </Section>
-
-{#if slack}
-    <SlackDialog onclose={() => (slack = false)} />
-{/if}
 
 <style>
     .profile {

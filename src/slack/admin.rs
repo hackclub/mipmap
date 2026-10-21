@@ -102,6 +102,15 @@ async fn send_now(
     key: &str,
 ) -> Result<(), ApiError> {
     let key = dedupe_key(key)?;
+    let unsubscribed: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT EXISTS (SELECT 1 FROM slack_preference WHERE user_id = {USER_FOR_SLACK_ID} AND NOT enabled)"
+    )))
+    .bind(slack_id)
+    .fetch_one(pool)
+    .await?;
+    if unsubscribed {
+        return Err(reject("They've unsubscribed from Mipmap DMs, so this wasn't sent"));
+    }
     let claimed: Option<(i32, Option<i32>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "INSERT INTO slack_message (slack_id, user_id, kind, text, admin_id, dedupe_key, sending_at)
          VALUES ($1, {USER_FOR_SLACK_ID}, $2, $3, $4, $5, now())
@@ -129,7 +138,7 @@ async fn send_now(
             _ => Err(reject_with(StatusCode::CONFLICT, "This message is still sending")),
         };
     };
-    match super::post(slack_id, text).await {
+    match super::post(slack_id, text, true).await {
         Ok(ts) => {
             let mut tx = pool.begin().await?;
             sqlx::query("UPDATE slack_message SET sent_at = now(), ts = $2 WHERE id = $1")

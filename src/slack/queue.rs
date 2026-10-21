@@ -32,9 +32,10 @@ pub fn spawn(pool: PgPool) {
 
 async fn send_next(pool: &PgPool) -> anyhow::Result<Duration> {
     let mut tx = pool.begin().await?;
-    let next: Option<(i32, String, String, i32, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    let next: Option<(i32, String, String, i32, bool, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT m.id, m.slack_id, m.text, m.attempts,
-             m.kind = 'admin' OR COALESCE(u.slack_id = m.slack_id AND {RECIPIENTS} AND {PREFERENCE}, false)
+             m.kind = 'admin' OR COALESCE(u.slack_id = m.slack_id AND {RECIPIENTS} AND {PREFERENCE}, false),
+             m.kind <> 'admin'
          FROM slack_message m
          LEFT JOIN \"user\" u ON u.id = m.user_id
          LEFT JOIN slack_preference p ON p.user_id = m.user_id
@@ -45,7 +46,7 @@ async fn send_next(pool: &PgPool) -> anyhow::Result<Duration> {
     )))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((id, slack_id, text, attempts, allowed)) = next else {
+    let Some((id, slack_id, text, attempts, allowed, footer)) = next else {
         tx.commit().await?;
         abandon_stuck(pool).await?;
         return Ok(IDLE);
@@ -70,7 +71,7 @@ async fn send_next(pool: &PgPool) -> anyhow::Result<Duration> {
             .bind(error)
             .execute(pool)
     };
-    Ok(match super::post(&slack_id, &text).await {
+    Ok(match super::post(&slack_id, &text, footer).await {
         Ok(ts) => {
             sqlx::query("UPDATE slack_message SET sent_at = now(), ts = $2, attempts = attempts + 1 WHERE id = $1")
                 .bind(id)

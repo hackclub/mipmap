@@ -15,7 +15,7 @@ mod queue;
 pub use admin::routes as admin_routes;
 pub use incoming::events;
 pub use notify::{snapshot_reminder, welcome};
-pub use preferences::routes;
+pub use preferences::{pages, routes};
 
 pub const TEXT_LIMIT: usize = 3000;
 const CHANNELS_JSON: &str = include_str!("../../frontend/src/lib/assets/slack_channels.json");
@@ -56,23 +56,25 @@ struct Posted {
     error: Option<String>,
 }
 
-pub async fn post(slack_id: &str, text: &str) -> Result<String, SendError> {
+pub async fn post(slack_id: &str, text: &str, footer: bool) -> Result<String, SendError> {
     let token = token().ok_or_else(|| SendError::Unavailable("SLACK_BOT_TOKEN isn't set".into()))?;
     let text = mrkdwn(text);
-    let footer = format!(
-        "Manage these DMs from your <{}|Mipmap dashboard>",
-        accounts::site_url("/dashboard")
-    );
+    let mut blocks = vec![json!({ "type": "section", "text": { "type": "mrkdwn", "text": text } })];
+    if footer {
+        let footer = format!(
+            "<{}|Manage these DMs> · <{}|Unsubscribe>",
+            accounts::site_url("/notifications"),
+            accounts::site_url("/notifications?unsubscribe")
+        );
+        blocks.push(json!({ "type": "context", "elements": [{ "type": "mrkdwn", "text": footer }] }));
+    }
     let response = http::CLIENT
         .post("https://slack.com/api/chat.postMessage")
         .bearer_auth(token)
         .json(&json!({
             "channel": slack_id,
             "text": text,
-            "blocks": [
-                { "type": "section", "text": { "type": "mrkdwn", "text": text } },
-                { "type": "context", "elements": [{ "type": "mrkdwn", "text": footer }] },
-            ],
+            "blocks": blocks,
             "unfurl_links": false,
             "unfurl_media": false,
         }))
