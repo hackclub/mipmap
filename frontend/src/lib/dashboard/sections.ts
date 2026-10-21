@@ -4,7 +4,7 @@ import { grid } from "$lib/cog_layout";
 const margin = 240;
 const projects_width = 2400;
 const side_width = 2400;
-const fulfillment_height = 1440;
+const fulfillment_height = 1752;
 const orders_height = 780;
 const feedback_height = 2100;
 const help_height = 2100;
