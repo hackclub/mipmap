@@ -426,7 +426,13 @@
 
     function on_canvas() {
         const active = document.activeElement;
-        return !active || active === document.body || viewport.contains(active);
+        return (
+            !active ||
+            active === document.body ||
+            viewport.contains(active) ||
+            controls.contains(active) ||
+            !!active.closest("[data-overlay]")
+        );
     }
 
     function onkeydown(e: KeyboardEvent) {

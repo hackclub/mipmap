@@ -34,13 +34,26 @@
             <span class="caption">Learn about all this stuff!</span>
         </a>
     </div>
-    <p>
-        Keyboard: arrow keys move the map, Shift + arrow keys jump between
-        items, + and − zoom
-    </p>
+    <div class="keys">
+        Keyboard:
+        <ul>
+            <li>Arrow keys: move the map</li>
+            <li>Shift + arrow keys: jump between items</li>
+            <li>+ and −: zoom</li>
+        </ul>
+    </div>
 </Section>
 
 <style>
+    .keys {
+        font-size: 0.85em;
+    }
+
+    ul {
+        margin: 0;
+        padding-left: 1.25rem;
+    }
+
     .guides {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
