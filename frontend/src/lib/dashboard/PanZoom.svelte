@@ -41,6 +41,7 @@
     const fit_padding = 48;
     const overscroll = 0.25;
     const pan_speed = 900;
+    const zoom_speed = 1.5;
     const arrows: Record<string, [number, number]> = {
         ArrowLeft: [-1, 0],
         ArrowRight: [1, 0],
@@ -359,20 +360,25 @@
     }
 
     const held = new Set<string>();
+    const zooming = new Map<string, number>();
     let pan_frame = 0;
 
     function ignored(e: KeyboardEvent) {
-        const target = e.target as Element;
-        const own = target.closest<HTMLElement>("[data-scroll]");
         return (
             locked ||
             e.ctrlKey ||
             e.metaKey ||
             e.altKey ||
             !!viewport.closest("[inert]") ||
-            !!target.closest("input, textarea, select, [contenteditable]") ||
-            (!!own && own.scrollHeight > own.clientHeight)
+            !!(e.target as Element).closest(
+                "input, textarea, select, [contenteditable]",
+            )
         );
+    }
+
+    function scrolls(e: KeyboardEvent) {
+        const own = (e.target as Element).closest<HTMLElement>("[data-scroll]");
+        return !!own && own.scrollHeight > own.clientHeight;
     }
 
     function pan() {
@@ -386,8 +392,15 @@
                 x -= arrows[key][0] * pan_speed * dt;
                 y -= arrows[key][1] * pan_speed * dt;
             }
+            for (const sign of zooming.values())
+                zoom_at(
+                    Math.exp(sign * zoom_speed * dt),
+                    view_width / 2,
+                    view_height / 2,
+                );
             constrain();
-            pan_frame = held.size ? requestAnimationFrame(step) : 0;
+            pan_frame =
+                held.size || zooming.size ? requestAnimationFrame(step) : 0;
         };
         pan_frame = requestAnimationFrame(step);
     }
@@ -438,23 +451,25 @@
     function onkeydown(e: KeyboardEvent) {
         if (ignored(e)) return;
         if (e.key in arrows) {
+            if (scrolls(e)) return;
             e.preventDefault();
             if (e.shiftKey) return jump(arrows[e.key]);
             held.add(e.key);
             pan();
         } else if (!on_canvas()) {
             return;
-        } else if (e.key === "=" || e.key === "+") {
+        } else if (["=", "+", "-", "_"].includes(e.key)) {
             e.preventDefault();
-            zoom(button_zoom);
-        } else if (e.key === "-" || e.key === "_") {
-            e.preventDefault();
-            zoom(1 / button_zoom);
+            const sign = e.key === "=" || e.key === "+" ? 1 : -1;
+            if (!e.repeat) return zoom(button_zoom ** sign);
+            zooming.set(e.code, sign);
+            pan();
         }
     }
 
     function onkeyup(e: KeyboardEvent) {
         held.delete(e.key);
+        zooming.delete(e.code);
     }
 
     function measure() {
@@ -640,7 +655,14 @@
     );
 </script>
 
-<svelte:window {onkeydown} {onkeyup} onblur={() => held.clear()} />
+<svelte:window
+    {onkeydown}
+    {onkeyup}
+    onblur={() => {
+        held.clear();
+        zooming.clear();
+    }}
+/>
 
 <div
     class="viewport"
