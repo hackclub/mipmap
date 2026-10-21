@@ -114,7 +114,7 @@
         padding: 0;
         background: none;
         border: none;
-        color: #e8c58c;
+        color: #a2b8eb;
         font: inherit;
         text-decoration: underline;
         cursor: pointer;

@@ -410,7 +410,18 @@
     }
 
     .site-footer a {
+        color: #e8c58c;
         text-decoration: none;
+    }
+
+    .site-footer a:focus-visible {
+        color: #d6ab70;
+    }
+
+    @media (hover: hover) {
+        .site-footer a:hover {
+            color: #d6ab70;
+        }
     }
 
     .made-with {

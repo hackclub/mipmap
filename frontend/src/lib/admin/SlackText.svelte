@@ -30,7 +30,7 @@
     }
 
     .slack :global(a) {
-        color: #e8c58c;
+        color: #a2b8eb;
     }
 
     .slack :global(code) {

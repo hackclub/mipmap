@@ -387,7 +387,7 @@
     }
 
     .markdown :global(a) {
-        color: #e8c58c;
+        color: #a2b8eb;
     }
 
     @media (max-width: 900px) {
@@ -477,7 +477,7 @@
     }
 
     a {
-        color: #e8c58c;
+        color: #a2b8eb;
     }
 
     .wide {

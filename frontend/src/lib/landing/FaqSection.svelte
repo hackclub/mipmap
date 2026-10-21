@@ -109,7 +109,10 @@
                 <p>
                     This tier is for custom 2D games without a real game
                     engine. Maybe you're doing it in something like the
-                    JavaScript canvas; something that lets you draw a few basic
+                    <a
+                        href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API"
+                        >JavaScript canvas</a
+                    >; something that lets you draw a few basic
                     shapes but beyond that, you're on your own. This tier is
                     really open in what it accepts.
                 </p>
@@ -118,7 +121,14 @@
                 <h3>Tier Romeo</h3>
                 <p>
                     This tier covers 2D or 3D games made with a low-level graphics
-                    library. This includes OpenGL, DirectX, Metal, BGFX, and
+                    library. This includes
+                    <a href="https://www.khronos.org/opengl/wiki/">OpenGL</a>,
+                    <a
+                        href="https://learn.microsoft.com/en-us/windows/win32/direct3d12/directx-12-programming-guide"
+                        >DirectX</a
+                    >,
+                    <a href="https://developer.apple.com/metal/">Metal</a>,
+                    <a href="https://github.com/bkaradzic/bgfx">BGFX</a>, and
                     more. Libraries in this tier must be only for talking to the
                     GPU, they mustn't provide things like lighting. Ask in the <a
                         href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"
@@ -136,11 +146,21 @@
                     qualify are those that meet one of the following criteria:
                 </p>
                 <ul>
-                    <li>Written using Vulkan</li>
-                    <li>Written on bare metal (no operating system!)</li>
                     <li>
-                        3D game written in a software renderer, that is using no
-                        GPU library at all
+                        Written using <a href="https://docs.vulkan.org/"
+                            >Vulkan</a
+                        >
+                    </li>
+                    <li>
+                        Written on <a href="https://wiki.osdev.org/"
+                            >bare metal</a
+                        > (no operating system!)
+                    </li>
+                    <li>
+                        3D game written in a <a
+                            href="https://github.com/ssloy/tinyrenderer/wiki"
+                            >software renderer</a
+                        >, that is using no GPU library at all
                     </li>
                 </ul>
             </li>
@@ -158,7 +178,9 @@
 {#snippet faq_4()}
     <strong>But I don't know how to do any of this!</strong>
     <div>
-        That's totally alright. It's exactly why Hack Club Mipmap has the Mipmap Docs, with a video to teach the basics of graphics programming, along with
+        That's totally alright. It's exactly why Hack Club Mipmap has the <a
+            href="/docs">Mipmap Docs</a
+        >, with a video to teach the basics of graphics programming, along with
         a few other notes. Scroll up a bit and click the big "Learn here!" button
         to find them.
     </div>
@@ -168,7 +190,7 @@
 {#snippet faq_5()}
     <strong>How do I track my time?</strong>
     <div>
-        After you sign in and work through the onboarding, you'll link your <a
+        After you <a href="/login" rel="external">sign in</a> and work through the onboarding, you'll link your <a
             href="https://hackatime.hackclub.com/">Hackatime</a
         >
         account. This is how your time is tracked so we know how many
@@ -190,7 +212,9 @@
         <p>
             So here's the rule. You may use as much or as little AI as you feel
             is necessary, but time spent AI coding will count for about a third less than
-            time spent coding by hand. Note that the hour tracking in Hackatime
+            time spent coding by hand. Note that the hour tracking in <a
+                href="https://hackatime.hackclub.com/">Hackatime</a
+            >
             does not take into account this deflation.
         </p>
         <p>

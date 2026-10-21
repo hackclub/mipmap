@@ -250,6 +250,6 @@
     }
 
     a {
-        color: #e8c58c;
+        color: #a2b8eb;
     }
 </style>

@@ -59,17 +59,17 @@
 
 	:global(a),
 	:global(a:visited) {
-		color: #e8c58c;
+		color: #a2b8eb;
 		transition: color 0.3s;
 	}
 
 	:global(a:focus-visible) {
-		color: #d6ab70;
+		color: #c8d5f3;
 	}
 
 	@media (hover: hover) {
 		:global(a:hover) {
-			color: #d6ab70;
+			color: #c8d5f3;
 		}
 	}
 </style>
