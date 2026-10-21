@@ -71,7 +71,7 @@
         },
         {
             name: "Vulkan",
-            description: "Low-level cross-platform graphics library",
+            description: "Low level cross-platform graphics library",
             tier: "sierra",
             links: [
                 { text: "How to Vulkan", href: "https://howtovulkan.com/" },

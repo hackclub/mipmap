@@ -120,7 +120,7 @@
             <li>
                 <h3>Tier Romeo</h3>
                 <p>
-                    This tier covers 2D or 3D games made with a low-level graphics
+                    This tier covers 2D or 3D games made with a low level graphics
                     library. This includes
                     <a href="https://www.khronos.org/opengl/wiki/">OpenGL</a>,
                     <a

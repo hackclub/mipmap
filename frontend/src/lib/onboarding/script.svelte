@@ -283,7 +283,7 @@
             simpler libraries, maybe a JS canvas?
         </li>
         <li>
-            Tier Romeo: 2D or 3D games in most low-level
+            Tier Romeo: 2D or 3D games in most low level
             graphics libraries (OpenGL, DirectX, BGFX, etc.)
         </li>
         <li>
