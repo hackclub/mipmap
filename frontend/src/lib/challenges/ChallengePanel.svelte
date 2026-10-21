@@ -33,7 +33,7 @@
         <article>
             <h3>{challenge.name}</h3>
             <p class="countdown">Ends in {countdown(challenge.ends)}</p>
-            <p>{challenge.description}</p>
+            <p class="description">{challenge.description}</p>
             <p class="fine">
                 Project must be shipped before the Challenge's countdown deadline. Reviewers
                 have discretion on whether or not this project meets the criteria
@@ -59,6 +59,10 @@
     h3 {
         font: inherit;
         font-weight: 700;
+    }
+
+    .description {
+        white-space: pre-line;
     }
 
     .fine {
