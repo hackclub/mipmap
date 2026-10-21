@@ -6,7 +6,7 @@
 </script>
 
 <Section title="Steps" {bounds} zoom={4} padded>
-    <ol>
+    <ol role="list">
         <li>
             <h3>Step 1</h3>
             <p>Make and ship a game without an engine</p>

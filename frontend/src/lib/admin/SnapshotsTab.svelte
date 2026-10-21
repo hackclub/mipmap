@@ -27,7 +27,11 @@
             {/snippet}
             <div class="body">
                 {#if safe_url(snapshot.image)}
-                    <img src={safe_url(snapshot.image)} alt="" loading="lazy" />
+                    <img
+                        src={safe_url(snapshot.image)}
+                        alt="Snapshot image from {snapshot.author}"
+                        loading="lazy"
+                    />
                 {/if}
                 <p>{snapshot.caption}</p>
             </div>

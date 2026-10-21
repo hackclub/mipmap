@@ -194,7 +194,8 @@ export type SurveyResults = {
         type: "text";
         key: string;
         label: string;
-        answers: { created_on: string; text: string }[];
+        answers: { id: number; created_on: string; text: string }[];
+        next: number | null;
       }
   )[];
 };

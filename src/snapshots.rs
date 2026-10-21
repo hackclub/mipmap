@@ -75,7 +75,8 @@ async fn everyone(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Snapshot>> {
          caption, display_name AS author
          FROM snapshot JOIN \"user\" ON \"user\".id = snapshot.user_id
          WHERE snapshot.deleted_at IS NULL AND \"user\".deleted_at IS NULL AND NOT \"user\".is_banned
-         AND snapshot.shadowbanned_at IS NULL AND (snapshot.held_image IS NULL OR snapshot.user_id = $2)
+         AND (snapshot.shadowbanned_at IS NULL OR snapshot.user_id = $2)
+         AND (snapshot.held_image IS NULL OR snapshot.user_id = $2)
          ORDER BY snapshot.created_at DESC LIMIT $1",
     )
     .bind(FEED_SIZE)
@@ -288,8 +289,13 @@ pub async fn create_snapshot(
     }
     uploads::ensure_image(&form.image.data)?;
 
-    let Some(hackatime) = hackatime::summaries(&pool, user_id, false).await else {
-        return Err(reject("Link your Hackatime account first"));
+    let hackatime = match hackatime::fetch(&pool, user_id, false).await {
+        hackatime::Summaries::Projects(projects) => projects,
+        hackatime::Summaries::Unlinked => return Err(reject("Link your Hackatime account first")),
+        hackatime::Summaries::Revoked => {
+            return Err(reject("Your Hackatime link expired. Link your Hackatime account again"));
+        }
+        hackatime::Summaries::Failed => return Err(reject("Couldn't reach Hackatime. Please try again")),
     };
     let totals = hackatime::totals(&hackatime);
     let projects = projects::list(&pool, user_id).await?;

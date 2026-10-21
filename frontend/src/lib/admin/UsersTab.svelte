@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { untrack } from "svelte";
+    import { tick, untrack } from "svelte";
+    import { message } from "$lib/api";
     import Field from "$lib/ui/Field.svelte";
     import { short_time } from "$lib/format";
     import {
@@ -15,36 +16,61 @@
     import Card from "./Card.svelte";
     import PagedList from "./PagedList.svelte";
 
-    let { onchange, initial = "" }: { onchange: () => void; initial?: string } =
-        $props();
+    let {
+        onchange,
+        lookup = null,
+    }: { onchange: () => void; lookup?: { hca_id: string } | null } = $props();
 
-    let search = $state(untrack(() => initial));
-    let query = $state(untrack(() => initial));
+    let search = $state("");
+    let query = "";
+    let list = $state<PagedList<User>>();
     const pages = new Pages<User>((before) => fetch_users({ before, q: query }));
+    pages.reset();
+
+    function find(next: string) {
+        if (next === query) return;
+        query = next;
+        return pages.reset();
+    }
 
     $effect(() => {
         const next = search;
-        const timer = setTimeout(() => (query = next), 300);
+        const timer = setTimeout(() => find(next), 300);
         return () => clearTimeout(timer);
     });
 
     $effect(() => {
-        void query;
-        untrack(pages.reset);
+        const target = lookup;
+        if (target) untrack(() => show(target.hca_id));
     });
+
+    async function show(hca_id: string) {
+        search = hca_id;
+        await find(hca_id);
+        await tick();
+        const user = pages.items.find((u) => u.hca_id === hca_id);
+        if (user) list?.focus_item(user.id);
+    }
 
     type Kind = "mips" | "adjust" | "ban";
 
     let editing = $state<{ user: User; kind: Kind } | null>(null);
     let mips = $state("");
     let reason = $state("");
+    let current = $state<number | null>(null);
+    let check_error = $state("");
 
     const parsed = $derived(Number(mips));
+    const checking = $derived(
+        current === null && !check_error ? "Checking their current Mips…" : "",
+    );
+    const balance = $derived(current ?? editing?.user.mips ?? 0);
     const total = $derived(
-        editing?.kind === "adjust" ? editing.user.mips + parsed : parsed,
+        editing?.kind === "adjust" ? balance + parsed : parsed,
     );
     const valid = $derived(
-        `${mips ?? ""}`.trim() !== "" &&
+        !checking &&
+            `${mips ?? ""}`.trim() !== "" &&
             Number.isInteger(parsed) &&
             (editing?.kind !== "adjust" || parsed !== 0) &&
             total >= 0 &&
@@ -55,19 +81,39 @@
         editing = { user, kind };
         mips = kind === "mips" ? String(user.mips) : "";
         reason = "";
+        current = null;
+        check_error = "";
+        if (kind !== "ban") recheck(user, kind);
+    }
+
+    async function recheck(user: User, kind: Kind) {
+        try {
+            const fresh = (
+                await fetch_users({ before: user.id + 1, q: user.hca_id })
+            ).find((u) => u.id === user.id);
+            if (editing?.user.id !== user.id || editing.kind !== kind) return;
+            if (!fresh) throw new Error("They weren't found");
+            if (kind === "mips" && mips === String(user.mips))
+                mips = String(fresh.mips);
+            current = fresh.mips;
+            pages.replace(fresh);
+        } catch (e) {
+            if (editing?.user.id === user.id)
+                check_error = `Couldn't check their current Mips (${message(e)}), so this may be out of date`;
+        }
     }
 </script>
 
 <div class="search">
     <Field
         type="search"
-        placeholder="Search name, email, Slack ID, HCA id or user id"
-        aria-label="Search users"
+        label="Search users"
+        placeholder="Name, email, Slack ID, HCA id or user id"
         bind:value={search}
     />
 </div>
 
-<PagedList {pages} empty="No users found">
+<PagedList {pages} empty="No users found" bind:this={list}>
     {#snippet item(user)}
         <Card dim={user.banned}>
             {#snippet title()}
@@ -117,9 +163,11 @@
     <ActionDialog
         title="Set Mips for {display_name(user.name, user.id)}"
         submit="Set Mips"
-        warning={valid && parsed < user.mips
-            ? `This takes away ${user.mips - parsed} Mips`
-            : undefined}
+        warning={checking ||
+            check_error ||
+            (valid && parsed < balance
+                ? `They have ${balance} Mips, so this takes away ${balance - parsed}`
+                : `They have ${balance} Mips`)}
         {valid}
         bind:reason
         onsubmit={async () => {
@@ -143,9 +191,11 @@
     <ActionDialog
         title="Add or remove Mips for {display_name(user.name, user.id)}"
         submit={valid && parsed < 0 ? "Remove Mips" : "Add Mips"}
-        warning={valid && parsed < 0
-            ? `This takes away ${-parsed} Mips, leaving ${total}`
-            : undefined}
+        warning={checking ||
+            check_error ||
+            (valid && parsed < 0
+                ? `This takes away ${-parsed} Mips, leaving ${total}`
+                : undefined)}
         {valid}
         bind:reason
         onsubmit={async () => {
@@ -156,7 +206,7 @@
     >
         <Field
             label="Mips to add"
-            hint="They have {user.mips}. Use a negative number to remove Mips"
+            hint="They have {balance}. Use a negative number to remove Mips"
             type="number"
             step="1"
             focus

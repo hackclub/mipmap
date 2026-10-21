@@ -1,9 +1,12 @@
 <script lang="ts">
     import { image_error, image_types } from "$lib/api";
+    import { dashboard } from "$lib/dashboard/state.svelte";
     import Field from "$lib/ui/Field.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import {
+        save_sent_at,
         save_username,
+        saved_sent_at,
         saved_username,
         send_snapshot,
     } from "$lib/snapshots/api";
@@ -18,7 +21,36 @@
     let caption = $state("");
     let username = $state(saved_username());
     let dragging = $state(false);
+    let sent = $state(false);
+    let sent_at = $state(saved_sent_at());
     const send = new Task();
+    const cooldown = 16 * 60 * 60 * 1000;
+    const recheck = 15 * 60 * 1000;
+
+    const unlocks = $derived(
+        status.sent_today && sent_at + cooldown > Date.now()
+            ? sent_at + cooldown
+            : 0,
+    );
+    const wait_note = $derived.by(() => {
+        if (!unlocks)
+            return "You can send your next one 16 hours after your last!";
+        const at = new Date(unlocks);
+        const time = at.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+        });
+        return at.toDateString() === new Date().toDateString()
+            ? `You can send your next one at ${time}!`
+            : `You can send your next one tomorrow at ${time}!`;
+    });
+
+    $effect(() => {
+        if (!status.sent_today) return;
+        const wait = unlocks ? unlocks - Date.now() + 5000 : recheck;
+        const timer = setTimeout(dashboard.run, Math.min(wait, recheck));
+        return () => clearTimeout(timer);
+    });
 
     $effect(() => {
         const url = preview;
@@ -57,18 +89,21 @@
         e.preventDefault();
         if (!ready || !image || !filled || send.pending) return;
         const file = image;
-        const sent = caption;
+        const text = caption;
+        const name = username.trim();
+        sent = false;
         await send.run(
+            () => send_snapshot(file, text.trim(), name),
             () => {
-                save_username(username.trim());
-                return send_snapshot(file, sent.trim(), username.trim());
-            },
-            () => {
+                save_username(name);
+                sent_at = Date.now();
+                save_sent_at(sent_at);
+                sent = true;
                 if (image === file) {
                     image = null;
                     preview = "";
                 }
-                if (caption === sent) caption = "";
+                if (caption === text) caption = "";
             },
         );
     }
@@ -128,12 +163,12 @@
             type="submit"
             disabled={!ready || !filled || send.pending}
         >
-            Send
+            {send.pending ? "Sending…" : "Send"}
         </MipmapButton>
         <div class="progress">{progress}</div>
         <div class="note">
             {status.sent_today
-                ? "You've gotta wait for tomorrow to send the next one!"
+                ? wait_note
                 : status.tracked_seconds < status.required_seconds
                   ? "Make sure you've got 15 minutes in projects tracked by Hackatime and linked to a Mipmap project first!"
                   : "You can still send a Snapshot today!"}
@@ -146,8 +181,15 @@
             </div>
         {/if}
         {#if send.error}
-            <div class="note">{send.error}</div>
+            <div class="note" role="alert">{send.error}</div>
         {/if}
+        <p class="sr" role="status">
+            {send.pending
+                ? "Sending your Snapshot"
+                : sent
+                  ? "Snapshot sent"
+                  : ""}
+        </p>
     </div>
 </form>
 
@@ -247,5 +289,15 @@
 
     .note {
         font-size: 0.85em;
+    }
+
+    .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 </style>

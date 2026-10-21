@@ -27,16 +27,26 @@
         return cap_valid && cap != null ? Math.min(cap, available) : available;
     });
     let fulfilling = $state<Wave | null>(null);
+    let checking = $state(false);
+
+    async function start() {
+        if (checking) return;
+        checking = true;
+        await load.run();
+        checking = false;
+        if (!load.error && selected && cap_valid) creating = true;
+    }
 
     const stickers = (count: number) =>
         `${count} sticker${count === 1 ? "" : "s"}`;
 </script>
 
+<div role="status">
+    {#if !load.error && !load.data}<p class="note">Loading…</p>{/if}
+</div>
 {#if load.error}
     <LoadError error={load.error} onretry={load.run} />
-{:else if !load.data}
-    <p class="note">Loading…</p>
-{:else}
+{:else if load.data}
     {@const { pending, pending_no_time, waves } = load.data}
     <div class="pending">
         <p>
@@ -61,8 +71,10 @@
             </label>
             <button
                 type="button"
-                disabled={!selected || !cap_valid}
-                onclick={() => (creating = true)}>Create wave</button
+                aria-disabled={!selected || !cap_valid || checking}
+                onclick={() => {
+                    if (selected && cap_valid) start();
+                }}>{checking ? "Checking…" : "Create wave"}</button
             >
         </div>
     </div>
@@ -157,10 +169,15 @@
         width: 5rem;
         padding: 0.3rem 0.5rem;
         background: #3d3029;
-        border: 1px solid #4f2f1f;
+        border: 1px solid #d6ab70;
         border-radius: 4px;
         color: #ead7c2;
         font: inherit;
+    }
+
+    .cap input::placeholder {
+        color: #ead7c2;
+        opacity: 0.75;
     }
 
     .cap input:focus-visible {
@@ -174,7 +191,7 @@
     }
 
     .note {
-        color: #d6ab70;
+        color: #ead7c2;
     }
 
     .list {
@@ -199,7 +216,7 @@
             color 0.3s;
     }
 
-    .pending button:disabled {
+    .pending button[aria-disabled="true"] {
         opacity: 0.5;
         cursor: default;
     }
@@ -211,7 +228,7 @@
     }
 
     @media (hover: hover) {
-        .pending button:not(:disabled):hover,
+        .pending button:not([aria-disabled="true"]):hover,
         .download:hover {
             background-color: #ead7c2;
             color: #4f2f1f;

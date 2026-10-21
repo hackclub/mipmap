@@ -147,7 +147,7 @@
     .hint {
         margin: 0;
         font-size: 0.75em;
-        opacity: 0.75;
+        opacity: 0.85;
     }
 
     .trigger {
@@ -158,7 +158,7 @@
         padding: 0.5rem 0.75rem;
         background: #4f2f1f;
         color: #ead7c2;
-        border: none;
+        border: 1px solid #d6ab70;
         border-radius: 0;
         font: inherit;
         font-size: 0.85em;
@@ -170,17 +170,48 @@
     }
 
     .trigger:focus-visible,
-    .options li:focus-visible,
     .options li[aria-selected="true"] {
         background-color: #ead7c2;
         color: #4f2f1f;
     }
 
+    .options li:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: -4px;
+    }
+
+    .options li[aria-selected="true"]:focus-visible {
+        outline-color: #4f2f1f;
+    }
+
     @media (hover: hover) {
-        .trigger:hover:not(:disabled),
-        .options li:hover {
+        .trigger:hover:not(:disabled) {
             background-color: #ead7c2;
             color: #4f2f1f;
+        }
+
+        .options li:hover:not([aria-selected="true"]) {
+            background-color: #5f4838;
+        }
+    }
+
+    @media (forced-colors: active) {
+        .trigger {
+            border: 1px solid ButtonText;
+        }
+
+        .options li[aria-selected="true"] {
+            forced-color-adjust: none;
+            background-color: Highlight;
+            color: HighlightText;
+        }
+
+        .options li:focus-visible {
+            outline-color: CanvasText;
+        }
+
+        .options li[aria-selected="true"]:focus-visible {
+            outline-color: HighlightText;
         }
     }
 

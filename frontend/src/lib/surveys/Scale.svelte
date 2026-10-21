@@ -19,7 +19,12 @@
 
 {#each question.items as item (item.key)}
     {@const name = `${uid}-${item.key}`}
-    <div class="item" role="radiogroup" aria-labelledby="{name}-label">
+    <div
+        class="item"
+        role="radiogroup"
+        aria-labelledby="{name}-label"
+        aria-required="true"
+    >
         <p class="label" id="{name}-label">{item.label}</p>
         <div class="points">
             {#each points as point (point)}
@@ -88,16 +93,35 @@
             color 0.3s;
     }
 
-    label:has(:focus-visible),
     label.chosen {
         background: #ead7c2;
         color: #4f2f1f;
     }
 
+    label:has(:focus-visible) {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
     @media (hover: hover) {
-        label:hover {
-            background: #ead7c2;
-            color: #4f2f1f;
+        label:hover:not(.chosen) {
+            background: #5f4838;
+        }
+    }
+
+    @media (forced-colors: active) {
+        label {
+            border: 1px solid ButtonText;
+        }
+
+        label.chosen {
+            forced-color-adjust: none;
+            background: Highlight;
+            color: HighlightText;
+        }
+
+        label:has(:focus-visible) {
+            outline-color: CanvasText;
         }
     }
 
@@ -111,7 +135,7 @@
         display: flex;
         justify-content: space-between;
         gap: 1rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.8rem;
     }
 

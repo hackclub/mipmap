@@ -1,11 +1,23 @@
-use crate::{error::ApiError, middleware, projects::review, tree};
-use actix_web::{HttpRequest, HttpResponse, get, post, web, web::Bytes};
+use crate::{
+    admin::Admin,
+    error::{ApiError, reject_with},
+    middleware,
+    projects::review,
+    tree,
+};
+use actix_web::{
+    HttpRequest, HttpResponse, get,
+    http::{StatusCode, header},
+    post, web,
+    web::Bytes,
+};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
-    net::IpAddr,
+    net::{IpAddr, Ipv6Addr},
     sync::{LazyLock, PoisonError},
     time::{Duration, Instant},
 };
@@ -16,11 +28,28 @@ mod sync;
 pub use sync::spawn;
 
 const CACHE_FOR: Duration = Duration::from_secs(30);
+const RETRY_FIRST: Duration = Duration::from_secs(5);
+const RETRY_MAX: Duration = Duration::from_secs(600);
 
 const VISITS_PER_IP: u32 = 50;
 const VISITOR_IPS: usize = 100_000;
 
-static CACHE: LazyLock<Mutex<Option<(Instant, Bytes)>>> = LazyLock::new(Default::default);
+const PUBLIC_MIN: i64 = 5;
+
+struct Built {
+    at: Instant,
+    exact: Bytes,
+    public: Bytes,
+}
+
+#[derive(Default)]
+struct Cache {
+    built: Option<Built>,
+    retry_at: Option<Instant>,
+    backoff: Duration,
+}
+
+static CACHE: LazyLock<Mutex<Cache>> = LazyLock::new(Default::default);
 
 const ROUNDS_JSON: &str = include_str!("../../frontend/src/lib/assets/fulfillment_rounds.json");
 
@@ -50,6 +79,7 @@ struct Day {
     date: NaiveDate,
     signed_up: i64,
     active: i64,
+    logged_in: i64,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -70,6 +100,8 @@ struct Totals {
     successful_referrals: i64,
     orders_placed: i64,
     logged_in_last_day: i64,
+    logged_in_last_week: i64,
+    logged_in_ever: i64,
     awaiting_review: i64,
     average_wait_hours: Option<f64>,
     average_approval_hours: Option<f64>,
@@ -94,25 +126,18 @@ struct Funnels {
 }
 
 #[derive(Serialize, sqlx::FromRow)]
-struct OnboardingTotals {
+struct Onboarding {
     users: i64,
     started: i64,
-    finished: i64,
-    median_minutes: Option<f64>,
+    made_project: i64,
+    reached_tech_tree: i64,
+    unlocked_sticker: i64,
     stickers: i64,
-}
-
-#[derive(Serialize, sqlx::FromRow)]
-struct OnboardingStep {
-    step: String,
-    users: i64,
-}
-
-#[derive(Serialize)]
-struct Onboarding {
-    #[serde(flatten)]
-    totals: OnboardingTotals,
-    steps: Vec<OnboardingStep>,
+    finished: i64,
+    in_progress: i64,
+    #[serde(skip)]
+    timed: i64,
+    median_minutes: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -131,43 +156,56 @@ struct Stats {
     onboarding: Onboardings,
 }
 
-async fn onboarding(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Onboarding> {
-    let totals = sqlx::query_as(
+async fn onboarding(pool: &PgPool, since: Option<DateTime<Utc>>) -> sqlx::Result<Onboarding> {
+    sqlx::query_as(
         "SELECT count(*) AS users,
-             count(*) FILTER (WHERE onboarding_started_at IS NOT NULL) AS started,
-             count(*) FILTER (WHERE onboarded_at IS NOT NULL) AS finished,
-             (percentile_cont(0.5) WITHIN GROUP (
-                  ORDER BY extract(epoch FROM onboarded_at - onboarding_started_at)
-              ) FILTER (WHERE onboarded_at IS NOT NULL AND onboarding_started_at IS NOT NULL))::float8
-                 / 60 AS median_minutes,
+             count(*) FILTER (WHERE onboarding_started_at IS NOT NULL OR onboarded_at IS NOT NULL)
+                 AS started,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL
+                 OR array_position($3::text[], onboarding_step) >= array_position($3::text[], 'Edit'))
+                 AS made_project,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL
+                 OR array_position($3::text[], onboarding_step) >= array_position($3::text[], 'Tech Tree'))
+                 AS reached_tech_tree,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL
+                 OR array_position($3::text[], onboarding_step) >= array_position($3::text[], 'Unlock token'))
+                 AS unlocked_sticker,
              count(*) FILTER (WHERE EXISTS (
                  SELECT 1 FROM \"order\"
                  WHERE user_id = \"user\".id AND node_id = $2 AND deleted_at IS NULL
-             )) AS stickers
+             )) AS stickers,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL) AS finished,
+             count(*) FILTER (WHERE onboarded_at IS NULL
+                 AND onboarding_started_at >= now() - interval '7 days') AS in_progress,
+             count(*) FILTER (WHERE onboarded_at IS NOT NULL AND onboarding_started_at IS NOT NULL)
+                 AS timed,
+             (percentile_cont(0.5) WITHIN GROUP (
+                  ORDER BY extract(epoch FROM onboarded_at - onboarding_started_at)
+              ) FILTER (WHERE onboarded_at IS NOT NULL AND onboarding_started_at IS NOT NULL))::float8
+                 / 60 AS median_minutes
          FROM \"user\"
-         WHERE deleted_at IS NULL AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))",
+         WHERE deleted_at IS NULL AND ($1::timestamptz IS NULL OR signup_at >= $1)",
     )
-    .bind(hours)
+    .bind(since)
     .bind(tree::STICKER as i32)
+    .bind(&*crate::dashboard::ONBOARDING_STEPS)
     .fetch_one(pool)
-    .await?;
-    let steps = sqlx::query_as(
-        "SELECT onboarding_step AS step, count(*) AS users FROM \"user\"
-         WHERE deleted_at IS NULL AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))
-             AND onboarding_started_at IS NOT NULL AND onboarding_step IS NOT NULL
-         GROUP BY 1",
-    )
-    .bind(hours)
-    .fetch_all(pool)
-    .await?;
-    Ok(Onboarding { totals, steps })
+    .await
 }
 
-async fn funnel(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Funnel> {
+async fn funnel(pool: &PgPool, since: Option<DateTime<Utc>>) -> sqlx::Result<Funnel> {
+    let visited: i64 = match since {
+        Some(since) => {
+            sqlx::query_scalar("SELECT count(*) FROM visitor WHERE visited_at >= $1")
+                .bind(since)
+                .fetch_one(pool)
+                .await?
+        }
+        None => sqlx::query_scalar("SELECT count(*) FROM visitor").fetch_one(pool).await?,
+    };
     sqlx::query_as(
         "SELECT
-             (SELECT count(*) FROM visitor
-              WHERE $1::int IS NULL OR visited_at >= now() - make_interval(hours => $1)) AS visited,
+             $3::bigint AS visited,
              count(*) AS signed_in,
              count(*) FILTER (WHERE hackatime_user_id IS NOT NULL) AS linked_hackatime,
              count(*) FILTER (WHERE EXISTS (
@@ -184,22 +222,27 @@ async fn funnel(pool: &PgPool, hours: Option<i32>) -> sqlx::Result<Funnel> {
                  WHERE user_id = \"user\".id AND deleted_at IS NULL AND node_id <> $2
              )) AS redeemed
          FROM \"user\"
-         WHERE deleted_at IS NULL
-             AND ($1::int IS NULL OR signup_at >= now() - make_interval(hours => $1))",
+         WHERE deleted_at IS NULL AND ($1::timestamptz IS NULL OR signup_at >= $1)",
     )
-    .bind(hours)
+    .bind(since)
     .bind(tree::STICKER as i32)
+    .bind(visited)
     .fetch_one(pool)
     .await
 }
 
-async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
+async fn build(pool: &PgPool) -> anyhow::Result<Stats> {
     let days = sqlx::query_as(
         "WITH signups AS (
              SELECT (signup_at AT TIME ZONE 'UTC')::date AS day, count(*) AS users
              FROM \"user\" WHERE deleted_at IS NULL GROUP BY 1
          ), active AS (
              SELECT day, count(*) AS users FROM active_day GROUP BY day
+         ), logins AS (
+             SELECT (login.logged_in_at AT TIME ZONE 'UTC')::date AS day,
+                 count(DISTINCT login.user_id) AS users
+             FROM login JOIN \"user\" ON \"user\".id = login.user_id
+             WHERE \"user\".deleted_at IS NULL GROUP BY 1
          ), range AS (
              SELECT generate_series(
                  LEAST((SELECT min(day) FROM signups), (now() AT TIME ZONE 'UTC')::date)::timestamp,
@@ -209,37 +252,33 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
          )
          SELECT range.day AS date,
              (sum(COALESCE(signups.users, 0)) OVER (ORDER BY range.day))::bigint AS signed_up,
-             COALESCE(active.users, 0) AS active
+             COALESCE(active.users, 0) AS active,
+             COALESCE(logins.users, 0) AS logged_in
          FROM range
          LEFT JOIN signups USING (day)
          LEFT JOIN active USING (day)
+         LEFT JOIN logins USING (day)
          ORDER BY range.day",
     )
     .fetch_all(pool)
     .await?;
     let hours = sqlx::query_as(
-        "WITH signups AS (
-             SELECT date_trunc('hour', signup_at AT TIME ZONE 'UTC') AS hour, count(*) AS users
-             FROM \"user\" WHERE deleted_at IS NULL GROUP BY 1
-         ), logins AS (
-             SELECT date_trunc('hour', login.logged_in_at AT TIME ZONE 'UTC') AS hour,
-                 count(DISTINCT login.user_id) AS users
-             FROM login JOIN \"user\" ON \"user\".id = login.user_id
-             WHERE \"user\".deleted_at IS NULL GROUP BY 1
-         ), range AS (
+        "WITH range AS (
              SELECT generate_series(
-                 LEAST((SELECT min(hour) FROM signups), date_trunc('hour', now() AT TIME ZONE 'UTC')),
+                 date_trunc('hour', now() AT TIME ZONE 'UTC') - interval '23 hours',
                  date_trunc('hour', now() AT TIME ZONE 'UTC'),
                  interval '1 hour'
-             ) AS hour
+             ) AT TIME ZONE 'UTC' AS hour
          )
-         SELECT range.hour AT TIME ZONE 'UTC' AS hour,
-             (sum(COALESCE(signups.users, 0)) OVER (ORDER BY range.hour))::bigint AS signed_up,
-             COALESCE(logins.users, 0) AS logged_in
+         SELECT hour,
+             (SELECT count(*) FROM \"user\"
+              WHERE deleted_at IS NULL AND signup_at < hour + interval '1 hour') AS signed_up,
+             (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
+              WHERE \"user\".deleted_at IS NULL
+                  AND login.logged_in_at >= hour AND login.logged_in_at < hour + interval '1 hour')
+                 AS logged_in
          FROM range
-         LEFT JOIN signups USING (hour)
-         LEFT JOIN logins USING (hour)
-         ORDER BY range.hour",
+         ORDER BY hour",
     )
     .fetch_all(pool)
     .await?;
@@ -263,13 +302,19 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
              (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
               WHERE \"user\".deleted_at IS NULL AND login.logged_in_at > now() - interval '1 day')
                  AS logged_in_last_day,
+             (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
+              WHERE \"user\".deleted_at IS NULL AND login.logged_in_at > now() - interval '7 days')
+                 AS logged_in_last_week,
+             (SELECT count(DISTINCT login.user_id) FROM login JOIN \"user\" ON \"user\".id = login.user_id
+              WHERE \"user\".deleted_at IS NULL)
+                 AS logged_in_ever,
              (SELECT count(*) FROM submission
               WHERE record_id IS NOT NULL AND deleted_at IS NULL AND NOT rejected
                   AND review_status IS DISTINCT FROM $1)
                  AS awaiting_review,
              (SELECT extract(epoch FROM avg(now() - start))::float8 / 3600
               FROM (SELECT GREATEST(COALESCE(sending_at, created_at), (
-                              SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
+                              SELECT (min(ship_by) + 1)::timestamp AT TIME ZONE 'UTC'
                               FROM unnest($4::date[]) AS ship_by
                               WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date
                           )) AS start FROM submission
@@ -279,7 +324,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
                  AS average_wait_hours,
              (SELECT extract(epoch FROM avg(GREATEST(approved_at - start, interval '0')))::float8 / 3600
               FROM (SELECT approved_at, GREATEST(COALESCE(sending_at, created_at), (
-                              SELECT min(ship_by)::timestamp AT TIME ZONE 'UTC'
+                              SELECT (min(ship_by) + 1)::timestamp AT TIME ZONE 'UTC'
                               FROM unnest($4::date[]) AS ship_by
                               WHERE ship_by >= (created_at AT TIME ZONE 'UTC')::date
                           )) AS start FROM submission
@@ -292,34 +337,89 @@ async fn build(pool: &PgPool) -> anyhow::Result<Bytes> {
     .bind(&*SHIP_BY)
     .fetch_one(pool)
     .await?;
+    let now = Utc::now();
+    let day = Some(now - chrono::Duration::hours(24));
+    let week = Some(now - chrono::Duration::days(7));
     let funnel = Funnels {
-        day: funnel(pool, Some(24)).await?,
-        week: funnel(pool, Some(24 * 7)).await?,
+        day: funnel(pool, day).await?,
+        week: funnel(pool, week).await?,
         all: funnel(pool, None).await?,
     };
     let onboarding = Onboardings {
-        day: onboarding(pool, Some(24)).await?,
-        week: onboarding(pool, Some(24 * 7)).await?,
+        day: onboarding(pool, day).await?,
+        week: onboarding(pool, week).await?,
         all: onboarding(pool, None).await?,
     };
-    Ok(serde_json::to_vec(&Stats { days, hours, totals, funnel, onboarding })?.into())
+    Ok(Stats { days, hours, totals, funnel, onboarding })
+}
+
+fn mask_small(value: &mut Value) {
+    match value {
+        Value::Object(map) => map.values_mut().for_each(mask_small),
+        Value::Array(items) => items.iter_mut().for_each(mask_small),
+        Value::Number(number) if number.as_i64().is_some_and(|n| n < PUBLIC_MIN) => *value = Value::Null,
+        _ => {}
+    }
+}
+
+fn public(stats: &Stats) -> serde_json::Result<Value> {
+    let mut value = serde_json::to_value(stats)?;
+    if stats.onboarding.day.timed < PUBLIC_MIN {
+        value["onboarding"]["day"]["median_minutes"] = Value::Null;
+    }
+    mask_small(&mut value["funnel"]["day"]);
+    mask_small(&mut value["onboarding"]["day"]);
+    Ok(value)
+}
+
+fn render(stats: &Stats) -> anyhow::Result<Built> {
+    Ok(Built {
+        at: Instant::now(),
+        exact: serde_json::to_vec(stats)?.into(),
+        public: serde_json::to_vec(&public(stats)?)?.into(),
+    })
 }
 
 #[get("/stats")]
-async fn get_stats(pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+async fn get_stats(admin: Option<Admin>, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
     let mut cache = CACHE.lock().await;
-    let body = match &*cache {
-        Some((built, body)) if built.elapsed() < CACHE_FOR => body.clone(),
-        _ => {
-            let body = build(&pool).await?;
-            *cache = Some((Instant::now(), body.clone()));
-            body
+    let fresh = cache.built.as_ref().is_some_and(|built| built.at.elapsed() < CACHE_FOR);
+    let waiting = cache.retry_at.is_some_and(|at| Instant::now() < at);
+    if !fresh && !waiting {
+        match build(&pool).await.and_then(|stats| render(&stats)) {
+            Ok(built) => {
+                cache.built = Some(built);
+                cache.retry_at = None;
+                cache.backoff = Duration::ZERO;
+            }
+            Err(e) => {
+                log::error!("Building stats failed: {e:#}");
+                cache.backoff = (cache.backoff * 2).clamp(RETRY_FIRST, RETRY_MAX);
+                cache.retry_at = Some(Instant::now() + cache.backoff);
+            }
         }
+    }
+    let Some(built) = &cache.built else {
+        return Err(reject_with(StatusCode::SERVICE_UNAVAILABLE, "Stats are unavailable right now"));
     };
-    Ok(HttpResponse::Ok().content_type("application/json").body(body))
+    Ok(match admin {
+        Some(_) => HttpResponse::Ok()
+            .content_type("application/json")
+            .insert_header((header::CACHE_CONTROL, "private, no-store"))
+            .body(built.exact.clone()),
+        None => HttpResponse::Ok().content_type("application/json").body(built.public.clone()),
+    })
+}
+
+fn visit_key(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(ip) => IpAddr::V6(Ipv6Addr::from(u128::from(ip) & !0 << 80)),
+        ip => ip,
+    }
 }
 
 fn allow_visit(ip: IpAddr) -> bool {
+    let ip = visit_key(ip);
     let today = Utc::now().date_naive();
     let mut visits = VISITS.lock().unwrap_or_else(PoisonError::into_inner);
     if visits.0 != today {
@@ -346,4 +446,37 @@ async fn record_visit(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpR
 #[get("/stats")]
 async fn page(req: HttpRequest) -> HttpResponse {
     crate::html(&req, "stats").await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visits_group_ipv6_by_48() {
+        let a: IpAddr = "2001:db8:1:2::1".parse().unwrap();
+        let b: IpAddr = "2001:db8:1:ffff::9".parse().unwrap();
+        let c: IpAddr = "2001:db8:2::1".parse().unwrap();
+        let v4: IpAddr = "198.51.100.7".parse().unwrap();
+        assert_eq!(visit_key(a), visit_key(b));
+        assert_ne!(visit_key(a), visit_key(c));
+        assert_eq!(visit_key(v4), v4);
+    }
+
+    #[test]
+    fn onboarding_milestones_exist() {
+        for step in ["Edit", "Tech Tree", "Unlock token"] {
+            assert!(crate::dashboard::ONBOARDING_STEPS.contains(&step), "{step}");
+        }
+    }
+
+    #[test]
+    fn small_counts_are_masked() {
+        let mut value = serde_json::json!({ "a": 4, "b": 5, "c": 0, "d": [1, 12], "e": 2.5, "f": "x" });
+        mask_small(&mut value);
+        assert_eq!(
+            value,
+            serde_json::json!({ "a": null, "b": 5, "c": null, "d": [null, 12], "e": 2.5, "f": "x" })
+        );
+    }
 }

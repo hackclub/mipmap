@@ -5,16 +5,30 @@
 
     let { data } = $props();
 
+    function seconds(value: string | null) {
+        if (!value) return 0;
+        if (/^\d+$/.test(value)) return Number(value);
+        const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(value);
+        return match
+            ? Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)
+            : 0;
+    }
+
     function embedUrl(value: string | undefined) {
         try {
-            const url = new URL(value ?? "");
+            const url = new URL((value ?? "").trim().replace(/^["']+|["']+$/g, "").trim());
+            const host = url.hostname.replace(/^(www|m)\./, "");
+            const parts = url.pathname.split("/").filter(Boolean);
             const id =
-                url.hostname === "youtu.be"
-                    ? url.pathname.slice(1)
-                    : url.searchParams.get("v");
-            return id && /^[\w-]{1,32}$/.test(id)
-                ? `https://www.youtube-nocookie.com/embed/${id}`
-                : null;
+                host === "youtu.be"
+                    ? parts[0]
+                    : (host === "youtube.com" || host === "youtube-nocookie.com") &&
+                        ["embed", "shorts", "live"].includes(parts[0])
+                      ? parts[1]
+                      : url.searchParams.get("v");
+            if (!id || !/^[\w-]{1,32}$/.test(id)) return null;
+            const start = seconds(url.searchParams.get("t") ?? url.searchParams.get("start"));
+            return `https://www.youtube-nocookie.com/embed/${id}${start ? `?start=${start}` : ""}`;
         } catch {
             return null;
         }
@@ -291,33 +305,33 @@
     ];
 
     let roadmap = $state(0);
-    let steps_width = $state(0);
+    let list = $state<HTMLOListElement>();
+    let arrows = $state<string[]>([]);
 
-    const steps = $derived.by(() => {
-        const rem = steps_width
-            ? parseFloat(getComputedStyle(document.documentElement).fontSize)
-            : 16;
-        const width = steps_width || 40 * rem;
-        const gap = 2.5 * rem;
-        const columns = Math.max(
-            width - gap >= 14 * rem ? 2 : 1,
-            Math.floor((width + gap) / (9 * rem + gap)),
-        );
-        const size = Math.min(9 * rem, (width - (columns - 1) * gap) / columns);
-        const boxes = roadmaps[roadmap].steps.map((text, index) => ({
-            text,
-            x: (index % columns) * (size + gap),
-            y: Math.floor(index / columns) * (size + gap),
-        }));
-        const arrows = boxes.slice(1).map((next, index) => {
-            const { x, y } = boxes[index];
-            if (next.y === y)
-                return `M${x + size + 4} ${y + size / 2}H${next.x - 4}m-6 -6l6 6l-6 6`;
-            const end_x = next.x + size / 2;
-            return `M${x + size / 2} ${y + size + 4}v${gap / 2 - 4}H${end_x}V${next.y - 4}m-6 -6l6 6l6 -6`;
+    function draw() {
+        if (!list) return;
+        const boxes = [...list.children] as HTMLElement[];
+        arrows = boxes.slice(1).map((next, index) => {
+            const box = boxes[index];
+            const x = box.offsetLeft;
+            const y = box.offsetTop;
+            const w = box.offsetWidth;
+            const h = box.offsetHeight;
+            if (next.offsetTop === y)
+                return `M${x + w + 4} ${y + h / 2}H${next.offsetLeft - 4}m-6 -6l6 6l-6 6`;
+            const middle = (y + h + next.offsetTop) / 2;
+            const end_x = next.offsetLeft + next.offsetWidth / 2;
+            return `M${x + w / 2} ${y + h + 4}V${middle}H${end_x}V${next.offsetTop - 4}m-6 -6l6 6l6 -6`;
         });
-        const rows = Math.ceil(boxes.length / columns);
-        return { boxes, arrows, size, height: rows * size + (rows - 1) * gap };
+    }
+
+    $effect(() => {
+        void roadmap;
+        if (!list) return;
+        const observer = new ResizeObserver(draw);
+        observer.observe(list);
+        draw();
+        return () => observer.disconnect();
     });
 
     const misc = [
@@ -340,7 +354,7 @@
 
 <main>
     <header class="card title">
-        <h1>Mipmap Docs</h1>
+        <p class="page-title">Mipmap Docs</p>
     </header>
     <div class="docs">
         <article class="card markdown">
@@ -380,46 +394,36 @@
                     </svg>
                 </button>
             </div>
-            <h3>{roadmaps[roadmap].name}</h3>
-            <div
-                class="steps"
-                bind:clientWidth={steps_width}
-                style:height="{steps.height}px"
-            >
+            <h3 aria-live="polite">{roadmaps[roadmap].name}</h3>
+            <div class="steps">
                 <svg aria-hidden="true">
-                    {#each steps.arrows as arrow}
+                    {#each arrows as arrow}
                         <path d={arrow} />
                     {/each}
                 </svg>
-                <ol>
-                    {#each steps.boxes as { text, x, y }}
-                        <li
-                            style:left="{x}px"
-                            style:top="{y}px"
-                            style:width="{steps.size}px"
-                            style:height="{steps.size}px"
-                        >
-                            {text}
-                        </li>
+                <ol bind:this={list}>
+                    {#each roadmaps[roadmap].steps as text}
+                        <li>{text}</li>
                     {/each}
                 </ol>
             </div>
         </section>
     </div>
     <div class="resources">
-        <section class="card wide">
-            <h2>Video</h2>
-            <p>Overview of all the important graphics concepts</p>
-            {#if video}
+        {#if video}
+            <section class="card wide">
+                <h2>Video</h2>
+                <p>Overview of all the important graphics concepts</p>
                 <iframe
                     src={video}
                     title="Overview of all the important graphics concepts"
                     allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
                     referrerpolicy="strict-origin-when-cross-origin"
+                    loading="lazy"
                     allowfullscreen
                 ></iframe>
-            {/if}
-        </section>
+            </section>
+        {/if}
         <div class="section">
             <MipmapButton onclick={() => (picking = true)}>Which library to choose?</MipmapButton>
         </div>
@@ -542,7 +546,17 @@
     }
 
     .markdown :global(a) {
-        color: #a2b8eb;
+        color: #c8d5f3;
+    }
+
+    .markdown :global(a:focus-visible) {
+        color: #ead7c2;
+    }
+
+    @media (hover: hover) {
+        .markdown :global(a:hover) {
+            color: #ead7c2;
+        }
     }
 
     @media (max-width: 900px) {
@@ -603,7 +617,7 @@
 
     .description {
         margin: 0.25rem 0 0;
-        opacity: 0.7;
+        opacity: 0.85;
     }
 
     .description + ul {
@@ -632,7 +646,17 @@
     }
 
     a {
-        color: #a2b8eb;
+        color: #c8d5f3;
+    }
+
+    a:not(.home):focus-visible {
+        color: #ead7c2;
+    }
+
+    @media (hover: hover) {
+        a:not(.home):hover {
+            color: #ead7c2;
+        }
     }
 
     .wide {
@@ -649,6 +673,9 @@
 
     .picker button {
         display: grid;
+        place-items: center;
+        min-width: 2.5rem;
+        min-height: 2.5rem;
         padding: 0.25rem;
         background: none;
         border: none;
@@ -694,14 +721,17 @@
         width: 1rem;
         height: 1rem;
         margin: 0;
+        box-sizing: border-box;
         appearance: none;
         background-color: #4f2f1f;
+        border: 2px solid #d6ab70;
         border-radius: 50%;
         cursor: pointer;
     }
 
     .dots input:checked {
         background-color: #ead7c2;
+        border-color: #ead7c2;
     }
 
     .dots input:focus-visible {
@@ -718,6 +748,7 @@
     .steps {
         position: relative;
         margin-top: 1rem;
+        container: roadmap / inline-size;
     }
 
     .steps svg {
@@ -734,14 +765,29 @@
     }
 
     .steps ol {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, 9rem);
+        gap: 2.5rem;
         margin: 0;
         padding: 0;
         list-style: none;
     }
 
+    @container roadmap (min-width: 18.5rem) and (max-width: 20.5rem) {
+        .steps ol {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @container roadmap (max-width: 9rem) {
+        .steps ol {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
     .steps li {
         box-sizing: border-box;
-        position: absolute;
+        aspect-ratio: 1;
         display: grid;
         place-items: center;
         padding: 0.5rem;
@@ -754,7 +800,7 @@
         overflow-wrap: break-word;
     }
 
-    h1 {
+    .page-title {
         margin: 0;
         font-size: 2rem;
         font-weight: 700;

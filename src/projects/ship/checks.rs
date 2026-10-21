@@ -10,7 +10,7 @@ use crate::{
     snapshots,
 };
 use hc_helper::{
-    airtable::AirtableTable,
+    airtable::{AirtableTable, get_records_with_fields, maybe_sent},
     auth::data::{forget_auth_token, get_auth_data_with_token},
     hackatime::data::{
         HackatimeUser, forget_hackatime_token, get_hackatime_project_summaries_with_token,
@@ -19,6 +19,7 @@ use hc_helper::{
 };
 use chrono::{DateTime, Utc};
 use reqwest::Url;
+use serde::de::IgnoredAny;
 use sqlx::{PgPool, types::Json};
 use std::{
     collections::HashSet,
@@ -32,6 +33,14 @@ pub struct RepoClaim(String);
 impl Drop for RepoClaim {
     fn drop(&mut self) {
         CLAIMED.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.0);
+    }
+}
+
+pub fn trust_blocked(level: &str) -> Option<&'static str> {
+    match level.trim().to_ascii_lowercase().as_str() {
+        "blue" | "green" | "yellow" => None,
+        "red" => Some("Your Hackatime account has been flagged, so you can't ship right now"),
+        _ => Some("Couldn't confirm your Hackatime account is in good standing, so you can't ship right now. Try again later"),
     }
 }
 
@@ -112,8 +121,8 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         .bind(&user.trust_factor.trust_level)
         .execute(pool)
         .await?;
-    if user.trust_factor.trust_level == "red" {
-        return Err(reject("Your Hackatime account has been flagged, so you can't ship right now"));
+    if let Some(reason) = trust_blocked(&user.trust_factor.trust_level) {
+        return Err(reject(reason));
     }
     let projects = get_hackatime_project_summaries_with_token(&token)
         .await
@@ -237,25 +246,36 @@ pub async fn submit(
         hackatime_id: hackatime.user.user_id.to_string(),
         github_username: hackatime.user.github_username.filter(|name| !name.is_empty()),
     };
-    let (record_id, queued) = if account.verified {
-        let record_id = queue::send(
-            table,
+    let (record_id, queued, sending) = if account.verified {
+        match queue::send(
+            table.clone(),
             &account.token,
             &hackatime.token,
             code_url.clone(),
             tier,
             shipped_at,
-            queued,
+            queued.clone(),
         )
-        .await?;
-        (Some(record_id), None)
+        .await
+        {
+            Ok(record_id) => (Some(record_id), None, false),
+            Err(e) if maybe_sent(&e) => {
+                log::error!(
+                    "Sending project {} for review failed after Airtable may have created the record, holding it for a manual check: {e:#}",
+                    project.id
+                );
+                (None, Some(Json(queued)), true)
+            }
+            Err(e) => return Err(e.into()),
+        }
     } else {
-        (None, Some(Json(queued)))
+        (None, Some(Json(queued)), false)
     };
-    if let Err(e) = sqlx::query(
+    let inserted: Result<i32, sqlx::Error> = sqlx::query_scalar(
         "INSERT INTO submission (project_id, record_id, mips_per_hour, code_url, tier, multiplier, tracked_hours,
-             created_at, queued)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             created_at, queued, sending_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $10 THEN now() END)
+         RETURNING id",
     )
     .bind(project.id)
     .bind(&record_id)
@@ -266,16 +286,45 @@ pub async fn submit(
     .bind(hackatime.tracked)
     .bind(shipped_at)
     .bind(queued)
-    .execute(pool)
-    .await
-    {
-        if let Some(record_id) = record_id {
-            log::error!(
-                "Review record {record_id} was created for project {} but saving the submission failed",
-                project.id
-            );
+    .bind(sending)
+    .fetch_one(pool)
+    .await;
+    let id = match inserted {
+        Ok(id) => id,
+        Err(e) => {
+            if let Some(record_id) = record_id {
+                log::error!(
+                    "Review record {record_id} was created for project {} but saving the submission failed",
+                    project.id
+                );
+            } else if sending {
+                log::error!(
+                    "Project {} may have a review record but saving the submission failed",
+                    project.id
+                );
+            }
+            return Err(e.into());
         }
-        return Err(e.into());
+    };
+    let Some(record_id) = record_id else {
+        return Ok(sending);
+    };
+    match get_records_with_fields::<IgnoredAny>(table, std::slice::from_ref(&record_id), &["Code URL"]).await {
+        Ok(found) if found.is_empty() => {
+            sqlx::query("DELETE FROM submission WHERE id = $1")
+                .bind(id)
+                .execute(pool)
+                .await?;
+            Err(anyhow::anyhow!(
+                "Review record {record_id} for project {} was created but can't be read back",
+                project.id
+            )
+            .into())
+        }
+        Ok(_) => Ok(true),
+        Err(e) => {
+            log::warn!("Couldn't read back review record {record_id} for project {}: {e:#}", project.id);
+            Ok(true)
+        }
     }
-    Ok(record_id.is_some())
 }

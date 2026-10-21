@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
-    net::IpAddr,
+    net::{IpAddr, Ipv6Addr},
     sync::{LazyLock, Mutex, PoisonError},
 };
 
@@ -18,7 +18,7 @@ const SURVEYS_JSON: &str = include_str!("../frontend/src/lib/assets/surveys.json
 const SCALE: std::ops::RangeInclusive<i64> = 1..=5;
 const UNSURE: &str = "unsure";
 const TEXT_LIMIT: usize = 2000;
-const RESPONSES_PER_IP: u32 = 5;
+const RESPONSES_PER_IP: u32 = 20;
 const RESPONDER_IPS: usize = 100_000;
 
 #[derive(Deserialize)]
@@ -67,7 +67,15 @@ pub fn pages(cfg: &mut web::ServiceConfig) {
     cfg.service(page);
 }
 
+fn responder(ip: IpAddr) -> IpAddr {
+    match ip.to_canonical() {
+        IpAddr::V6(ip) => IpAddr::V6(Ipv6Addr::from(u128::from(ip) & !0 << 80)),
+        ip => ip,
+    }
+}
+
 fn allow_response(ip: IpAddr) -> bool {
+    let ip = responder(ip);
     let today = Utc::now().date_naive();
     let mut responses = RESPONSES.lock().unwrap_or_else(PoisonError::into_inner);
     if responses.0 != today {
@@ -163,7 +171,12 @@ struct SurveyResults {
 #[serde(tag = "type", rename_all = "lowercase")]
 enum QuestionResults {
     Scale { key: &'static str, items: Vec<ItemResults> },
-    Text { key: &'static str, label: &'static str, answers: Vec<TextAnswer> },
+    Text {
+        key: &'static str,
+        label: &'static str,
+        answers: Vec<TextAnswer>,
+        next: Option<i32>,
+    },
 }
 
 #[derive(Serialize)]
@@ -176,6 +189,7 @@ struct ItemResults {
 
 #[derive(Serialize, sqlx::FromRow)]
 struct TextAnswer {
+    id: i32,
     #[serde(skip)]
     survey_id: i32,
     #[serde(skip)]
@@ -184,8 +198,17 @@ struct TextAnswer {
     text: String,
 }
 
+#[derive(Deserialize)]
+struct ResultsQuery {
+    before: Option<i32>,
+}
+
 #[get("/surveys")]
-async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+async fn get_results(
+    _: Admin,
+    pool: web::Data<PgPool>,
+    query: web::Query<ResultsQuery>,
+) -> Result<HttpResponse, ApiError> {
     let totals: HashMap<i32, i64> = sqlx::query_as(
         "SELECT survey_id, count(*) FROM survey_response WHERE deleted_at IS NULL GROUP BY survey_id",
     )
@@ -204,12 +227,18 @@ async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
     .fetch_all(pool.get_ref())
     .await?;
     let mut texts: Vec<TextAnswer> = sqlx::query_as(
-        "SELECT r.survey_id, a.key AS question, r.created_on, a.value #>> '{}' AS text
-         FROM survey_response r
-         CROSS JOIN LATERAL jsonb_each(r.answers) a
-         WHERE r.deleted_at IS NULL AND jsonb_typeof(a.value) = 'string'
-         ORDER BY r.id DESC",
+        "SELECT id, survey_id, question, created_on, text FROM (
+             SELECT r.id, r.survey_id, a.key AS question, r.created_on, a.value #>> '{}' AS text,
+                 row_number() OVER (PARTITION BY r.survey_id, a.key ORDER BY r.id DESC) AS n
+             FROM survey_response r
+             CROSS JOIN LATERAL jsonb_each(r.answers) a
+             WHERE r.deleted_at IS NULL AND jsonb_typeof(a.value) = 'string'
+             AND ($1::int IS NULL OR r.id < $1)
+         ) t WHERE n <= $2
+         ORDER BY id DESC",
     )
+    .bind(query.before)
+    .bind(PAGE + 1)
     .fetch_all(pool.get_ref())
     .await?;
 
@@ -247,11 +276,14 @@ async fn get_results(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
                             .collect(),
                     },
                     Question::Text { key, label, .. } => {
-                        let (answers, rest) = std::mem::take(&mut texts)
+                        let (mut answers, rest): (Vec<TextAnswer>, _) = std::mem::take(&mut texts)
                             .into_iter()
                             .partition(|text| text.survey_id == survey.id && &text.question == key);
                         texts = rest;
-                        QuestionResults::Text { key, label, answers }
+                        let more = answers.len() as i64 > PAGE;
+                        answers.truncate(PAGE as usize);
+                        let next = more.then(|| answers.last().map(|answer| answer.id)).flatten();
+                        QuestionResults::Text { key, label, answers, next }
                     }
                 })
                 .collect(),
@@ -320,6 +352,6 @@ async fn delete_response(
 async fn page(req: HttpRequest, id: web::Path<String>) -> HttpResponse {
     match id.parse().ok().and_then(survey) {
         Some(survey) => crate::html(&req, &format!("surveys/{}", survey.id)).await,
-        None => HttpResponse::NotFound().finish(),
+        None => crate::not_found_page(),
     }
 }

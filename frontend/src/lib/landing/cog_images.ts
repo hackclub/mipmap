@@ -75,11 +75,19 @@ export function cog_shadow(size: number) {
 	);
 }
 
+const belts = new Map<string, string>();
+
 export function belt_shadow(path: string, thickness: number, view: [number, number, number, number]) {
-	return svg_url(
-		blurred(
-			view,
-			`<path transform="translate(${shadow_x} ${shadow_y})" fill="none" stroke="#000" stroke-width="${thickness}" d="${path}"/>`
-		)
-	);
+	const key = `${path}:${thickness}:${view.join(' ')}`;
+	let url = belts.get(key);
+	if (!url) {
+		url = svg_url(
+			blurred(
+				view,
+				`<path transform="translate(${shadow_x} ${shadow_y})" fill="none" stroke="#000" stroke-width="${thickness}" d="${path}"/>`
+			)
+		);
+		belts.set(key, url);
+	}
+	return url;
 }

@@ -63,6 +63,7 @@
 </script>
 
 <Filters
+    label="Order status"
     options={[
         ["unfulfilled", "Unfulfilled"],
         ["all", "All"],
@@ -71,6 +72,7 @@
 />
 
 <Filters
+    label="Item type"
     options={[
         ["all", "All items"],
         ["sticker", "Stickers"],

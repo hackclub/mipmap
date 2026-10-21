@@ -4,13 +4,15 @@
     import type { Dashboard } from "$lib/dashboard/state.svelte";
     import SendSnapshot from "$lib/snapshots/SendSnapshot.svelte";
     import SnapshotCard from "$lib/snapshots/SnapshotCard.svelte";
-    import { scroll_focus } from "$lib/ui/scroll_focus";
+    import { scroll_region } from "$lib/ui/scroll_focus";
 
     let {
         bounds,
         snapshots,
     }: { bounds: Bounds; snapshots: Dashboard["snapshots"] } = $props();
 
+    const uid = $props.id();
+    const mine = scroll_region({ labelledby: `${uid}-mine` });
     const columns = 6;
     const rows = 4;
 </script>
@@ -34,8 +36,8 @@
                 </p>
             </div>
         </div>
-        <div class="area mine" data-scroll {@attach scroll_focus}>
-            <h3>Your Snapshots</h3>
+        <div class="area mine" data-scroll {@attach mine}>
+            <h3 id="{uid}-mine">Your Snapshots</h3>
             {#each snapshots.mine as snapshot (snapshot.id)}
                 <SnapshotCard {snapshot} />
             {:else}

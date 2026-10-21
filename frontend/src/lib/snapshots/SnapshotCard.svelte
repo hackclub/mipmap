@@ -42,7 +42,11 @@
 {#if open}
     <Dialog labelledby="{uid}-title" onclose={() => (open = false)}>
         <h2 id="{uid}-title">Snapshot by {snapshot.author}</h2>
-        <img class="full" src={snapshot.image} alt="" />
+        <img
+            class="full"
+            src={snapshot.image}
+            alt="Snapshot by {snapshot.author}"
+        />
         <p class="full">{snapshot.caption}</p>
     </Dialog>
 {/if}
@@ -114,14 +118,26 @@
         padding: 0;
         background: none;
         border: none;
-        color: #a2b8eb;
+        color: #c8d5f3;
         font: inherit;
         text-decoration: underline;
         cursor: pointer;
+        transition: color 0.3s;
+    }
+
+    figcaption button:focus-visible {
+        color: #ead7c2;
+    }
+
+    @media (hover: hover) {
+        figcaption button:hover {
+            color: #ead7c2;
+        }
     }
 
     h2 {
         margin: 0 0 1rem;
+        overflow-wrap: anywhere;
     }
 
     img.full {

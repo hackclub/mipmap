@@ -29,6 +29,7 @@
     let frame_id = 0;
     let bubble_timer = 0;
     let last = 0;
+    let still = false;
 
     function tick(now: number) {
         const step = Math.max(0, Math.min(now - last, max_step));
@@ -43,9 +44,9 @@
         } else {
             progress = Math.max(0, progress - step / drain_time);
         }
-        const amplitude = progress * max_shake;
+        const amplitude = still ? 0 : progress * max_shake;
         shake =
-            progress > 0
+            amplitude > 0
                 ? `translate(${amplitude * Math.sin(now * 0.09)}px, ${amplitude * Math.sin(now * 0.13) * 0.5}px) rotate(${amplitude * 0.4 * Math.sin(now * 0.11)}deg)`
                 : "";
         frame_id = holding || progress > 0 ? requestAnimationFrame(tick) : 0;
@@ -53,6 +54,7 @@
 
     function run() {
         if (frame_id) return;
+        still = matchMedia("(prefers-reduced-motion: reduce)").matches;
         last = performance.now();
         frame_id = requestAnimationFrame(tick);
     }
@@ -220,9 +222,12 @@
         font: inherit;
         font-size: clamp(1.25rem, 2vw, 1.75rem);
         font-weight: 700;
-        white-space: nowrap;
+        text-align: center;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+        box-sizing: border-box;
         cursor: pointer;
-        touch-action: none;
+        touch-action: pan-y;
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
@@ -253,6 +258,7 @@
         inset: 0;
         display: grid;
         place-items: center;
+        padding: inherit;
         background-color: #d6ab70;
         color: #4f2f1f;
         pointer-events: none;

@@ -1,3 +1,4 @@
+use super::checks;
 use crate::{
     accounts::{
         profile,
@@ -9,15 +10,16 @@ use crate::{
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use hc_helper::{
-    airtable::AirtableTable,
+    airtable::{AirtableTable, maybe_sent},
     auth::data::{forget_auth_token, get_auth_data_with_token},
+    hackatime::data::{forget_hackatime_token, get_hackatime_user_with_token},
     submission::create_unified_with_token,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgPool, types::Json};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Queued {
     pub demo: String,
     pub screenshot: String,
@@ -118,10 +120,21 @@ async fn release(pool: &PgPool, table: &AirtableTable) -> anyhow::Result<()> {
     let mut checked: Option<(i32, Option<String>)> = None;
     for ship in waiting {
         if checked.as_ref().is_none_or(|(user_id, _)| *user_id != ship.user_id) {
-            let token = verified(pool, ship.user_id).await.unwrap_or_else(|e| {
-                log::warn!("Checking user {}'s ID verification failed: {e:#}", ship.user_id);
-                None
-            });
+            let token = match verified(pool, ship.user_id).await {
+                Ok(Some(token)) => match trusted(pool, ship.user_id).await {
+                    Ok(true) => Some(token),
+                    Ok(false) => None,
+                    Err(e) => {
+                        log::warn!("Checking user {}'s Hackatime trust level failed: {e:#}", ship.user_id);
+                        None
+                    }
+                },
+                Ok(None) => None,
+                Err(e) => {
+                    log::warn!("Checking user {}'s ID verification failed: {e:#}", ship.user_id);
+                    None
+                }
+            };
             checked = Some((ship.user_id, token));
         }
         let Some((_, Some(hca_token))) = &checked else {
@@ -144,6 +157,24 @@ async fn verified(pool: &PgPool, user_id: i32) -> anyhow::Result<Option<String>>
     Ok(profile::ship_blocked(Some(&data.verification_status), data.ysws_eligible)
         .is_none()
         .then_some(token))
+}
+
+async fn trusted(pool: &PgPool, user_id: i32) -> anyhow::Result<bool> {
+    let token = tokens::load(pool, user_id, Provider::Hackatime)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("user {user_id} has no Hackatime token"))?;
+    forget_hackatime_token(&token);
+    let level = get_hackatime_user_with_token(&token).await?.trust_factor.trust_level;
+    sqlx::query("UPDATE \"user\" SET hackatime_trust_level = $2 WHERE id = $1")
+        .bind(user_id)
+        .bind(&level)
+        .execute(pool)
+        .await?;
+    let blocked = checks::trust_blocked(&level).is_some();
+    if blocked {
+        log::warn!("Holding user {user_id}'s queued ships because their Hackatime trust level is {level:?}");
+    }
+    Ok(!blocked)
 }
 
 async fn submit(pool: &PgPool, table: &AirtableTable, hca_token: &str, ship: Waiting) -> anyhow::Result<()> {
@@ -175,6 +206,12 @@ async fn submit(pool: &PgPool, table: &AirtableTable, hca_token: &str, ship: Wai
     .await;
     let record_id = match sent {
         Ok(record_id) => record_id,
+        Err(e) if maybe_sent(&e) => {
+            log::error!(
+                "Submitting ship {id} after ID verification failed after Airtable may have created the record, leaving it for a manual check: {e:#}"
+            );
+            return Ok(());
+        }
         Err(e) => {
             log::error!("Submitting ship {id} after ID verification failed: {e:#}");
             sqlx::query("UPDATE submission SET sending_at = NULL WHERE id = $1")

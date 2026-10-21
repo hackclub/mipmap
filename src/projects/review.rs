@@ -1,11 +1,11 @@
 use crate::{accounts::profile, env, snapshots, tree};
 use chrono::{DateTime, Utc};
-use hc_helper::airtable::{AirtableTable, field_names, fields, get_records};
+use hc_helper::airtable::{AirtableTable, field_names, fields, get_records_with_fields};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool};
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::{LazyLock, Mutex, PoisonError},
     time::{Duration, Instant},
 };
@@ -15,9 +15,19 @@ pub const REFERRER_MIPS: i32 = 100;
 pub const REFEREE_MIPS: i32 = 20;
 const MAX_HOURS: f64 = 10_000.0;
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(60 * 60);
+const REFERRAL_RETRY_EVERY: Duration = Duration::from_secs(60 * 60);
+const REFERRAL_BACKOFF_MAX: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const TIERS: [(&str, &str); 3] = [("quebec", "Quebec"), ("romeo", "Romeo"), ("sierra", "Sierra")];
 
 static REPORTED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+
+const READ_FIELDS: &[&str] = &[
+    "Automation - Status",
+    "Optional - Override Hours Spent",
+    "Code URL",
+    "Rejected",
+    "Submission Tier",
+];
 
 #[derive(Serialize)]
 pub struct Extras {
@@ -185,6 +195,7 @@ pub fn spawn(pool: PgPool) {
         );
         return;
     };
+    let referrals = pool.clone();
     actix_web::rt::spawn(async move {
         match field_problems(&table).await {
             Ok(problems) if !problems.is_empty() => log::error!(
@@ -202,14 +213,19 @@ pub fn spawn(pool: PgPool) {
             interval.tick().await;
             let all = synced_all.is_none_or(|at| at.elapsed() >= FULL_SYNC_EVERY);
             match sync(&pool, &table, all).await {
-                Ok(true) if all => {
-                    synced_all = Some(Instant::now());
-                    if let Err(e) = retry_referrals(&pool).await {
-                        log::error!("Retrying referral bonuses failed: {e:#}");
-                    }
-                }
+                Ok(true) if all => synced_all = Some(Instant::now()),
                 Ok(_) => {}
                 Err(e) => log::error!("Review sync failed: {e:#}"),
+            }
+        }
+    });
+    actix_web::rt::spawn(async move {
+        let mut interval = actix_web::rt::time::interval(REFERRAL_RETRY_EVERY);
+        let mut failures: HashMap<i32, (u32, Instant)> = HashMap::new();
+        loop {
+            interval.tick().await;
+            if let Err(e) = retry_referrals(&referrals, &mut failures).await {
+                log::error!("Retrying referral bonuses failed: {e:#}");
             }
         }
     });
@@ -276,7 +292,7 @@ async fn sync(pool: &PgPool, table: &AirtableTable, all: bool) -> anyhow::Result
         );
         return Ok(false);
     }
-    let reviews = get_records::<Review>(table.clone(), &ids).await?;
+    let reviews = get_records_with_fields::<Review>(table.clone(), &ids, READ_FIELDS).await?;
     if let Err(e) = &fields
         && reviews.is_empty()
     {
@@ -301,9 +317,11 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     let mut tiers = Vec::new();
     let mut rates = Vec::new();
     let superseded: HashSet<String> = sqlx::query_scalar(
-        "SELECT s.record_id FROM submission s
-         WHERE s.record_id = ANY($1) AND s.deleted_at IS NOT NULL
-         AND EXISTS (SELECT 1 FROM submission n WHERE n.project_id = s.project_id AND n.deleted_at IS NULL AND n.id > s.id)",
+        "SELECT s.record_id FROM submission s JOIN project p ON p.id = s.project_id
+         WHERE s.record_id = ANY($1) AND (s.deleted_at IS NOT NULL OR s.rejected)
+         AND (p.deleted_at IS NOT NULL OR EXISTS (
+             SELECT 1 FROM submission n WHERE n.project_id = s.project_id AND n.deleted_at IS NULL AND n.id > s.id
+         ))",
     )
     .bind(&present)
     .fetch_all(pool)
@@ -313,7 +331,9 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     for (record_id, review) in reviews {
         if superseded.contains(&record_id) {
             if REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(record_id.clone()) {
-                log::warn!("Review {record_id} came back after its project reshipped, leaving it deleted");
+                log::warn!(
+                    "Review {record_id} changed after its project reshipped or was deleted, leaving it deleted or rejected"
+                );
             }
             continue;
         }
@@ -330,11 +350,14 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
             );
             continue;
         };
-        let rate = match record_tier.map(|tier| mips_per_hour(Some(tier))).transpose() {
-            Ok(rate) => rate,
+        let (record_tier, rate) = match record_tier.map(|tier| mips_per_hour(Some(tier))).transpose() {
+            Ok(rate) => (record_tier, rate),
             Err(e) => {
-                log::error!("Review {record_id} can't be priced, skipping it: {e:#}");
-                continue;
+                let tier = record_tier.unwrap_or_default();
+                if REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(format!("rate:{tier}")) {
+                    log::error!("{tier} reviews can't be priced, keeping their current tier and rate: {e:#}");
+                }
+                (None, None)
             }
         };
         found.push(record_id);
@@ -402,10 +425,10 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     let changed_ids: Vec<i32> = changed.iter().copied().collect();
     sqlx::query(
         "UPDATE project p SET tier = s.tier
-         FROM (SELECT DISTINCT ON (project_id) project_id, tier FROM submission
+         FROM (SELECT DISTINCT ON (project_id) project_id, tier, rejected FROM submission
                WHERE project_id = ANY($1) AND deleted_at IS NULL
                ORDER BY project_id, created_at DESC, id DESC) s
-         WHERE p.id = s.project_id AND s.tier IS NOT NULL AND p.tier IS DISTINCT FROM s.tier",
+         WHERE p.id = s.project_id AND NOT s.rejected AND s.tier IS NOT NULL AND p.tier IS DISTINCT FROM s.tier",
     )
     .bind(&changed_ids)
     .execute(&mut *tx)
@@ -566,7 +589,7 @@ async fn revoke_referral(conn: &mut PgConnection, user_id: i32) -> anyhow::Resul
     Ok(vec![referrer, user_id])
 }
 
-async fn retry_referrals(pool: &PgPool) -> anyhow::Result<()> {
+async fn retry_referrals(pool: &PgPool, failures: &mut HashMap<i32, (u32, Instant)>) -> anyhow::Result<()> {
     let users: Vec<i32> = sqlx::query_scalar(
         "SELECT id FROM \"user\" WHERE referred_by IS NOT NULL AND NOT referral_paid
          AND EXISTS (
@@ -578,7 +601,25 @@ async fn retry_referrals(pool: &PgPool) -> anyhow::Result<()> {
     .bind(APPROVED)
     .fetch_all(pool)
     .await?;
-    pay_referrals(pool, users).await;
+    failures.retain(|user_id, _| users.contains(user_id));
+    for user_id in users {
+        if failures.get(&user_id).is_some_and(|(_, next)| Instant::now() < *next) {
+            continue;
+        }
+        let paid = pay_referral(pool, user_id).await.unwrap_or_else(|e| {
+            log::error!("Paying user {user_id}'s referral bonus failed: {e:#}");
+            false
+        });
+        if paid {
+            failures.remove(&user_id);
+        } else {
+            let count = failures.get(&user_id).map_or(1, |(count, _)| count + 1);
+            let wait = REFERRAL_RETRY_EVERY
+                .saturating_mul(2_u32.saturating_pow(count.min(16)))
+                .min(REFERRAL_BACKOFF_MAX);
+            failures.insert(user_id, (count, Instant::now() + wait));
+        }
+    }
     Ok(())
 }
 
@@ -590,7 +631,7 @@ async fn pay_referrals(pool: &PgPool, users: Vec<i32>) {
     }
 }
 
-async fn pay_referral(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
+async fn pay_referral(pool: &PgPool, user_id: i32) -> anyhow::Result<bool> {
     let pending: Option<(i32, String, String)> = sqlx::query_as(
         "SELECT referrer.id, referrer.hca_id, \"user\".hca_id
          FROM \"user\" JOIN \"user\" referrer ON referrer.id = \"user\".referred_by
@@ -602,16 +643,16 @@ async fn pay_referral(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
     .fetch_optional(pool)
     .await?;
     let Some((referrer, referrer_hca_id, hca_id)) = pending else {
-        return Ok(());
+        return Ok(true);
     };
     if !has_approved(pool, user_id).await? {
-        return Ok(());
+        return Ok(true);
     }
     if !(profile::ysws_eligible(&referrer_hca_id).await? && profile::ysws_eligible(&hca_id).await?) {
         log::info!(
             "User {user_id} or their referrer {referrer} isn't eligible, skipping the referral bonus"
         );
-        return Ok(());
+        return Ok(false);
     }
     let mut tx = pool.begin().await?;
     let claimed = sqlx::query(
@@ -626,5 +667,5 @@ async fn pay_referral(pool: &PgPool, user_id: i32) -> anyhow::Result<()> {
         reward(&mut tx, referrer, user_id, 1).await?;
         tx.commit().await?;
     }
-    Ok(())
+    Ok(true)
 }

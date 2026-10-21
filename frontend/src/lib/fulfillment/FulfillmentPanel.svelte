@@ -11,6 +11,10 @@
         ["review_by", "We'll get it reviewed by..."],
         ["fulfill_by", "After you redeem prizes, they'll be sent out by..."],
     ];
+
+    const now = Date.now();
+    const closed = (round: (typeof rounds)[number]) =>
+        now >= Date.parse(round.ship_by) + 86_400_000;
 </script>
 
 <Section title="Fulfillment Rounds" {bounds} zoom={3} padded>
@@ -29,9 +33,17 @@
         </thead>
         <tbody>
             {#each rounds as round}
-                <tr>
+                {@const past = closed(round)}
+                <tr class:past>
                     {#each columns as [key] (key)}
-                        <td>{long_date(round[key])}</td>
+                        <td>
+                            {#if past && key === "ship_by"}
+                                <s>{long_date(round[key])}</s>
+                                <span class="closed">(closed)</span>
+                            {:else}
+                                {long_date(round[key])}
+                            {/if}
+                        </td>
                     {/each}
                 </tr>
             {/each}
@@ -73,5 +85,18 @@
 
     tbody tr:nth-child(odd) {
         background: rgb(79 47 31 / 0.4);
+    }
+
+    .past {
+        opacity: 0.85;
+    }
+
+    .closed {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 </style>

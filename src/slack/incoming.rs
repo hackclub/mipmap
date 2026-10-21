@@ -1,3 +1,4 @@
+use super::USER_FOR_SLACK_ID;
 use crate::{env, error::ApiError};
 use actix_web::{HttpRequest, HttpResponse, post, web};
 use hmac::{Hmac, KeyInit, Mac};
@@ -6,7 +7,7 @@ use serde_json::json;
 use sha2::Sha256;
 use sqlx::PgPool;
 
-const MAX_AGE_SECS: i64 = 5 * 60;
+const MAX_AGE_SECS: u64 = 5 * 60;
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -42,7 +43,7 @@ fn verified(req: &HttpRequest, body: &[u8], secret: &str) -> bool {
     };
     let fresh = timestamp
         .parse::<i64>()
-        .is_ok_and(|sent| (chrono::Utc::now().timestamp() - sent).abs() <= MAX_AGE_SECS);
+        .is_ok_and(|sent| chrono::Utc::now().timestamp().abs_diff(sent) <= MAX_AGE_SECS);
     let Some(signature) = signature.strip_prefix("v0=").and_then(|hex| hex::decode(hex).ok()) else {
         return false;
     };
@@ -88,12 +89,11 @@ pub async fn events(req: HttpRequest, pool: web::Data<PgPool>, body: web::Bytes)
                 1 => text.push_str("\n_Sent a file_"),
                 count => text.push_str(&format!("\n_Sent {count} files_")),
             }
-            sqlx::query(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO slack_message (slack_id, user_id, incoming, kind, text, ts)
-                 VALUES ($1, (SELECT id FROM \"user\" WHERE slack_id = $1 ORDER BY deleted_at IS NOT NULL, id LIMIT 1),
-                     true, 'message', $2, $3)
-                 ON CONFLICT (slack_id, ts) DO NOTHING",
-            )
+                 VALUES ($1, {USER_FOR_SLACK_ID}, true, 'message', $2, $3)
+                 ON CONFLICT (slack_id, ts) DO NOTHING"
+            )))
             .bind(slack_id)
             .bind(text.trim())
             .bind(ts)

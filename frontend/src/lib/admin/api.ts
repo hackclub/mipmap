@@ -1,4 +1,5 @@
-import { get_json, json, request, send_json } from "$lib/api";
+import { json, request, send_json } from "$lib/api";
+import { session } from "./session.svelte";
 import type {
   Action,
   AdminContact,
@@ -23,22 +24,38 @@ import type {
 
 export const page_size = 50;
 
+async function admin(path: string, init?: RequestInit) {
+  const response = await request(`/api/admin/${path}`, init);
+  if (
+    response.status === 404 &&
+    (path === "overview" ||
+      (await request("/api/admin/overview").then(
+        (probe) => probe.status === 404,
+        () => false,
+      )))
+  ) {
+    session.ended = true;
+    throw new Error("Your admin session ended. Log in again");
+  }
+  return response;
+}
+
+const get = <T>(path: string) => admin(path).then((r) => json<T>(r));
+
 const list =
   <T>(path: string) =>
   (params: Record<string, string | number | undefined> = {}) => {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params))
       if (value !== undefined && value !== "") query.set(key, String(value));
-    return get_json<T[]>(`/api/admin/${path}?${query}`);
+    return get<T[]>(`${path}?${query}`);
   };
 
 const post = <T>(path: string, body: unknown) =>
-  request(`/api/admin/${path}`, send_json("POST", body)).then((r) =>
-    json<T>(r),
-  );
+  admin(path, send_json("POST", body)).then((r) => json<T>(r));
 
 export const fetch_overview = () =>
-  get_json<{ unfulfilled_orders: number }>("/api/admin/overview");
+  get<{ unfulfilled_orders: number }>("overview");
 
 export const fetch_ships = list<Ship>("ships");
 export const fetch_snapshots = list<Snapshot>("snapshots");
@@ -61,8 +78,8 @@ export const set_shadowban = (
 ) => post<Snapshot>(`snapshots/${id}/shadowban`, body);
 
 export const review_snapshot = async (id: number, approve: boolean) => {
-  const response = await request(
-    `/api/admin/snapshots/${id}/review`,
+  const response = await admin(
+    `snapshots/${id}/review`,
     send_json("POST", { approve }),
   );
   if (!response.ok) await json(response);
@@ -86,15 +103,15 @@ export const set_fulfilled = (
 ) => post<Order>(`orders/${id}/fulfill`, body);
 
 export const cancel_order = async (id: number, reason: string) => {
-  const response = await request(
-    `/api/admin/orders/${id}/cancel`,
+  const response = await admin(
+    `orders/${id}/cancel`,
     send_json("POST", { reason }),
   );
   if (!response.ok) await json(response);
 };
 
 export const fetch_stickers = () =>
-  get_json<Stickers>("/api/admin/stickers");
+  get<Stickers>("stickers");
 
 export const create_wave = (body: { no_time: boolean; cap: number | null }) =>
   post<Stickers>("stickers/waves", body);
@@ -104,14 +121,23 @@ export const fulfill_wave = (id: number) =>
 
 export const wave_csv = (id: number) => `/api/admin/stickers/waves/${id}/csv`;
 
-export const safe_url = (url: string | null) =>
-  url && /^(?:https?:\/\/|\/(?!\/))/i.test(url) ? url : undefined;
+export function safe_url(url: string | null) {
+  if (!url || /[\\\u0000-\u001f\u007f]/.test(url)) return undefined;
+  try {
+    const parsed = new URL(url, location.origin);
+    if (url.startsWith("/"))
+      return parsed.origin === location.origin ? parsed.href : undefined;
+    return /^(?:https?:\/\/|mailto:)/i.test(url) ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const display_name = (name: string, id: number) =>
   name.trim() || `User #${id}`;
 
 export const fetch_slack_log = list<LogEntry>("slack/log");
-export const fetch_drafts = () => get_json<Draft[]>("/api/admin/slack/drafts");
+export const fetch_drafts = () => get<Draft[]>("slack/drafts");
 export const send_draft = (id: number) =>
   post<Draft[]>(`slack/drafts/${id}/send`, {});
 export const dismiss_draft = (id: number) =>
@@ -120,42 +146,40 @@ export const refresh_draft = (id: number) =>
   post<Draft[]>(`slack/drafts/${id}/refresh`, {});
 
 const post_empty = (path: string, body: unknown) =>
-  request(`/api/admin/${path}`, send_json("POST", body)).then(async (r) => {
+  admin(path, send_json("POST", body)).then(async (r) => {
     if (!r.ok) await json(r);
   });
 
 export const send_key = (..._inputs: unknown[]) => crypto.randomUUID();
 
 export const send_announcement = (text: string, key: string) =>
-  post_empty("slack/announcements", { text, key });
+  post<{ recipients: number }>("slack/announcements", { text, key });
 export const send_direct = (slack_id: string, text: string, key: string) =>
   post_empty("slack/direct", { slack_id, text, key });
 
-export const fetch_locations = () => get_json<Locations>("/api/admin/locations");
+export const fetch_locations = () => get<Locations>("locations");
 export const fetch_located_people = (country: string) =>
-  get_json<LocatedPerson[]>(
-    `/api/admin/locations/people?${new URLSearchParams({ country })}`,
-  );
+  get<LocatedPerson[]>(`locations/people?${new URLSearchParams({ country })}`);
 
 export const fetch_slack_admins = () =>
-  get_json<AdminContact[]>("/api/admin/slack/admins");
+  get<AdminContact[]>("slack/admins");
 export const fetch_slack_templates = () =>
-  get_json<Template[]>("/api/admin/slack/templates");
+  get<Template[]>("slack/templates");
 
-export const fetch_threads = () =>
-  get_json<Thread[]>("/api/admin/slack/threads");
+export const threads_cap = 100;
+export const fetch_threads = () => get<Thread[]>("slack/threads");
 export const fetch_thread = (slack_id: string) =>
-  get_json<SlackMessage[]>(
-    `/api/admin/slack/threads/${encodeURIComponent(slack_id)}`,
-  );
+  get<SlackMessage[]>(`slack/threads/${encodeURIComponent(slack_id)}`);
+export const mark_read = (slack_id: string) =>
+  post_empty(`slack/threads/${encodeURIComponent(slack_id)}/read`, {});
 export const reply = (slack_id: string, text: string, key: string) =>
   post<SlackMessage[]>(
     `slack/threads/${encodeURIComponent(slack_id)}/reply`,
     { text, key },
   );
 
-export const fetch_surveys = () =>
-  get_json<SurveyResults[]>("/api/admin/surveys");
+export const fetch_surveys = (before?: number) =>
+  get<SurveyResults[]>(`surveys${before ? `?before=${before}` : ""}`);
 
 export const fetch_survey_responses = (
   id: number,
@@ -163,9 +187,8 @@ export const fetch_survey_responses = (
 ) => list<SurveyResponse>(`surveys/${id}/responses`)(params);
 
 export const delete_survey_response = async (id: number) => {
-  const response = await request(
-    `/api/admin/surveys/responses/${id}/delete`,
-    { method: "POST" },
-  );
+  const response = await admin(`surveys/responses/${id}/delete`, {
+    method: "POST",
+  });
   if (!response.ok) await json(response);
 };

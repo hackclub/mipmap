@@ -4,7 +4,9 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"predev": "node scripts/fonts.mjs",
 		"dev": "vite dev",
+		"prebuild": "node scripts/fonts.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",

@@ -182,7 +182,7 @@
 </script>
 
 {#each visible_belts as belt (belt)}
-	<img decoding="sync"
+	<img decoding="async"
 		class="belt-shadow"
 		src={belt.shadow.src}
 		style:left="{belt.shadow.left}px"
@@ -202,7 +202,7 @@
 	>
 		<div style:transform="rotate({cog.offset}deg)">
 			<div class={cog.parity === 1 ? 'cw' : 'ccw'}>
-				<img decoding="sync" src={cog_shadow(cog.size)} width={cog.size + 2 * shadow_pad} height={cog.size + 2 * shadow_pad} alt="" />
+				<img decoding="async" src={cog_shadow(cog.size)} width={cog.size + 2 * shadow_pad} height={cog.size + 2 * shadow_pad} alt="" />
 			</div>
 		</div>
 	</div>
@@ -254,7 +254,7 @@
 	>
 		<div style:transform="rotate({cog.offset}deg)">
 			<div class={cog.parity === 1 ? 'cw' : 'ccw'}>
-				<img decoding="sync" src={cog_image(cog.size, brightness_for(cog))} width={cog.size} height={cog.size} alt="" />
+				<img decoding="async" src={cog_image(cog.size, brightness_for(cog))} width={cog.size} height={cog.size} alt="" />
 			</div>
 		</div>
 		{#if cog_prizes.get(cog)}

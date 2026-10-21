@@ -1,9 +1,17 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import { short_time } from "$lib/format";
     import { Load, Task } from "$lib/load.svelte";
     import Field from "$lib/ui/Field.svelte";
     import LoadError from "$lib/ui/LoadError.svelte";
-    import { fetch_thread, fetch_threads, reply, send_key } from "./api";
+    import {
+        fetch_thread,
+        fetch_threads,
+        mark_read,
+        reply,
+        send_key,
+        threads_cap,
+    } from "./api";
     import type { SlackMessage, Thread } from "./types";
     import SlackText from "./SlackText.svelte";
     import { decode, mrkdwn } from "./slack.svelte";
@@ -16,32 +24,64 @@
     let open = $state<Thread | null>(null);
     let conversation = $state.raw<Load<SlackMessage[]>>();
     let text = $state("");
+    let scroller = $state<HTMLElement>();
+    let section = $state<HTMLElement>();
     const sending = new Task();
 
     const length = $derived([...mrkdwn(text.trim())].length);
     const key = $derived(send_key(text, open?.slack_id));
     const name = (thread: Thread) => thread.user_name || thread.slack_id;
 
-    const select = (thread: Thread) => {
+    async function read(slack_id: string) {
+        try {
+            await mark_read(slack_id);
+        } catch {
+            return;
+        }
+        if (threads.data)
+            threads.set(
+                threads.data.map((thread) =>
+                    thread.slack_id === slack_id
+                        ? { ...thread, unread: 0 }
+                        : thread,
+                ),
+            );
+    }
+
+    async function select(thread: Thread) {
+        if (open?.slack_id !== thread.slack_id) {
+            text = "";
+            sending.error = "";
+        }
         open = thread;
-        text = "";
-        sending.error = "";
         const load = new Load(() => fetch_thread(thread.slack_id));
         conversation = load;
-        load.run().then(threads.run);
-    };
+        if (matchMedia("(max-width: 48rem)").matches) {
+            await tick();
+            section?.scrollIntoView({ block: "start" });
+        }
+        await load.run();
+        if (!load.error && conversation === load) read(thread.slack_id);
+    }
 
     const send = (e: SubmitEvent) => {
         e.preventDefault();
         const thread = open;
         const load = conversation;
-        if (!thread || !load || !length || length > limit) return;
+        if (sending.pending || !thread || !load || !length || length > limit)
+            return;
+        const message = text;
         sending.run(async () => {
-            load.set(await reply(thread.slack_id, text, key));
-            text = "";
+            load.set(await reply(thread.slack_id, message, key));
+            if (text === message) text = "";
             threads.run();
         });
     };
+
+    $effect(() => {
+        if (!conversation?.data || !scroller) return;
+        scroller.scrollTop = scroller.scrollHeight;
+    });
 </script>
 
 <div class="layout">
@@ -49,7 +89,7 @@
         {#if threads.error}
             <LoadError error={threads.error} onretry={threads.run} />
         {:else if !threads.data}
-            <p class="note">Loading…</p>
+            <p class="note" role="status">Loading…</p>
         {:else}
             {#each threads.data as thread (thread.slack_id)}
                 {@const active = open?.slack_id === thread.slack_id}
@@ -65,7 +105,8 @@
                     <span class="who">
                         {name(thread)}
                         {#if thread.unread}<span class="badge"
-                                >{thread.unread}</span
+                                >{thread.unread}<span class="sr"> unread</span
+                                ></span
                             >{/if}
                     </span>
                     <span class="last">{decode(thread.last_text)}</span>
@@ -74,38 +115,53 @@
             {:else}
                 <p class="note">Nobody has replied to the bot yet</p>
             {/each}
+            {#if threads.data.length >= threads_cap}
+                <p class="note">
+                    Showing {threads_cap} conversations, unread first, then the most
+                    recent. Older ones aren't listed
+                </p>
+            {/if}
         {/if}
     </section>
 
-    <section class="conversation" aria-label="Messages">
+    <section class="conversation" aria-label="Messages" bind:this={section}>
         {#if !open}
             <p class="note">Choose a conversation</p>
         {:else}
             <h3>{name(open)}{open.user_name ? ` · ${open.slack_id}` : ""}</h3>
             {#if conversation?.error}
                 <p class="error" role="alert">{conversation.error}</p>
-            {:else if !conversation?.data}
-                <p class="note">Loading…</p>
             {/if}
-            <ol>
-                {#each conversation?.data ?? [] as message (message.id)}
-                    <li class:incoming={message.incoming}>
-                        <SlackText text={message.text} />
-                        <span class="when"
-                            >{short_time(message.at)}{message.admin_name
-                                ? ` · ${message.admin_name}`
-                                : message.incoming
-                                  ? ""
-                                  : " · bot"}</span
-                        >
-                    </li>
-                {/each}
-            </ol>
+            <p class="note" role="status">
+                {!conversation?.error && !conversation?.data ? "Loading…" : ""}
+            </p>
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <div
+                class="scroller"
+                tabindex="0"
+                role="region"
+                aria-label="Messages with {name(open)}"
+                bind:this={scroller}
+            >
+                <ol>
+                    {#each conversation?.data ?? [] as message (message.id)}
+                        <li class:incoming={message.incoming}>
+                            <SlackText text={message.text} />
+                            <span class="when"
+                                >{short_time(message.at)} · {message.incoming
+                                    ? name(open)
+                                    : (message.admin_name ?? "bot")}</span
+                            >
+                        </li>
+                    {/each}
+                </ol>
+            </div>
             <form onsubmit={send}>
                 <Field
                     label="Reply as the bot"
                     multiline
                     rows={3}
+                    readonly={sending.pending}
                     bind:value={text}
                 />
                 <div class="send-row">
@@ -114,8 +170,9 @@
                     >
                     <button
                         type="submit"
-                        disabled={sending.pending || !length || length > limit}
-                        >Send reply</button
+                        aria-disabled={sending.pending ||
+                            !length ||
+                            length > limit}>Send reply</button
                     >
                 </div>
                 {#if sending.error}
@@ -155,8 +212,17 @@
 
     .note,
     .when {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.8rem;
+    }
+
+    .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
     .over,
@@ -221,14 +287,22 @@
         text-overflow: ellipsis;
     }
 
+    .scroller {
+        max-height: 32rem;
+        overflow: auto;
+    }
+
+    .scroller:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
     ol {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        max-height: 32rem;
         margin: 0;
         padding: 0;
-        overflow: auto;
         list-style: none;
     }
 
@@ -269,7 +343,7 @@
             color 0.3s;
     }
 
-    button[type="submit"]:disabled {
+    button[type="submit"][aria-disabled="true"] {
         opacity: 0.5;
         cursor: default;
     }
@@ -280,7 +354,7 @@
     }
 
     @media (hover: hover) {
-        button[type="submit"]:not(:disabled):hover {
+        button[type="submit"]:not([aria-disabled="true"]):hover {
             background-color: #ead7c2;
             color: #4f2f1f;
         }
@@ -289,6 +363,11 @@
     @media (max-width: 48rem) {
         .layout {
             grid-template-columns: minmax(0, 1fr);
+        }
+
+        .threads {
+            max-height: 40vh;
+            overflow: auto;
         }
     }
 </style>

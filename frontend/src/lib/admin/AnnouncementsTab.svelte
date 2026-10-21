@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import { short_time } from "$lib/format";
     import { Load, Task } from "$lib/load.svelte";
     import Field from "$lib/ui/Field.svelte";
@@ -18,6 +19,7 @@
     } from "./api";
     import { Pages } from "./pages.svelte";
     import type { Draft, LogEntry } from "./types";
+    import ActionDialog from "./ActionDialog.svelte";
     import Card from "./Card.svelte";
     import Filters from "./Filters.svelte";
     import PagedList from "./PagedList.svelte";
@@ -43,6 +45,10 @@
     let slack_id = $state("");
     let notice = $state("");
     let sent = $state(0);
+    let template = $state("");
+    let replacing = $state<string | null>(null);
+    let message_box = $state<HTMLElement>();
+    let drafts_heading = $state<HTMLElement>();
     const key = $derived(send_key(text, slack_id, sent));
     const task = new Task();
     const drafts = new Load(fetch_drafts);
@@ -55,48 +61,72 @@
     log.reset();
 
     const length = $derived([...mrkdwn(text.trim())].length);
-    const ready = $derived(length > 0 && length <= limit && !task.pending);
+    const ready = $derived(length > 0 && length <= limit);
 
     const people = (count: number) =>
         `${count} ${count === 1 ? "person" : "people"}`;
 
-    const run = (action: () => Promise<unknown>, done: string) =>
+    const run = (action: () => Promise<string>) =>
         task.run(async () => {
             notice = "";
-            await action();
+            notice = await action();
             sent++;
-            notice = done;
-            log.reset();
+            log.refresh();
         });
 
-    const to_all = () =>
+    function to_all() {
+        if (task.pending || !ready) return;
+        const message = text;
         run(async () => {
-            await send_announcement(text, key);
-            text = "";
-        }, "Announcement queued for everyone who gets announcements");
+            const result = await send_announcement(message, key);
+            if (text === message) text = "";
+            await tick();
+            message_box?.querySelector("textarea")?.focus();
+            return result.recipients
+                ? `Announcement queued for ${people(result.recipients)}`
+                : "Nobody gets announcements right now, so it wasn't sent to anyone";
+        });
+    }
 
-    const to_one = () =>
-        run(
-            () => send_direct(slack_id, text, key),
-            `Sent to ${slack_id.trim()}`,
-        );
+    function to_one() {
+        if (task.pending || !ready || !slack_id.trim()) return;
+        const to = slack_id.trim();
+        run(async () => {
+            await send_direct(slack_id, text, key);
+            return `Sent to ${to}`;
+        });
+    }
+
+    function use_template() {
+        const chosen = templates.data?.[Number(template)];
+        if (!chosen || template === "" || task.pending) return;
+        if (text.trim() && text !== chosen.text) replacing = chosen.text;
+        else text = chosen.text;
+    }
 
     const draft_action = (action: () => Promise<Draft[]>) =>
         task.run(async () => {
             notice = "";
             drafts.set(await action());
-            log.reset();
+            log.refresh();
+            await tick();
+            const active = document.activeElement;
+            if (!active || active === document.body || !active.isConnected)
+                (
+                    drafts_heading ??
+                    message_box?.querySelector<HTMLElement>("textarea")
+                )?.focus();
         });
 
     const refresh = (draft: Draft) =>
         draft_action(async () => {
             const updated = await refresh_draft(draft.id);
-            const same =
-                updated.find((other) => other.id === draft.id)?.text ===
-                draft.text;
-            notice = same
-                ? "That message already uses the current wording"
-                : "Updated to the current wording";
+            const found = updated.find((other) => other.id === draft.id);
+            notice = !found
+                ? "That message isn't waiting any more"
+                : found.text === draft.text
+                  ? "That message already uses the current wording"
+                  : "Updated to the current wording";
             return updated;
         });
 
@@ -129,9 +159,9 @@
             <LoadError error={drafts.error} onretry={drafts.run} />
         {:else if drafts.data?.length}
             <section class="drafts">
-                <h3>Waiting for you</h3>
+                <h3 tabindex="-1" bind:this={drafts_heading}>Waiting for you</h3>
                 {#each drafts.data as draft (draft.id)}
-                    <Card>
+                    <Card level={4}>
                         {#snippet title()}
                             {kinds[draft.kind] ?? draft.kind}
                         {/snippet}
@@ -139,6 +169,7 @@
                             {short_time(draft.created_at)}
                         {/snippet}
                         <SlackText text={draft.text} footer />
+                        <p class="note">Skipping can't be undone</p>
                         {#snippet actions()}
                             <HoldButton
                                 label="Send"
@@ -149,29 +180,33 @@
                             />
                             <button
                                 type="button"
-                                disabled={task.pending}
-                                onclick={() => refresh(draft)}>Refresh</button
+                                aria-disabled={task.pending}
+                                onclick={() => {
+                                    if (!task.pending) refresh(draft);
+                                }}>Refresh</button
                             >
-                            <button
-                                type="button"
+                            <HoldButton
+                                label="Skip"
                                 disabled={task.pending}
-                                onclick={() =>
+                                onconfirm={() =>
                                     draft_action(() => dismiss_draft(draft.id))}
-                                >Not now</button
-                            >
+                            />
                         {/snippet}
                     </Card>
                 {/each}
             </section>
         {/if}
 
-        <Field
-            label="Message"
-            hint="Slack formatting: *bold*, _italic_, ~strike~, `code`, ```blocks```, > quotes, <https://link|text>, <@U0123ABCD>, #mipmap, :emoji:"
-            multiline
-            rows={8}
-            bind:value={text}
-        />
+        <div class="message" bind:this={message_box}>
+            <Field
+                label="Message"
+                hint="Slack formatting: *bold*, _italic_, ~strike~, `code`, ```blocks```, > quotes, <https://link|text>, <@U0123ABCD>, #mipmap, :emoji:"
+                multiline
+                rows={8}
+                readonly={task.pending}
+                bind:value={text}
+            />
+        </div>
         <p class="count" class:over={length > limit}>{length} / {limit}</p>
 
         <section class="preview" aria-label="Preview">
@@ -186,21 +221,20 @@
         {#if templates.data?.length}
             <div class="premade">
                 <label for="premade">Premade message</label>
-                <select
-                    id="premade"
-                    value=""
-                    onchange={(event) => {
-                        const chosen =
-                            templates.data?.[Number(event.currentTarget.value)];
-                        if (chosen) text = chosen.text;
-                        event.currentTarget.value = "";
-                    }}
-                >
-                    <option value="" disabled>Fill the message with…</option>
-                    {#each templates.data as template, i (template.label)}
-                        <option value={i}>{template.label}</option>
-                    {/each}
-                </select>
+                <div class="premade-row">
+                    <select id="premade" bind:value={template}>
+                        <option value="" disabled>Choose a template…</option>
+                        {#each templates.data as option, i (i)}
+                            <option value={String(i)}>{option.label}</option>
+                        {/each}
+                    </select>
+                    <button
+                        type="button"
+                        class="send"
+                        aria-disabled={template === "" || task.pending}
+                        onclick={use_template}>Insert template</button
+                    >
+                </div>
             </div>
         {/if}
         <div class="direct">
@@ -208,7 +242,7 @@
             <button
                 type="button"
                 class="send"
-                disabled={!ready || !slack_id.trim()}
+                aria-disabled={!ready || !slack_id.trim() || task.pending}
                 onclick={to_one}>Send to Slack ID</button
             >
         </div>
@@ -216,6 +250,7 @@
             <div class="admins">
                 <span class="note">Admins</span>
                 <Filters
+                    label="Admins"
                     options={admins.data.map((admin) => [
                         admin.slack_id,
                         admin.name,
@@ -229,28 +264,27 @@
             <HoldButton
                 label="Send to All"
                 duration={2000}
-                disabled={!ready}
+                disabled={!ready || task.pending}
                 onconfirm={to_all}
             />
         </div>
 
+        <p class="note" role="status">{task.error ? "" : notice}</p>
         {#if task.error}
             <p class="error" role="alert">{task.error}</p>
-        {:else if notice}
-            <p class="note" role="status">{notice}</p>
         {/if}
     </div>
 
     <section class="log" aria-label="Message log">
         <div class="log-head">
             <h3>Message log</h3>
-            <button type="button" class="send" onclick={log.reset}
+            <button type="button" class="send" onclick={log.refresh}
                 >Refresh</button
             >
         </div>
         <PagedList pages={log} empty="No messages yet">
             {#snippet item(entry)}
-                <Card dim={entry.incoming}>
+                <Card dim={entry.incoming} level={4}>
                     {#snippet title()}
                         {entry.incoming
                             ? `From ${who(entry)}`
@@ -261,7 +295,15 @@
                             ? ` · by ${entry.admin_name}`
                             : ""}
                     {/snippet}
-                    <div class="clip"><SlackText text={entry.text} /></div>
+                    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                    <div
+                        class="clip"
+                        tabindex="0"
+                        role="region"
+                        aria-label="Message text"
+                    >
+                        <SlackText text={entry.text} />
+                    </div>
                     {#if status(entry)}
                         <p class="status">{status(entry)}</p>
                     {/if}
@@ -270,6 +312,17 @@
         </PagedList>
     </section>
 </div>
+
+{#if replacing !== null}
+    {@const chosen = replacing}
+    <ActionDialog
+        title="Replace your message?"
+        submit="Replace"
+        warning="The message you've written will be replaced with this template"
+        onsubmit={async () => (text = chosen)}
+        onclose={() => (replacing = null)}
+    />
+{/if}
 
 <style>
     .layout {
@@ -300,7 +353,7 @@
     .count {
         align-self: flex-end;
         margin-top: -0.5rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.8rem;
     }
 
@@ -322,7 +375,7 @@
 
     .note,
     .status {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.85rem;
     }
 
@@ -337,11 +390,19 @@
         font-weight: 700;
     }
 
+    .premade-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
     .premade select {
+        flex: 1 1 12rem;
+        min-width: 0;
         padding: 0.5rem 0.75rem;
         background: #4f2f1f;
         color: #ead7c2;
-        border: none;
+        border: 1px solid #d6ab70;
         border-radius: 0;
         font: inherit;
         font-size: 0.85em;
@@ -388,6 +449,11 @@
         overflow: auto;
     }
 
+    .clip:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
     .send {
         padding: 0.4rem 0.8rem;
         background-color: #4f2f1f;
@@ -402,7 +468,7 @@
             color 0.3s;
     }
 
-    .send:disabled {
+    .send[aria-disabled="true"] {
         opacity: 0.5;
         cursor: default;
     }
@@ -413,7 +479,7 @@
     }
 
     @media (hover: hover) {
-        .send:not(:disabled):hover {
+        .send:not([aria-disabled="true"]):hover {
             background-color: #ead7c2;
             color: #4f2f1f;
         }

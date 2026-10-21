@@ -6,15 +6,14 @@ use crate::{
 use actix_web::{http::StatusCode, web};
 use anyhow::Context;
 use base64::{Engine, engine::general_purpose::STANDARD};
-use image::{DynamicImage, ImageDecoder, ImageReader, imageops::FilterType};
+use image::{DynamicImage, ImageDecoder, ImageError, ImageReader, Limits, imageops::FilterType};
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     io::Cursor,
-    sync::{LazyLock, Mutex, PoisonError},
-    thread,
+    sync::{Arc, LazyLock, Mutex, PoisonError},
     time::{Duration, Instant},
 };
 use tokio::sync::Semaphore;
@@ -23,13 +22,14 @@ const CDN_UPLOAD_URL: &str = "https://cdn.hackclub.com/api/v4/upload";
 const MODERATION_URL: &str = "https://api.openai.com/v1/moderations";
 const MAX_BYTES: usize = 150_000;
 const MAX_SIDE: u32 = 1920;
-const MAX_UPLOAD_SIDE: u32 = 4000;
+const MAX_PIXELS: u64 = 50_000_000;
+const MAX_ALLOC: u64 = 256 * 1024 * 1024;
+const INVALID: &str = "Please choose a PNG, JPEG or WebP image";
+const TOO_LARGE: &str = "Images can be at most 50 megapixels";
 const UPLOADS_PER_HOUR: usize = 30;
 const HOUR: Duration = Duration::from_secs(60 * 60);
 
-static COMPRESSING: LazyLock<Semaphore> = LazyLock::new(|| {
-    Semaphore::new(thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).max(1)))
-});
+static COMPRESSING: Semaphore = Semaphore::const_new(1);
 
 #[derive(Default)]
 struct Budget {
@@ -39,7 +39,9 @@ struct Budget {
 
 static BUDGET: LazyLock<Mutex<Budget>> = LazyLock::new(Default::default);
 
-pub struct Slot(i32);
+struct Active(i32);
+
+pub struct Slot(Arc<Active>);
 
 pub fn reserve(user_id: i32) -> Result<Slot, ApiError> {
     let mut budget = BUDGET.lock().unwrap_or_else(PoisonError::into_inner);
@@ -60,10 +62,10 @@ pub fn reserve(user_id: i32) -> Result<Slot, ApiError> {
     }
     times.push(now);
     budget.active.insert(user_id);
-    Ok(Slot(user_id))
+    Ok(Slot(Arc::new(Active(user_id))))
 }
 
-impl Drop for Slot {
+impl Drop for Active {
     fn drop(&mut self) {
         BUDGET
             .lock()
@@ -80,7 +82,6 @@ pub fn warn_unconfigured() {
 }
 
 pub fn ensure_image(bytes: &[u8]) -> Result<(), ApiError> {
-    const INVALID: &str = "Please choose a PNG, JPEG or WebP image";
     match bytes {
         [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, ..]
         | [0xff, 0xd8, 0xff, ..]
@@ -92,10 +93,8 @@ pub fn ensure_image(bytes: &[u8]) -> Result<(), ApiError> {
         .ok()
         .and_then(|reader| reader.into_dimensions().ok())
         .ok_or_else(|| reject(INVALID))?;
-    if width > MAX_UPLOAD_SIDE || height > MAX_UPLOAD_SIDE {
-        return Err(reject(format!(
-            "Images can be at most {MAX_UPLOAD_SIDE} x {MAX_UPLOAD_SIDE} pixels"
-        )));
+    if u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(reject(TOO_LARGE));
     }
     Ok(())
 }
@@ -121,15 +120,17 @@ pub async fn upload(slot: &Slot, bytes: &[u8]) -> Result<String, ApiError> {
     Ok(store(prepare(slot, bytes).await?).await?)
 }
 
-pub async fn prepare(_slot: &Slot, bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
+pub async fn prepare(slot: &Slot, bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
     let bytes = bytes.to_vec();
+    let active = slot.0.clone();
     let permit = COMPRESSING.acquire().await.map_err(anyhow::Error::from)?;
-    Ok(web::block(move || {
+    web::block(move || {
+        let _active = active;
         let _permit = permit;
         compress(&bytes)
     })
     .await
-    .map_err(anyhow::Error::from)??)
+    .map_err(anyhow::Error::from)?
 }
 
 pub async fn image_flags(webp: &[u8]) -> Result<BTreeSet<String>, ApiError> {
@@ -188,16 +189,44 @@ async fn moderate(key: &str, input: Value) -> anyhow::Result<Vec<BTreeSet<String
         .collect())
 }
 
-fn compress(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut decoder = ImageReader::new(Cursor::new(bytes))
-        .with_guessed_format()?
-        .into_decoder()?;
-    let orientation = decoder.orientation()?;
-    let mut image = DynamicImage::from_decoder(decoder)?;
-    image.apply_orientation(orientation);
-    if image.width() > MAX_SIDE || image.height() > MAX_SIDE {
-        image = image.resize(MAX_SIDE, MAX_SIDE, FilterType::Lanczos3);
+fn unreadable(error: ImageError) -> ApiError {
+    match error {
+        ImageError::Limits(_) => reject(TOO_LARGE),
+        _ => reject(INVALID),
     }
+}
+
+fn decode(bytes: &[u8]) -> Result<DynamicImage, ApiError> {
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(MAX_ALLOC);
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| reject(INVALID))?;
+    reader.limits(limits.clone());
+    let mut decoder = reader.into_decoder().map_err(unreadable)?;
+    let (width, height) = decoder.dimensions();
+    if u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(reject(TOO_LARGE));
+    }
+    limits.reserve(decoder.total_bytes()).map_err(unreadable)?;
+    let orientation = decoder.orientation().map_err(unreadable)?;
+    let image = DynamicImage::from_decoder(decoder).map_err(unreadable)?;
+    let mut image = if width > MAX_SIDE * 2 || height > MAX_SIDE * 2 {
+        DynamicImage::ImageRgba8(image.thumbnail(MAX_SIDE, MAX_SIDE).into_rgba8())
+    } else {
+        let image = DynamicImage::ImageRgba8(image.into_rgba8());
+        if width > MAX_SIDE || height > MAX_SIDE {
+            image.resize(MAX_SIDE, MAX_SIDE, FilterType::Lanczos3)
+        } else {
+            image
+        }
+    };
+    image.apply_orientation(orientation);
+    Ok(image)
+}
+
+fn compress(bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
+    let mut image = decode(bytes)?;
     loop {
         let rgba = image.to_rgba8();
         for quality in [80.0, 65.0, 50.0] {
@@ -231,3 +260,77 @@ pub async fn store(webp: Vec<u8>) -> anyhow::Result<String> {
     Ok(response.json::<Uploaded>().await?.url)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{ImageFormat, RgbImage};
+
+    fn rejected(result: Result<impl Sized, ApiError>) -> Option<String> {
+        match result {
+            Err(ApiError::Rejected(_, message)) => Some(message),
+            _ => None,
+        }
+    }
+
+    fn crc(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+            }
+        }
+        !crc
+    }
+
+    fn png_header(width: u32, height: u32) -> Vec<u8> {
+        let mut chunk = b"IHDR".to_vec();
+        chunk.extend(width.to_be_bytes());
+        chunk.extend(height.to_be_bytes());
+        chunk.extend([8, 2, 0, 0, 0]);
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13];
+        png.extend(&chunk);
+        png.extend(crc(&chunk).to_be_bytes());
+        for name in [b"IDAT", b"IEND"] {
+            png.extend([0, 0, 0, 0]);
+            png.extend(name);
+            png.extend(crc(name).to_be_bytes());
+        }
+        png
+    }
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Cursor::new(Vec::new());
+        RgbImage::from_fn(width, height, |x, y| image::Rgb([x as u8, y as u8, 7]))
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn pixel_limit() {
+        assert!(ensure_image(&png_header(4032, 3024)).is_ok());
+        assert!(ensure_image(&png_header(5712, 4284)).is_ok());
+        assert_eq!(rejected(ensure_image(&png_header(8000, 7000))).as_deref(), Some(TOO_LARGE));
+        assert_eq!(rejected(compress(&png_header(8000, 7000))).as_deref(), Some(TOO_LARGE));
+    }
+
+    #[test]
+    fn corrupt_images_are_rejected() {
+        let mut truncated = png(64, 64);
+        truncated.truncate(truncated.len() / 2);
+        assert!(ensure_image(&truncated).is_ok());
+        assert_eq!(rejected(compress(&truncated)).as_deref(), Some(INVALID));
+        assert_eq!(rejected(compress(&png_header(64, 64))).as_deref(), Some(INVALID));
+    }
+
+    #[test]
+    fn large_images_shrink() {
+        for (width, height) in [(4100, 20), (2600, 30), (100, 50)] {
+            let webp = compress(&png(width, height)).ok().unwrap();
+            let image = image::load_from_memory(&webp).unwrap();
+            assert!(image.width() <= MAX_SIDE && image.height() <= MAX_SIDE);
+            assert_eq!(image.width(), width.min(MAX_SIDE));
+        }
+    }
+}

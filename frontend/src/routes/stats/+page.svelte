@@ -6,39 +6,91 @@
     import SiteHead from "$lib/SiteHead.svelte";
     import Funnel from "$lib/stats/Funnel.svelte";
     import LineChart from "$lib/stats/LineChart.svelte";
-    import type { Stats } from "$lib/stats/types";
-    import { index } from "$lib/onboarding/script.svelte";
-    import { duration, short_date, short_time } from "$lib/format";
+    import type { Day, Hour, Stats } from "$lib/stats/types";
+    import { age, clock_time, duration, short_date, short_time } from "$lib/format";
 
     const stats = new Load(() => get_json<Stats>("/api/stats"));
 
     const data = $derived(stats.data);
-    const today = $derived(data?.days[data.days.length - 1]);
-    const now = $derived(data?.hours[data.hours.length - 1]);
 
-    const ranges: [string, number, "day" | "week" | "all"][] = [
-        ["24h", 24, "day"],
-        ["7d", 24 * 7, "week"],
-        ["All", Infinity, "all"],
+    type Period = "day" | "week" | "all";
+    const ranges: [string, Period, string, string][] = [
+        ["24h", "day", "last 24 hours", "signed up in the last 24 hours"],
+        ["7d", "week", "last 7 days", "signed up in the last 7 days"],
+        ["All", "all", "all time", "all users"],
     ];
-    let range = $state(24 * 7);
-    const hours = $derived(data?.hours.slice(-range) ?? []);
-    const period = $derived(
-        ranges.find(([, value]) => value === range)?.[2] ?? "all",
+    let period = $state<Period>("week");
+    const range = $derived(ranges.find(([, value]) => value === period) ?? ranges[1]);
+
+    const memo = (format: (key: string) => string) => {
+        const cache = new Map<string, string>();
+        return (key: string) => {
+            let label = cache.get(key);
+            if (label === undefined) {
+                label = format(key);
+                cache.set(key, label);
+            }
+            return label;
+        };
+    };
+    const hour_label = memo(short_time);
+    const day_label = memo(short_date);
+
+    const hourly = (hours: Hour[], pick: (hour: Hour) => number) => ({
+        values: hours.map(pick),
+        labels: hours.map((hour) => hour_label(hour.hour)),
+    });
+    const daily = (days: Day[], pick: (day: Day) => number) => ({
+        values: days.map(pick),
+        labels: days.map((day) => day_label(day.date)),
+    });
+    const recent = (days: Day[]) => (period === "week" ? days.slice(-7) : days);
+
+    const complete_days = $derived(data?.days.slice(0, -1) ?? []);
+    const signed_up_chart = $derived(
+        data &&
+            (period === "day"
+                ? hourly(data.hours, (hour) => hour.signed_up)
+                : daily(recent(data.days), (day) => day.signed_up)),
     );
+    const logged_in_chart = $derived(
+        data &&
+            (period === "day"
+                ? hourly(data.hours, (hour) => hour.logged_in)
+                : daily(recent(complete_days), (day) => day.logged_in)),
+    );
+    const active_chart = $derived(daily(complete_days, (day) => day.active));
+    const active_day = $derived(complete_days.at(-1));
+    const logged_in = $derived(
+        data &&
+            {
+                day: data.totals.logged_in_last_day,
+                week: data.totals.logged_in_last_week,
+                all: data.totals.logged_in_ever,
+            }[period],
+    );
+
+    const count = (value: number | null) =>
+        value === null ? "<5" : value.toLocaleString();
+
     const funnel = $derived(data?.funnel[period]);
     const onboarding = $derived(data?.onboarding[period]);
-    const past = (key: string) =>
-        onboarding?.steps
-            .filter((entry) => index(entry.step) >= index(key))
-            .reduce((total, entry) => total + entry.users, 0) ?? 0;
+    const masked = $derived(
+        [funnel, onboarding].some(
+            (counts) =>
+                counts &&
+                Object.entries(counts).some(
+                    ([key, value]) => key !== "median_minutes" && value === null,
+                ),
+        ),
+    );
     const onboarding_steps = $derived(
         onboarding && [
             { label: "Started", count: onboarding.started },
-            { label: "Made a project", count: past("Edit") },
-            { label: "Reached the Tech Tree", count: past("Tech Tree") },
-            { label: "Unlocked the sticker", count: past("Unlock token") },
-            { label: "Redeemed the sticker", count: past("Sticker sent") },
+            { label: "Made a project", count: onboarding.made_project },
+            { label: "Reached the Tech Tree", count: onboarding.reached_tech_tree },
+            { label: "Unlocked the sticker", count: onboarding.unlocked_sticker },
+            { label: "Redeemed the sticker", count: onboarding.stickers },
             { label: "Finished", count: onboarding.finished },
         ],
     );
@@ -46,24 +98,22 @@
         onboarding && [
             [
                 "Completion rate",
-                onboarding.started
-                    ? `${Math.round((onboarding.finished / onboarding.started) * 100)}%`
+                onboarding.started && onboarding.finished !== null
+                    ? `${Math.min(100, Math.round((onboarding.finished / onboarding.started) * 100))}%`
                     : "–",
             ],
             [
                 "Median time to finish",
-                onboarding.median_minutes === null
-                    ? "–"
-                    : `${Math.round(onboarding.median_minutes)}m`,
+                duration(
+                    onboarding.median_minutes === null
+                        ? null
+                        : onboarding.median_minutes / 60,
+                ),
             ],
-            ["Stickers redeemed", onboarding.stickers.toLocaleString()],
-            [
-                "Still onboarding",
-                (onboarding.started - onboarding.finished).toLocaleString(),
-            ],
+            ["Stickers redeemed", count(onboarding.stickers)],
+            ["Still onboarding (last 7 days)", count(onboarding.in_progress)],
         ],
     );
-    const hour_labels = $derived(hours.map((hour) => short_time(hour.hour)));
     const quick = $derived(
         data && [
             [
@@ -87,7 +137,7 @@
     );
     const steps = $derived(
         funnel && [
-            { label: "Visited", count: funnel.visited },
+            { label: "Visited the home page", count: funnel.visited },
             { label: "Signed in", count: funnel.signed_in },
             { label: "Created a project", count: funnel.created_project },
             { label: "Linked Hackatime", count: funnel.linked_hackatime },
@@ -98,28 +148,24 @@
     );
 
     const refresh_ms = 30_000;
+    const wake_gap_ms = 10_000;
 
     let refreshing = $state(false);
+    let paused = $state(false);
     let refreshed = $state(0);
     let clock = $state(Date.now());
     let attempted = 0;
     let timer = 0;
     let destroyed = false;
 
-    const ago = $derived.by(() => {
-        const seconds = Math.max(0, Math.floor((clock - refreshed) / 1000));
-        return seconds < 60
-            ? `${seconds}s ago`
-            : `${Math.floor(seconds / 60)}m ${seconds % 60}s ago`;
-    });
-
     function schedule() {
         clearTimeout(timer);
-        if (destroyed || refreshing || !document.hasFocus()) return;
+        if (destroyed || refreshing || paused || document.hidden) return;
         timer = window.setTimeout(refresh, Math.max(0, attempted + refresh_ms - Date.now()));
     }
 
     async function refresh() {
+        if (refreshing) return;
         clearTimeout(timer);
         attempted = Date.now();
         refreshing = true;
@@ -129,9 +175,25 @@
         schedule();
     }
 
+    function wake() {
+        if (document.hidden) return clearTimeout(timer);
+        if (paused) return;
+        clock = Date.now();
+        if (Date.now() - attempted >= wake_gap_ms) refresh();
+        else schedule();
+    }
+
+    function toggle_pause() {
+        paused = !paused;
+        if (paused) clearTimeout(timer);
+        else wake();
+    }
+
     onMount(() => {
         refresh();
-        const tick = setInterval(() => (clock = Date.now()), 1000);
+        const tick = setInterval(() => {
+            if (!paused) clock = Date.now();
+        }, 10_000);
         return () => {
             destroyed = true;
             clearTimeout(timer);
@@ -140,12 +202,7 @@
     });
 </script>
 
-<svelte:window
-    onfocus={() => {
-        if (!refreshing) refresh();
-    }}
-    onblur={() => clearTimeout(timer)}
-/>
+<svelte:document onvisibilitychange={wake} />
 
 <SiteHead
     title="Stats - Hack Club Mipmap"
@@ -153,56 +210,82 @@
     path="/stats"
 />
 
-{#if data && today && now && quick && steps && onboarding_steps && onboarding_quick}
-    <main>
-        <header>
-            <h1>Mipmap Stats</h1>
+<nav class="site" aria-label="Site">
+    <a class="home" href="/">Home</a>
+</nav>
+
+<main>
+    <header>
+        <h1>Mipmap Stats</h1>
+        {#if data}
             <div class="refresh">
-                <span>Refreshed {ago}</span>
-                <button type="button" disabled={refreshing} onclick={refresh}
-                    >Refresh</button
+                <span
+                    >{paused
+                        ? `Auto-refresh paused, refreshed at ${clock_time(refreshed)}`
+                        : `Refreshed ${age(clock - refreshed)}`}</span
+                >
+                <button
+                    type="button"
+                    aria-disabled={refreshing}
+                    onclick={refresh}>Refresh</button
+                >
+                <button
+                    type="button"
+                    class:active={paused}
+                    aria-pressed={paused}
+                    onclick={toggle_pause}>Pause auto-refresh</button
                 >
             </div>
-        </header>
+        {/if}
+        <p class="warning" role="status">
+            {data && stats.error
+                ? `Couldn't refresh (${stats.error}). Showing the last numbers we got.`
+                : ""}
+        </p>
+    </header>
 
+    {#if data && signed_up_chart && logged_in_chart && quick && steps && onboarding_steps && onboarding_quick}
         <div class="pair">
             <section class="card split">
-                <div class="ranges">
-                    {#each ranges as [label, value] (label)}
-                        <button
-                            type="button"
-                            class:active={range === value}
-                            aria-pressed={range === value}
-                            onclick={() => (range = value)}>{label}</button
+                <div class="half">
+                    <div class="row">
+                        <h2 class="label">Signed Up Users</h2>
+                        <div
+                            class="ranges"
+                            role="group"
+                            aria-label="Time range for the sign-up and sign-in charts, the funnel and onboarding"
                         >
-                    {/each}
-                </div>
-                <div class="half">
-                    <div class="label">Signed Up Users</div>
-                    <div class="big">{now.signed_up.toLocaleString()}</div>
-                    <LineChart
-                        values={hours.map((hour) => hour.signed_up)}
-                        labels={hour_labels}
-                    />
-                </div>
-                <div class="half">
-                    <div class="label">Logged In (last 24 hours)</div>
-                    <div class="big">
-                        {data.totals.logged_in_last_day.toLocaleString()}
+                            {#each ranges as [label, value] (label)}
+                                <button
+                                    type="button"
+                                    class:active={period === value}
+                                    aria-pressed={period === value}
+                                    onclick={() => (period = value)}>{label}</button
+                                >
+                            {/each}
+                        </div>
                     </div>
-                    <LineChart
-                        values={hours.map((hour) => hour.logged_in)}
-                        labels={hour_labels}
-                    />
+                    <div class="big">
+                        {(data.hours.at(-1)?.signed_up ?? 0).toLocaleString()}
+                    </div>
+                    <LineChart name="Signed up users" {...signed_up_chart} />
+                </div>
+                <div class="half">
+                    <h2 class="label">Users who signed in with Hack Club ({range[2]})</h2>
+                    <div class="big">{(logged_in ?? 0).toLocaleString()}</div>
+                    <LineChart name="Users who signed in" {...logged_in_chart} />
                 </div>
             </section>
             <section class="card column">
-                <div class="label">Daily Active Users</div>
-                <div class="big">{today.active.toLocaleString()}</div>
-                <LineChart
-                    values={data.days.map((day) => day.active)}
-                    labels={data.days.map((day) => short_date(day.date))}
-                />
+                <h2 class="label">
+                    Daily Active Users ({active_day
+                        ? `${day_label(active_day.date)}, UTC`
+                        : "today so far"})
+                </h2>
+                <div class="big">
+                    {(active_day ?? data.days.at(-1))?.active.toLocaleString()}
+                </div>
+                <LineChart name="Daily active users" {...active_chart} />
             </section>
         </div>
 
@@ -218,12 +301,17 @@
         {/each}
 
         <section class="card">
-            <div class="label">Funnel</div>
+            <h2 class="label">Funnel: {range[3]}</h2>
+            <p class="note">
+                Percentages are of the previous step. Visits only count the home
+                page, so sign-ins can be higher.{#if masked}
+                    Counts under 5 are hidden.{/if}
+            </p>
             <Funnel {steps} />
         </section>
 
         <section class="card onboarding">
-            <div class="label">Onboarding</div>
+            <h2 class="label">Onboarding: {range[3]}</h2>
             <div class="quick">
                 {#each onboarding_quick as [label, value] (label)}
                     <div>
@@ -234,14 +322,47 @@
             </div>
             <Funnel steps={onboarding_steps} />
         </section>
-    </main>
-{:else if stats.error}
-    <div class="status">
-        <LoadError error={stats.error} onretry={stats.run} />
-    </div>
-{/if}
+    {:else if stats.error}
+        <div class="status">
+            <LoadError error={stats.error} onretry={refresh} />
+        </div>
+    {:else}
+        <p class="status" role="status">Loading stats…</p>
+    {/if}
+</main>
 
 <style>
+    .site {
+        box-sizing: border-box;
+        max-width: 64rem;
+        margin: 0 auto;
+        padding: 1rem 1rem 0;
+    }
+
+    .home {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background-color: #4f2f1f;
+        color: #ead7c2;
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .home:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .home:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
+    }
+
     main {
         box-sizing: border-box;
         display: flex;
@@ -249,7 +370,7 @@
         gap: 1rem;
         max-width: 64rem;
         margin: 0 auto;
-        padding: 2rem 1rem;
+        padding: 1rem 1rem 2rem;
         color: #ead7c2;
     }
 
@@ -263,15 +384,23 @@
 
     .refresh {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.5rem 0.75rem;
         color: #d6ab70;
         font-size: 0.9rem;
         font-variant-numeric: tabular-nums;
     }
 
+    .warning {
+        flex-basis: 100%;
+        margin: 0;
+        font-size: 0.9rem;
+    }
+
     .refresh button,
     .ranges button {
+        min-height: 2rem;
         padding: 0.5rem 1rem;
         background-color: #4f2f1f;
         border: none;
@@ -285,6 +414,7 @@
     }
 
     .refresh button:focus-visible,
+    .refresh button.active,
     .ranges button:focus-visible,
     .ranges button.active {
         background-color: #ead7c2;
@@ -292,14 +422,14 @@
     }
 
     @media (hover: hover) {
-        .refresh button:hover:not(:disabled),
+        .refresh button:hover:not([aria-disabled="true"]),
         .ranges button:hover {
             background-color: #ead7c2;
             color: #4f2f1f;
         }
     }
 
-    .refresh button:disabled {
+    .refresh button[aria-disabled="true"] {
         opacity: 0.5;
         cursor: default;
     }
@@ -332,21 +462,31 @@
     }
 
     .split {
-        position: relative;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
     }
 
-    .ranges {
-        position: absolute;
-        top: 1.25rem;
-        right: 1.25rem;
+    .row {
         display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .row .label {
+        margin: 0;
+    }
+
+    .ranges {
+        display: flex;
+        flex-wrap: wrap;
     }
 
     .ranges button {
-        padding: 0.25rem 0.6rem;
+        padding: 0.35rem 0.75rem;
         font-size: 0.85rem;
     }
 
@@ -355,9 +495,15 @@
     }
 
     .label {
-        margin-bottom: 0.5rem;
-        color: #d6ab70;
+        margin: 0 0 0.5rem;
+        color: #ead7c2;
         font-size: 0.9rem;
+        font-weight: 400;
+    }
+
+    .note {
+        margin: 0 0 1rem;
+        font-size: 0.85rem;
     }
 
     .big {
@@ -394,12 +540,8 @@
     }
 
     .status {
-        position: fixed;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 1.5rem;
-        color: #ead7c2;
+        margin: 0;
+        padding: 3rem 0;
         font-size: clamp(1.25rem, 2vw, 1.75rem);
     }
 

@@ -1,11 +1,9 @@
 use crate::error::{ApiError, reject_with};
 use actix_web::{
     FromRequest, HttpRequest, HttpResponse,
-    body::MessageBody,
     cookie::{Cookie, SameSite, time::Duration},
-    dev::{Payload, ServiceRequest, ServiceResponse},
+    dev::Payload,
     http::StatusCode,
-    middleware::Next,
     post, web,
 };
 use sha2::{Digest, Sha256};
@@ -13,7 +11,6 @@ use sqlx::{PgExecutor, PgPool};
 use std::{future::Future, pin::Pin};
 
 const COOKIE: &str = "__Host-session";
-const LEGACY_COOKIE: &str = "session";
 
 fn hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
@@ -42,28 +39,13 @@ fn cookie(token: String) -> Cookie<'static> {
 }
 
 fn token(req: &HttpRequest) -> Option<Cookie<'static>> {
-    req.cookie(COOKIE).or_else(|| req.cookie(LEGACY_COOKIE))
+    req.cookie(COOKIE)
 }
 
-pub async fn migrate_cookie(
-    req: ServiceRequest,
-    next: Next<impl MessageBody>,
-) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
-    let legacy = req.cookie(LEGACY_COOKIE);
-    let upgrade = req.cookie(COOKIE).is_none();
-    let mut res = next.call(req).await?;
-    let sets_session = res
-        .response()
-        .cookies()
-        .any(|cookie| cookie.name() == COOKIE || cookie.name() == LEGACY_COOKIE);
-    if let Some(legacy) = legacy.filter(|_| !sets_session) {
-        let response = res.response_mut();
-        if upgrade {
-            let _ = response.add_cookie(&cookie(legacy.value().to_string()));
-        }
-        let _ = response.add_removal_cookie(&Cookie::build(LEGACY_COOKIE, "").path("/").finish());
-    }
-    Ok(res)
+fn signed_out() -> HttpResponse {
+    let mut response = HttpResponse::NoContent().finish();
+    let _ = response.add_removal_cookie(&Cookie::build(COOKIE, "").path("/").secure(true).finish());
+    response
 }
 
 #[post("/logout")]
@@ -74,10 +56,25 @@ pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpRes
             .execute(pool.get_ref())
             .await?;
     }
-    let mut response = HttpResponse::NoContent().finish();
-    let _ = response.add_removal_cookie(&Cookie::build(COOKIE, "").path("/").secure(true).finish());
-    let _ = response.add_removal_cookie(&Cookie::build(LEGACY_COOKIE, "").path("/").finish());
-    Ok(response)
+    Ok(signed_out())
+}
+
+#[post("/logout-all")]
+pub async fn logout_all(req: HttpRequest, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let cookie = token(&req).ok_or_else(|| reject_with(StatusCode::UNAUTHORIZED, "Not logged in"))?;
+    let deleted = sqlx::query(
+        "DELETE FROM session WHERE user_id = (
+             SELECT user_id FROM session WHERE token_hash = $1 AND expires_at > now()
+         )",
+    )
+    .bind(hash(cookie.value()))
+    .execute(pool.get_ref())
+    .await?
+    .rows_affected();
+    if deleted == 0 {
+        return Err(reject_with(StatusCode::UNAUTHORIZED, "Not logged in"));
+    }
+    Ok(signed_out())
 }
 
 pub async fn prune(pool: &PgPool) -> sqlx::Result<()> {

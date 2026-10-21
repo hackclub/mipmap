@@ -128,7 +128,7 @@
   "26": {
     "title": "10.1 Inch Capacitive Touchscreen",
     "description": "big'ol-ish screen",
-    "facts": "HDMI 10.1 inch capactive LCD touchscreen",
+    "facts": "HDMI 10.1 inch capacitive LCD touchscreen",
     "image": "https://www.waveshare.com/media/catalog/product/cache/1/image/800x800/9df78eab33525d08d6e5fb8d27136e95/1/0/10.1ep-1.jpg"
   },
   "27": {
@@ -138,9 +138,9 @@
     "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Steam_icon_logo.svg/500px-Steam_icon_logo.svg.png"
   },
   "28": {
-    "title": "Blendkit Subscription Grant",
+    "title": "BlenderKit Subscription Grant",
     "description": "awesome asset library that does a great job of supporting creators",
-    "facts": "Grant for a Blendkit subscription, enought to cover 1 year standard price or 2 years with the education discount",
+    "facts": "Grant for a BlenderKit subscription, enough to cover 1 year standard price or 2 years with the education discount",
     "image": "https://www.blenderkit.com/static/img/blenderkit-logo-hexa_512x512.af0834c3e7f5.png"
   },
   "29": {

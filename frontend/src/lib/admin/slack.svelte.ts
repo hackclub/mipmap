@@ -50,7 +50,7 @@ function channels(text: string) {
       rest[0] === "<" ? control.exec(rest) : rest[0] === "`" ? code.exec(rest) : null;
     if (skip) {
       out += skip[0];
-      prev = skip[0].at(-1)!;
+      prev = [...skip[0]].at(-1)!;
       i += skip[0].length;
       continue;
     }
@@ -62,9 +62,10 @@ function channels(text: string) {
       i += name[0].length;
       continue;
     }
-    out += rest[0];
-    prev = rest[0];
-    i++;
+    const c = String.fromCodePoint(rest.codePointAt(0)!);
+    out += c;
+    prev = c;
+    i += c.length;
   }
   return out;
 }
@@ -85,10 +86,24 @@ const html = (text: string) =>
 
 const text_html = (mrkdwn: string) => html(decode(mrkdwn));
 
+function destination(href: string) {
+  if (/^mailto:/i.test(href)) return href.slice(7);
+  try {
+    return new URL(href).host;
+  } catch {
+    return href;
+  }
+}
+
 function link(url: string, label: string) {
   const href = decode(url);
   if (!/^(https?:\/\/|mailto:)/i.test(href)) return text_html(label);
-  return `<a href="${html(href)}" target="_blank" rel="noopener noreferrer">${text_html(label)}</a>`;
+  const shown = decode(label);
+  const host =
+    shown === href || shown === href.replace(/^mailto:/i, "")
+      ? ""
+      : ` <span class="host">(${html(destination(href))})</span>`;
+  return `<a href="${html(href)}" title="${html(href)}" target="_blank" rel="noopener noreferrer">${text_html(label)}</a>${host}`;
 }
 
 const mention = (label: string) =>

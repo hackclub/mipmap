@@ -24,7 +24,7 @@ const RAMP: f32 = 4.0;
 const MAX_DOWNLOAD: usize = 20_000_000;
 const MAX_OUTPUT: usize = 100_000;
 const WHITE: u8 = 0xf0;
-const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
+const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"];
 const MAX_ATTEMPTS: u32 = 4;
 const MAX_WAIT: u64 = 10;
 
@@ -237,12 +237,13 @@ pub async fn item_image(id: web::Path<u32>) -> HttpResponse {
     match images.get(&id.into_inner()) {
         Some(stored) => HttpResponse::Ok()
             .content_type(stored.content_type.as_str())
+            .insert_header(("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"))
             .insert_header((
                 "Cache-Control",
                 if READY.load(Ordering::Relaxed) { "public, max-age=3600" } else { "no-store" },
             ))
             .body(stored.bytes.clone()),
-        None => HttpResponse::NotFound().finish(),
+        None => HttpResponse::NotFound().insert_header(("Cache-Control", "no-store")).finish(),
     }
 }
 

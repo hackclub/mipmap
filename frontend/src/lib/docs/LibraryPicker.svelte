@@ -55,7 +55,7 @@
         JavaScript: {
             tip: "The browser already gives you a window, so grab a canvas and go straight to the GPU.",
             window: ["WebGL"],
-            gpu: [["WebGL"], ["WebGL", "wgpu"], ["wgpu", "Software renderer"]],
+            gpu: [["WebGL"], ["WebGL"], ["Software renderer"]],
         },
     };
 
@@ -70,6 +70,8 @@
     let kind = $state<Kind>();
     let level = $state<number>();
     let box = $state<HTMLElement>();
+    let question = $state<HTMLElement>();
+    let moved = false;
 
     const step = $derived(
         language === undefined
@@ -89,9 +91,18 @@
             : [],
     );
 
+    const questions = [
+        "Which language do you want to use?",
+        "What are you looking for?",
+        "How much of a challenge do you want?",
+        "Try these:",
+    ];
+
     $effect(() => {
-        step;
-        refocus(box, true);
+        void step;
+        if (moved) question?.focus();
+        else refocus(box, true);
+        moved = true;
     });
 
     function back() {
@@ -108,36 +119,33 @@
 <Dialog labelledby="{uid}-title" width="40rem" {onclose}>
     <h2 id="{uid}-title">Which library to choose?</h2>
     <div class="body" bind:this={box}>
+        <h3 class="question" tabindex="-1" bind:this={question}>{questions[step]}</h3>
         {#if step === 0}
-            <p>Which language do you want to use?</p>
             <div class="options">
                 {#each Object.keys(picks) as option}
                     <button type="button" onclick={() => (language = option)}>{option}</button>
                 {/each}
             </div>
         {:else if step === 1}
-            <p>What are you looking for?</p>
             <div class="options">
                 {#each kinds as [value, label]}
                     <button type="button" onclick={() => (kind = value)}>{label}</button>
                 {/each}
             </div>
         {:else if step === 2}
-            <p>How much of a challenge do you want?</p>
             <div class="options">
                 {#each levels as label, index}
                     <button type="button" onclick={() => (level = index)}>{label}</button>
                 {/each}
             </div>
         {:else}
-            <p>Try these:</p>
             {#if kind === "window" && language && picks[language].tip}
                 <p class="description">{picks[language].tip}</p>
             {/if}
             <div class="results">
                 {#each results as { name, description, tier, links }}
                     <section>
-                        <h3>{name}</h3>
+                        <h4>{name}</h4>
                         <p class="tier">{tier_labels[tier]}</p>
                         <p class="description">{description}</p>
                         <ul>
@@ -169,6 +177,16 @@
 
     p {
         margin: 1rem 0 0;
+    }
+
+    .question {
+        margin: 1rem 0 0;
+        font-size: inherit;
+        font-weight: 400;
+    }
+
+    .question:focus:not(:focus-visible) {
+        outline: none;
     }
 
     .options {
@@ -223,7 +241,7 @@
         border-radius: 7px;
     }
 
-    h3 {
+    h4 {
         margin: 0;
         font-size: 1.25rem;
         font-weight: 700;
@@ -241,7 +259,7 @@
 
     .description {
         margin: 0.25rem 0 0;
-        opacity: 0.7;
+        opacity: 0.85;
     }
 
     ul {
@@ -250,6 +268,16 @@
     }
 
     a {
-        color: #a2b8eb;
+        color: #c8d5f3;
+    }
+
+    a:focus-visible {
+        color: #ead7c2;
+    }
+
+    @media (hover: hover) {
+        a:hover {
+            color: #ead7c2;
+        }
     }
 </style>

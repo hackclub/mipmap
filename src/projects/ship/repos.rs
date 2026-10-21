@@ -49,8 +49,7 @@ impl Repo {
     }
 
     pub fn overlaps(&self, other: &Repo) -> bool {
-        let (key, other) = (self.key(), other.key());
-        key == other || key.starts_with(&format!("{other}/")) || other.starts_with(&format!("{key}/"))
+        self.key() == other.key()
     }
 }
 
@@ -75,11 +74,16 @@ pub fn parse(link: &str) -> Result<Repo, ApiError> {
         .collect();
     match host {
         Host::GitLab => {
-            if let Some(end) = segments
-                .iter()
-                .skip(2)
-                .position(|segment| GITLAB_ROUTES.contains(segment))
-            {
+            let last = segments.len().saturating_sub(1);
+            let end = match segments.iter().skip(2).position(|segment| *segment == "-") {
+                Some(end) => Some(end),
+                None => segments
+                    .iter()
+                    .enumerate()
+                    .skip(2)
+                    .position(|(i, segment)| i < last && GITLAB_ROUTES.contains(segment)),
+            };
+            if let Some(end) = end {
                 segments.truncate(end + 2);
             }
         }
@@ -161,13 +165,17 @@ mod tests {
     #[test]
     fn overlaps() {
         let base = repo("https://gitlab.com/a/b");
-        for same in ["gitlab.com/a/b/tree/main", "https://gitlab.com/A/B/x", "gitlab.com/a/b/-/blob/main/x", "gitlab.com/a/b.git"] {
+        for same in ["gitlab.com/a/b/tree/main", "https://gitlab.com/A/B/", "gitlab.com/a/b/-/blob/main/x", "gitlab.com/a/b.git"] {
             assert!(repo(same).overlaps(&base), "{same}");
             assert!(base.overlaps(&repo(same)), "{same}");
         }
-        for other in ["gitlab.com/a/bc", "gitlab.com/a/c", "github.com/a/b"] {
+        for other in ["gitlab.com/a/bc", "gitlab.com/a/c", "github.com/a/b", "gitlab.com/a/b/x", "gitlab.com/a/b/files"] {
             assert!(!repo(other).overlaps(&base), "{other}");
+            assert!(!base.overlaps(&repo(other)), "{other}");
         }
+        assert_eq!(repo("gitlab.com/g/sub/files").key(), "gitlab.com/g/sub/files");
+        assert_eq!(repo("gitlab.com/g/sub/files/-/tree/main").key(), "gitlab.com/g/sub/files");
+        assert_eq!(repo("gitlab.com/g/sub/proj/tree/main/src").key(), "gitlab.com/g/sub/proj");
         assert_eq!(repo("gitlab.com/a/b/c").root(), "gitlab.com/a/b");
         assert!(repo("github.com/a/b/tree/main").overlaps(&repo("https://github.com/A/B")));
         assert!(repo("gitlab.com/a/b/tree/main").overlaps(&repo("gitlab.com/a/b/blob/main/x")));

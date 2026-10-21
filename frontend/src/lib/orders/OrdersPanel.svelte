@@ -8,7 +8,7 @@
 
 <Section title="Orders" {bounds} zoom={3} padded>
     {#if orders.length}
-        <ul>
+        <ul role="list">
             {#each orders as order (order.id)}
                 <li>
                     <strong>{order.item_name}</strong>
@@ -17,7 +17,9 @@
                     </div>
                     <div>
                         {#if order.fulfilled && order.tracking_number}
-                            Fulfilled, tracking number {order.tracking_number}
+                            Fulfilled, tracking number <span data-selectable
+                                >{order.tracking_number}</span
+                            >
                         {:else if order.fulfilled}
                             Fulfilled
                         {:else}

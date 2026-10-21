@@ -49,6 +49,7 @@
     };
 
     let viewport: HTMLDivElement;
+    let controls: HTMLDivElement;
     let view_width = $state(0);
     let view_height = $state(0);
     let x = $state(0);
@@ -59,11 +60,14 @@
     let tween = $state({ x: 0, y: 0, scale: 1 });
     let frame = 0;
     let leave_timer = 0;
+    let arrive: ((done: boolean) => void) | null = null;
 
     const shown = $derived(animating ? tween : { x, y, scale });
 
     const pointers = new Map<number, { x: number; y: number }>();
     let dragged = false;
+    let sideways = false;
+    let pinch = 1;
     let gesture_start: {
         x: number;
         y: number;
@@ -119,8 +123,22 @@
         return at(0, 1, (lo + hi) / 2);
     }
 
+    const reduced = () =>
+        matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function finish(done: boolean) {
+        const resolve = arrive;
+        arrive = null;
+        resolve?.(done);
+    }
+
     function animate(from: typeof tween, ms = 300) {
         cancelAnimationFrame(frame);
+        finish(false);
+        if (reduced()) {
+            animating = false;
+            return Promise.resolve(true);
+        }
         const start = performance.now();
         tween = from;
         animating = true;
@@ -133,14 +151,24 @@
                 scale: from.scale + (scale - from.scale) * e,
             };
             if (t < 1) frame = requestAnimationFrame(step);
-            else animating = false;
+            else {
+                animating = false;
+                finish(true);
+            }
         };
         frame = requestAnimationFrame(step);
+        return new Promise<boolean>((resolve) => (arrive = resolve));
     }
 
     function stop() {
+        if (animating) {
+            x = tween.x;
+            y = tween.y;
+            scale = tween.scale;
+        }
         animating = false;
         cancelAnimationFrame(frame);
+        finish(false);
     }
 
     const nudge = (start: number, size: number, view: number, pad: number) =>
@@ -161,6 +189,7 @@
             free = false,
             within,
             inset = { left: 0, top: 0, right: 0, bottom: 0 },
+            align = "center",
         }: {
             smooth?: boolean;
             ms?: number;
@@ -170,9 +199,10 @@
             free?: boolean;
             within?: Bounds;
             inset?: Inset;
+            align?: "center" | "start";
         } = {},
-    ) {
-        if (!view_width || !view_height) return;
+    ): Promise<boolean> {
+        if (!view_width || !view_height) return Promise.resolve(false);
         const from = { ...shown };
         const area_width = view_width - inset.left - inset.right;
         const area_height = view_height - inset.top - inset.bottom;
@@ -184,8 +214,10 @@
         scale = clamp(fit, floor, max_scale);
         x =
             inset.left +
-            area_width / 2 -
-            (bounds.left + bounds.width / 2) * scale;
+            (align === "start" &&
+            bounds.width * scale > area_width - 2 * padding
+                ? padding - bounds.left * scale
+                : area_width / 2 - (bounds.left + bounds.width / 2) * scale);
         y =
             inset.top +
             (bounds.height * scale <= area_height - 2 * padding
@@ -196,7 +228,7 @@
             y += nudge(y + within.top * scale, within.height * scale, view_height, padding);
         }
         if (!free) constrain();
-        if (smooth) animate(from, ms);
+        return smooth ? animate(from, ms) : Promise.resolve(true);
     }
 
     export function rect(bounds: Bounds): Bounds {
@@ -234,10 +266,18 @@
     }
 
     $effect(() => {
+        const gestures = ["gesturestart", "gesturechange", "gestureend"];
         viewport.addEventListener("wheel", onwheel, { passive: false });
+        for (const type of gestures)
+            viewport.addEventListener(type, ongesture, { passive: false });
         return () => {
             viewport.removeEventListener("wheel", onwheel);
+            for (const type of gestures)
+                viewport.removeEventListener(type, ongesture);
             clearTimeout(latch_timer);
+            cancelAnimationFrame(frame);
+            cancelAnimationFrame(pan_frame);
+            finish(false);
         };
     });
 
@@ -294,6 +334,28 @@
             y -= e.deltaY * unit;
         }
         constrain();
+    }
+
+    function ongesture(e: Event) {
+        e.preventDefault();
+        if (pointers.size) return;
+        const gesture = e as Event & {
+            scale: number;
+            clientX: number;
+            clientY: number;
+        };
+        if (e.type === "gesturestart") {
+            stop();
+            pinch = 1;
+        } else if (e.type === "gesturechange" && gesture.scale > 0) {
+            const rect = viewport.getBoundingClientRect();
+            zoom_at(
+                gesture.scale / pinch,
+                gesture.clientX - rect.left,
+                gesture.clientY - rect.top,
+            );
+            pinch = gesture.scale;
+        }
     }
 
     const held = new Set<string>();
@@ -362,6 +424,11 @@
         best?.focus({ focusVisible: true } as FocusOptions);
     }
 
+    function on_canvas() {
+        const active = document.activeElement;
+        return !active || active === document.body || viewport.contains(active);
+    }
+
     function onkeydown(e: KeyboardEvent) {
         if (ignored(e)) return;
         if (e.key in arrows) {
@@ -369,6 +436,8 @@
             if (e.shiftKey) return jump(arrows[e.key]);
             held.add(e.key);
             pan();
+        } else if (!on_canvas()) {
+            return;
         } else if (e.key === "=" || e.key === "+") {
             e.preventDefault();
             zoom(button_zoom);
@@ -405,16 +474,23 @@
 
     function onpointerdown(e: PointerEvent) {
         if (e.pointerType === "mouse" && e.button !== 0) return;
-        if ((e.target as Element).closest("input, textarea, select")) return;
+        const target = e.target as Element;
+        if (target.closest("input, textarea, select")) return;
+        const touch = e.pointerType === "touch";
+        if (!touch && target.closest("[data-selectable]")) return;
         const own = scroller(e);
+        const overflowing = !!own && own.scrollHeight > own.clientHeight;
         if (
-            own &&
-            own.scrollHeight > own.clientHeight &&
-            (e.pointerType === "touch" ||
-                (e.target === own && e.offsetX >= own.clientWidth))
+            overflowing &&
+            !touch &&
+            e.target === own &&
+            e.offsetX >= own.clientWidth
         )
             return;
         stop();
+        if (!pointers.size)
+            sideways =
+                touch && !!own && getComputedStyle(own).touchAction === "pan-y";
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (pointers.size === 1) dragged = false;
         start_gesture();
@@ -463,7 +539,7 @@
             for (const id of pointers.keys()) viewport.setPointerCapture(id);
         }
         x += mid_x - gesture_start.mid_x;
-        y += mid_y - gesture_start.mid_y;
+        if (!sideways || count > 1) y += mid_y - gesture_start.mid_y;
         if (count > 1 && gesture_start.distance > 0) {
             const rect = viewport.getBoundingClientRect();
             zoom_at(
@@ -504,27 +580,45 @@
             stop();
             flushSync();
         }
-        const rects = [target, ...target.children].map((el) =>
-            el.getBoundingClientRect(),
-        );
+        const visible = (r: DOMRect) => r.width > 0 || r.height > 0;
+        const own = target.getBoundingClientRect();
+        const rects = visible(own)
+            ? [own]
+            : [...target.querySelectorAll("*")]
+                  .map((el) => el.getBoundingClientRect())
+                  .filter(visible);
+        if (!rects.length) return;
         const view = viewport.getBoundingClientRect();
         const left = Math.min(...rects.map((r) => r.left)) - view.left;
         const top = Math.min(...rects.map((r) => r.top)) - view.top;
         const right = Math.max(...rects.map((r) => r.right)) - view.left;
         const bottom = Math.max(...rects.map((r) => r.bottom)) - view.top;
         const pad = Math.min(fit_padding, view_width / 4, view_height / 4);
-        const dx =
-            left < pad
-                ? pad - left
-                : right > view_width - pad
-                  ? view_width - pad - right
-                  : 0;
+        const dx = nudge(left, right - left, view_width, pad);
+        let [above, below] = [0, view_height];
+        const covers = [
+            controls,
+            ...document.querySelectorAll<HTMLElement>("[data-overlay]"),
+        ];
+        for (const cover of covers) {
+            const r = cover.getBoundingClientRect();
+            const [l, t] = [r.left - view.left, r.top - view.top];
+            if (
+                !r.width ||
+                !r.height ||
+                l >= right + dx + pad ||
+                l + r.width <= left + dx - pad
+            )
+                continue;
+            if (t + r.height / 2 < view_height / 2)
+                above = Math.max(above, t + r.height);
+            else below = Math.min(below, t);
+        }
+        const room = below - above;
         const dy =
-            top < pad
-                ? pad - top
-                : bottom > view_height - pad
-                  ? view_height - pad - bottom
-                  : 0;
+            bottom - top > room - 2 * pad
+                ? above + pad - top
+                : nudge(top - above, bottom - top, room, pad);
         if (!dx && !dy) return;
         const from = { ...shown };
         x += dx;
@@ -574,6 +668,7 @@
 
 <div
     class="controls"
+    bind:this={controls}
     class:locked
     inert={locked}
     role="group"

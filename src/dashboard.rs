@@ -20,6 +20,19 @@ const REFRESH_EVERY: Duration = Duration::from_secs(30);
 
 static REFRESHED: LazyLock<Mutex<HashMap<i32, Instant>>> = LazyLock::new(Default::default);
 
+const ONBOARDING_SCRIPT: &str = include_str!("../frontend/src/lib/onboarding/script.svelte");
+
+pub static ONBOARDING_STEPS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    let steps = ONBOARDING_SCRIPT
+        .split_once("export const steps")
+        .map_or("", |(_, steps)| steps);
+    steps
+        .split("key: \"")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('"').map(|(key, _)| key))
+        .collect()
+});
+
 pub fn api(cfg: &mut web::ServiceConfig) {
     cfg.service((get_dashboard, save_onboarding_step, grant_onboarding_mips, finish_onboarding));
 }
@@ -141,11 +154,21 @@ fn refresh_due(user_id: i32) -> bool {
     let mut refreshed = REFRESHED.lock().unwrap_or_else(PoisonError::into_inner);
     let now = Instant::now();
     refreshed.retain(|_, at| now.duration_since(*at) < REFRESH_EVERY);
-    refreshed.insert(user_id, now).is_none()
+    if refreshed.contains_key(&user_id) {
+        return false;
+    }
+    refreshed.insert(user_id, now);
+    true
 }
 
 pub async fn respond(pool: &PgPool, user_id: i32) -> Result<HttpResponse, ApiError> {
-    Ok(HttpResponse::Ok().json(build(pool, user_id, false).await?))
+    match build(pool, user_id, false).await {
+        Ok(dashboard) => Ok(HttpResponse::Ok().json(dashboard)),
+        Err(e) => {
+            log::error!("building dashboard after a change failed: {e:#}");
+            Ok(HttpResponse::Ok().json(serde_json::Value::Null))
+        }
+    }
 }
 
 #[get("/dashboard")]
@@ -182,16 +205,18 @@ async fn save_onboarding_step(
     pool: web::Data<PgPool>,
     body: web::Json<OnboardingStep>,
 ) -> Result<HttpResponse, ApiError> {
-    if body.step.is_empty() || body.step.len() > 64 {
+    if !ONBOARDING_STEPS.contains(&body.step.as_str()) {
         return Err(reject("Invalid onboarding step"));
     }
     sqlx::query(
         "UPDATE \"user\" SET onboarding_step = $2,
              onboarding_started_at = COALESCE(onboarding_started_at, now())
-         WHERE id = $1 AND onboarded_at IS NULL",
+         WHERE id = $1 AND onboarded_at IS NULL
+         AND COALESCE(array_position($3::text[], onboarding_step), 0) < array_position($3::text[], $2)",
     )
     .bind(user_id)
     .bind(&body.step)
+    .bind(&*ONBOARDING_STEPS)
     .execute(pool.get_ref())
     .await?;
     Ok(HttpResponse::NoContent().finish())
@@ -271,4 +296,17 @@ async fn tree_json() -> HttpResponse {
 #[get("/dashboard/layout.json")]
 async fn layout_json() -> HttpResponse {
     json(tree::LAYOUT_JSON.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn onboarding_steps() {
+        assert_eq!(ONBOARDING_STEPS.first(), Some(&"Welcome"));
+        assert_eq!(ONBOARDING_STEPS.last(), Some(&"Goodbye"));
+        assert!(ONBOARDING_STEPS.contains(&"Sticker sent"));
+        assert!(ONBOARDING_STEPS.iter().all(|step| !step.is_empty() && step.len() <= 64));
+    }
 }

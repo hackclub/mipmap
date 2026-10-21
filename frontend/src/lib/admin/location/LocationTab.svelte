@@ -19,7 +19,9 @@
     load.run();
 
     let picked = $state<string | null>(null);
-    let offsets = $state.raw(new Map<string, number>());
+    let offsets = $state.raw<Map<string, number> | null>(null);
+    let offsets_failed = $state(false);
+    let attempt = $state(0);
 
     const countries = $derived(load.data?.countries ?? []);
     const counts = $derived(new Map(countries.map((c) => [c.code, c.users])));
@@ -43,7 +45,17 @@
     });
 
     const growth = $derived.by(() => {
-        const weeks = [...new Set((load.data?.weeks ?? []).map((w) => w.week))].sort();
+        const seen = [...new Set((load.data?.weeks ?? []).map((w) => w.week))].sort();
+        const weeks: string[] = [];
+        if (seen.length) {
+            const last = Date.parse(`${seen.at(-1)}T00:00:00Z`);
+            for (
+                let at = Date.parse(`${seen[0]}T00:00:00Z`);
+                at <= last;
+                at += 7 * 86_400_000
+            )
+                weeks.push(new Date(at).toISOString().slice(0, 10));
+        }
         const index = new Map(weeks.map((week, i) => [week, i]));
         const series = countries.slice(0, LINES).map((c) => {
             const values = weeks.map(() => 0);
@@ -67,7 +79,7 @@
                     }
                 if (c.users > placed)
                     out.push({ zone: "America/Chicago", users: c.users - placed });
-            } else if (offsets.has(c.code)) {
+            } else if (offsets?.has(c.code)) {
                 out.push({ offset: offsets.get(c.code), users: c.users });
             }
         }
@@ -79,8 +91,15 @@
     );
     const regions_total = $derived(regions.reduce((sum, r) => sum + r.users, 0));
 
-    const people = new Load(() =>
-        selected ? fetch_located_people(selected) : Promise.resolve([]),
+    const people = new Load(async () => {
+        const country = selected;
+        return {
+            country,
+            list: country ? await fetch_located_people(country) : [],
+        };
+    });
+    const shown = $derived(
+        people.data?.country === selected ? people.data.list : undefined,
     );
     $effect(() => {
         void selected;
@@ -88,18 +107,25 @@
     });
 
     $effect(() => {
+        void attempt;
         if (!countries.length) return;
         let stale = false;
-        Promise.all([import("d3-geo"), load_world()]).then(([d3, world]) => {
-            if (stale) return;
-            const next = new Map<string, number>();
-            for (const country of world)
-                if (country.code)
-                    next.set(country.code, Math.round(d3.geoCentroid(country)[0] / 15));
-            for (const [code, [lon]] of Object.entries(small))
-                next.set(code, Math.round(lon / 15));
-            offsets = next;
-        });
+        offsets_failed = false;
+        Promise.all([import("d3-geo"), load_world()]).then(
+            ([d3, world]) => {
+                if (stale) return;
+                const next = new Map<string, number>();
+                for (const country of world)
+                    if (country.code)
+                        next.set(country.code, Math.round(d3.geoCentroid(country)[0] / 15));
+                for (const [code, [lon]] of Object.entries(small))
+                    next.set(code, Math.round(lon / 15));
+                offsets = next;
+            },
+            () => {
+                if (!stale) offsets_failed = true;
+            },
+        );
         return () => (stale = true);
     });
 
@@ -111,7 +137,7 @@
 {#if load.error}
     <LoadError error={load.error} onretry={load.run} />
 {:else if !load.data}
-    <p class="note">Loading…</p>
+    <p class="note" role="status">Loading…</p>
 {:else if !countries.length}
     <p class="note">
         Nobody has an address yet{load.data.unknown
@@ -135,7 +161,7 @@
                     <span class="gradient" style:background="linear-gradient(to right, {dim(0)}, {dim(0.5)}, {dim(1)})"></span>
                     <span>{max.toLocaleString()}</span>
                 </div>
-                <p class="note">Drag to turn it, hover a country for its stats, click one to open it below. Lighter means more people.</p>
+                <p class="note">Drag sideways to turn it, hover a country for its stats, click one to open it below. Lighter means more people.</p>
             </section>
             <section class="box">
                 <h3>Share by country</h3>
@@ -148,7 +174,7 @@
             <ol class="bars">
                 {#each countries.slice(0, BARS) as c (c.code)}
                     <li>
-                        <button type="button" class="row" class:active={c.code === selected} onclick={() => pick(c.code)}>
+                        <button type="button" class="row" class:active={c.code === selected} aria-pressed={c.code === selected} onclick={() => pick(c.code)}>
                             <span class="name">{country_name(c.code)}</span>
                             <span class="track">
                                 <span class="fill" style:width="{(c.users / max) * 100}%" style:background={ramp(scale(c.users, max))}></span>
@@ -165,7 +191,16 @@
             <p class="note">
                 How many people it's 9am to 9pm for at each hour of your day. Estimated from their country, and their state in the US.
             </p>
-            <Awake {groups} />
+            {#if offsets_failed}
+                <div class="unavailable" role="alert">
+                    <p class="note">The world map didn't load, so this can't be worked out for people outside the US.</p>
+                    <button type="button" class="open" onclick={() => attempt++}>Retry</button>
+                </div>
+            {:else if !offsets}
+                <p class="note" role="status">Loading…</p>
+            {:else}
+                <Awake {groups} />
+            {/if}
         </section>
 
         <section class="box">
@@ -192,7 +227,7 @@
                         {#each countries as c (c.code)}
                             <tr class:active={c.code === selected}>
                                 <th scope="row">
-                                    <button type="button" class="link" onclick={() => pick(c.code)}>{country_name(c.code)}</button>
+                                    <button type="button" class="link" aria-pressed={c.code === selected} onclick={() => pick(c.code)}>{country_name(c.code)}</button>
                                 </th>
                                 <td>{c.users.toLocaleString()}</td>
                                 <td>{rate(c.onboarded, c.users)}</td>
@@ -208,11 +243,13 @@
 
         <div class="pair">
             <section class="box">
-                <h3>All countries</h3>
+                <h3 id="loc-all-countries">All countries</h3>
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <div class="scroller" tabindex="0" role="region" aria-labelledby="loc-all-countries">
                 <ol class="list">
                     {#each countries as c, i (c.code)}
                         <li>
-                            <button type="button" class="row" class:active={c.code === selected} onclick={() => pick(c.code)}>
+                            <button type="button" class="row" class:active={c.code === selected} aria-pressed={c.code === selected} onclick={() => pick(c.code)}>
                                 <span class="rank">{i + 1}</span>
                                 <span class="name">{country_name(c.code)}</span>
                                 <span class="count">{c.users.toLocaleString()} · {share(c.users)}</span>
@@ -220,9 +257,12 @@
                         </li>
                     {/each}
                 </ol>
+                </div>
             </section>
             <section class="box">
-                <h3>Top cities</h3>
+                <h3 id="loc-top-cities">Top cities</h3>
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <div class="scroller" tabindex="0" role="region" aria-labelledby="loc-top-cities">
                 <ol class="list">
                     {#each load.data.cities as city, i (city.country + city.name)}
                         <li>
@@ -234,6 +274,7 @@
                         <li class="note">No cities yet</li>
                     {/each}
                 </ol>
+                </div>
             </section>
         </div>
 
@@ -241,7 +282,9 @@
             <h3 class="selected">{country_name(selected)}</h3>
             <div class="pair">
                 <section class="box">
-                    <h3>States and regions</h3>
+                    <h4 id="loc-regions">States and regions</h4>
+                    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                    <div class="scroller" tabindex="0" role="region" aria-labelledby="loc-regions">
                     <ol class="list">
                         {#each regions as region, i (region.name)}
                             <li>
@@ -256,16 +299,19 @@
                             <li class="note">{((counts.get(selected) ?? 0) - regions_total).toLocaleString()} without a state or region</li>
                         {/if}
                     </ol>
+                    </div>
                 </section>
                 <section class="box">
-                    <h3>People</h3>
+                    <h4 id="loc-people">People</h4>
                     {#if people.error}
                         <LoadError error={people.error} onretry={people.run} />
-                    {:else if !people.data}
-                        <p class="note">Loading…</p>
+                    {:else if !shown}
+                        <p class="note" role="status">Loading…</p>
                     {:else}
+                        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                        <div class="scroller" tabindex="0" role="region" aria-labelledby="loc-people">
                         <ul class="list people">
-                            {#each people.data as person (person.id)}
+                            {#each shown as person (person.id)}
                                 <li>
                                     <span class="name">
                                         {person.name || `User #${person.id}`}
@@ -275,7 +321,8 @@
                                 </li>
                             {/each}
                         </ul>
-                        {#if people.data.length >= 1000}
+                        </div>
+                        {#if shown.length >= 1000}
                             <p class="note">Showing the newest 1,000.</p>
                         {/if}
                     {/if}
@@ -302,8 +349,20 @@
     }
 
     .note {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.85rem;
+    }
+
+    .unavailable {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+    }
+
+    h4 {
+        margin: 0;
+        font-size: 1rem;
     }
 
     .summary {
@@ -339,7 +398,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 
@@ -369,6 +428,7 @@
         align-items: center;
         gap: 0.6rem;
         width: 100%;
+        min-height: 2rem;
         padding: 0.25rem 0.4rem;
         background: none;
         border: none;
@@ -390,6 +450,11 @@
     .row.active,
     tr.active {
         background: #4f2f1f;
+    }
+
+    .row.active,
+    tr.active th {
+        box-shadow: inset 4px 0 0 #ead7c2;
     }
 
     @media (hover: hover) {
@@ -426,7 +491,7 @@
     }
 
     .count {
-        color: #d6ab70;
+        color: #ead7c2;
         white-space: nowrap;
     }
 
@@ -434,13 +499,21 @@
         display: flex;
         flex-direction: column;
         gap: 0.1rem;
+    }
+
+    .scroller {
         max-height: 22rem;
         overflow: auto;
     }
 
+    .scroller:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
     .rank {
         flex: 0 0 1.75rem;
-        color: #d6ab70;
+        color: #ead7c2;
         text-align: right;
     }
 
@@ -456,12 +529,13 @@
     }
 
     .people small {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 
     .open {
         flex: 0 0 auto;
+        min-height: 2rem;
         padding: 0.3rem 0.6rem;
         background: #4f2f1f;
         border: none;
@@ -509,7 +583,7 @@
     }
 
     thead th {
-        color: #d6ab70;
+        color: #ead7c2;
         font-weight: 700;
         border-bottom: 2px solid #4f2f1f;
     }
@@ -519,6 +593,7 @@
     }
 
     .link {
+        min-height: 2rem;
         padding: 0;
         background: none;
         border: none;

@@ -2,6 +2,7 @@ export type Day = {
   date: string;
   signed_up: number;
   active: number;
+  logged_in: number;
 };
 
 export type Hour = {
@@ -23,6 +24,8 @@ export type Stats = {
     successful_referrals: number;
     orders_placed: number;
     logged_in_last_day: number;
+    logged_in_last_week: number;
+    logged_in_ever: number;
     awaiting_review: number;
     average_wait_hours: number | null;
     average_approval_hours: number | null;
@@ -32,20 +35,23 @@ export type Stats = {
 };
 
 export type Onboarding = {
-  users: number;
-  started: number;
-  finished: number;
+  users: number | null;
+  started: number | null;
+  made_project: number | null;
+  reached_tech_tree: number | null;
+  unlocked_sticker: number | null;
+  stickers: number | null;
+  finished: number | null;
+  in_progress: number | null;
   median_minutes: number | null;
-  stickers: number;
-  steps: { step: string; users: number }[];
 };
 
 export type Funnel = {
-  visited: number;
-  signed_in: number;
-  linked_hackatime: number;
-  created_project: number;
-  logged_time: number;
-  shipped: number;
-  redeemed: number;
+  visited: number | null;
+  signed_in: number | null;
+  linked_hackatime: number | null;
+  created_project: number | null;
+  logged_time: number | null;
+  shipped: number | null;
+  redeemed: number | null;
 };

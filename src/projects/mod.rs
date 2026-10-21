@@ -7,8 +7,9 @@ use crate::{
 use actix_web::{HttpResponse, delete, http::StatusCode, post, put, web};
 use chrono::{DateTime, Utc};
 use hc_helper::hackatime::data::Project as HackatimeProject;
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgExecutor, PgPool};
 
 pub mod review;
 pub mod ship;
@@ -111,6 +112,21 @@ fn required_name(name: &str) -> Result<&str, ApiError> {
     }
 }
 
+fn web_link(label: &str, link: &str) -> Result<String, ApiError> {
+    if link.is_empty() {
+        return Ok(String::new());
+    }
+    let link = if link.contains("://") {
+        link.to_string()
+    } else {
+        format!("https://{link}")
+    };
+    match Url::parse(&link) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() => Ok(link),
+        _ => Err(reject(format!("{label} has to be an http(s) link"))),
+    }
+}
+
 pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
     sqlx::query_as(
         "SELECT p.id, p.name, p.description, COALESCE(p.repo_url, '') AS repo,
@@ -120,7 +136,8 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
                   WHEN latest.rejected THEN 'rejected'
                   WHEN latest.review_status = $2 THEN 'approved'
                   ELSE 'shipped' END AS status,
-             latest.created_at IS NOT NULL AND latest.record_id IS NULL AS awaiting_id,
+             latest.created_at IS NOT NULL AND latest.record_id IS NULL AND latest.sending_at IS NULL
+                 AS awaiting_id,
              EXISTS (SELECT 1 FROM submission WHERE project_id = p.id AND deleted_at IS NULL AND NOT rejected)
                  AS locked,
              latest.created_at AS shipped_at,
@@ -129,7 +146,7 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
              p.total_seconds, p.last_logged_at
          FROM project p
          LEFT JOIN LATERAL (
-             SELECT review_status, rejected, created_at, record_id FROM submission
+             SELECT review_status, rejected, created_at, record_id, sending_at FROM submission
              WHERE project_id = p.id AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1
          ) latest ON true
@@ -168,7 +185,7 @@ async fn reviewing(pool: &PgPool, project_id: i32) -> sqlx::Result<bool> {
 }
 
 async fn ensure_hackatime_free(
-    pool: &PgPool,
+    db: impl PgExecutor<'_>,
     user_id: i32,
     project_id: i32,
     names: &[String],
@@ -181,7 +198,7 @@ async fn ensure_hackatime_free(
     .bind(user_id)
     .bind(project_id)
     .bind(names)
-    .fetch_optional(pool)
+    .fetch_optional(db)
     .await?;
     match taken {
         Some(name) => Err(reject(format!(
@@ -274,8 +291,8 @@ async fn update_project(
     let fields = body.into_inner();
     let name = required_name(&fields.name)?;
     let description = limited("Description", &fields.description, DESCRIPTION_LIMIT)?;
-    let repo = limited("Repo link", &fields.repo, LINK_LIMIT)?;
-    let demo = limited("Demo link", &fields.demo, LINK_LIMIT)?;
+    let mut repo = limited("Repo link", &fields.repo, LINK_LIMIT)?.to_string();
+    let mut demo = limited("Demo link", &fields.demo, LINK_LIMIT)?.to_string();
     let mut hackatime = fields.hackatime;
     hackatime.sort();
     hackatime.dedup();
@@ -299,6 +316,15 @@ async fn update_project(
     .ok_or_else(unknown_project)?;
     current.hackatime.sort();
     current.hackatime.dedup();
+    if repo != current.repo {
+        repo = web_link("The repo link", &repo)?;
+    }
+    if demo != current.demo {
+        demo = web_link("The demo link", &demo)?;
+    }
+    if repo.chars().count() > LINK_LIMIT || demo.chars().count() > LINK_LIMIT {
+        return Err(reject(format!("Links must be at most {LINK_LIMIT} characters")));
+    }
     let unchanged = current.description == description
         && current.repo == repo
         && current.demo == demo
@@ -310,7 +336,16 @@ async fn update_project(
             "This project is being reviewed, so only its name can change",
         ));
     }
-    ensure_hackatime_free(&pool, user_id, *id, &hackatime).await?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM project WHERE id = $1 FOR UPDATE")
+        .bind(*id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SELECT 1 FROM \"user\" WHERE id = $1 FOR UPDATE")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    ensure_hackatime_free(&mut *tx, user_id, *id, &hackatime).await?;
     let shipped: bool = sqlx::query_scalar(
         "SELECT EXISTS (
              SELECT 1 FROM submission
@@ -318,7 +353,7 @@ async fn update_project(
          )",
     )
     .bind(*id)
-    .fetch_one(pool.get_ref())
+    .fetch_one(&mut *tx)
     .await?;
     if shipped {
         if current.repo != repo {
@@ -344,11 +379,12 @@ async fn update_project(
     .bind(demo)
     .bind(fields.tier.map(Tier::name))
     .bind(hackatime)
-    .execute(pool.get_ref())
+    .execute(&mut *tx)
     .await?;
     if updated.rows_affected() == 0 {
         return Err(unknown_project());
     }
+    tx.commit().await?;
     dashboard::respond(&pool, user_id).await
 }
 
@@ -396,17 +432,23 @@ async fn upload_screenshot(
 ) -> Result<HttpResponse, ApiError> {
     uploads::ensure_image(&body)?;
     ensure_owned(&pool, user_id, *id).await?;
-    let _shipping = ship::Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
-    if reviewing(&pool, *id).await? {
-        return Err(reject_with(
+    let in_review = || {
+        reject_with(
             StatusCode::CONFLICT,
             "This project is being reviewed, so its screenshot can't change",
-        ));
+        )
+    };
+    if reviewing(&pool, *id).await? {
+        return Err(in_review());
     }
     let slot = uploads::reserve(user_id)?;
     let url = uploads::upload(&slot, &body).await?;
-    sqlx::query("UPDATE project SET screenshot_url = $2 WHERE id = $1")
+    let _shipping = ship::Shipping::start(*id)
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+    if reviewing(&pool, *id).await? {
+        return Err(in_review());
+    }
+    sqlx::query("UPDATE project SET screenshot_url = $2 WHERE id = $1 AND deleted_at IS NULL")
         .bind(*id)
         .bind(url)
         .execute(pool.get_ref())

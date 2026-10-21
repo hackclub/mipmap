@@ -7,6 +7,7 @@
         layout,
         currency,
         metadata,
+        names,
         unlocked,
         purchased,
         left = 0,
@@ -16,6 +17,7 @@
         layout: Layout;
         currency: string;
         metadata: ItemMetadata;
+        names: Map<number, string>;
         unlocked: Set<number>;
         purchased: Set<number>;
         left?: number;
@@ -27,6 +29,19 @@
     const ordered = $derived(
         [...layout.nodes].sort((a, b) => b.y - a.y || a.x - b.x),
     );
+
+    function describe(node: TreeNode) {
+        const parts = node.category ? [node.category] : [];
+        const reachable = node.requires.some(
+            (id) => unlocked.has(id) || nodes.get(id)?.kind === "origin",
+        );
+        const missing = node.requires
+            .filter((id) => nodes.get(id)?.kind !== "origin")
+            .map((id) => names.get(id) ?? nodes.get(id)?.name ?? "");
+        if (!unlocked.has(node.id) && !reachable && missing.length)
+            parts.push(`Locked, unlock ${missing.join(" or ")} first`);
+        return parts.join(". ");
+    }
 </script>
 
 <div
@@ -66,6 +81,8 @@
             <NodeView
                 {node}
                 title={metadata[node.id]?.title ?? node.name}
+                name={names.get(node.id) ?? node.name}
+                description={describe(node)}
                 shape={layout.shapes[node.kind]}
                 x={placed.x}
                 y={placed.y}

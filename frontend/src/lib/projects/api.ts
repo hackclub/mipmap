@@ -1,6 +1,13 @@
-import { json, request, send_json } from "$lib/api";
+import { SvelteSet } from "svelte/reactivity";
+import { json, prepare_image, request, send_json } from "$lib/api";
 import { dashboard, mutate, type Dashboard } from "$lib/dashboard/state.svelte";
 import type { CheckEvent, ProjectFields } from "$lib/projects/types";
+
+export class ConnectionLost extends Error {
+  constructor() {
+    super("Connection lost; the ship may still finish. Check back in a minute");
+  }
+}
 
 type ShipLine =
   | CheckEvent
@@ -16,12 +23,21 @@ export const update_project = (id: number, fields: ProjectFields) =>
 export const delete_project = (id: number) =>
   mutate(`/api/projects/${id}`, { method: "DELETE" });
 
-export const upload_screenshot = (id: number, file: File) =>
-  mutate(`/api/projects/${id}/screenshot`, {
-    method: "POST",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
+export const uploading = new SvelteSet<number>();
+
+export async function upload_screenshot(id: number, original: File) {
+  uploading.add(id);
+  try {
+    const file = await prepare_image(original);
+    await mutate(`/api/projects/${id}/screenshot`, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+  } finally {
+    uploading.delete(id);
+  }
+}
 
 export async function ship_project(
   id: number,
@@ -31,7 +47,7 @@ export async function ship_project(
     method: "POST",
   });
   if (!response.ok) await json(response);
-  if (!response.body) throw new Error("Lost connection while shipping");
+  if (!response.body) throw new ConnectionLost();
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -41,7 +57,12 @@ export async function ship_project(
 
   const handle = (line: string) => {
     if (!line.trim()) return;
-    const event: ShipLine = JSON.parse(line);
+    let event: ShipLine;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      throw new ConnectionLost();
+    }
     if ("error" in event) throw new Error(event.error);
     if ("dashboard" in event) {
       if (event.dashboard) dashboard.set(event.dashboard);
@@ -55,7 +76,9 @@ export async function ship_project(
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await reader.read().catch(() => {
+        throw new ConnectionLost();
+      });
       buffer += decoder.decode(value, { stream: !done });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -67,6 +90,6 @@ export async function ship_project(
     reader.cancel().catch(() => {});
   }
 
-  if (!shipped) throw new Error("Lost connection while shipping");
+  if (!shipped) throw new ConnectionLost();
   return { waiting };
 }

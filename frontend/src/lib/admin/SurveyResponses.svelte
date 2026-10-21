@@ -24,7 +24,7 @@
 
 <PagedList {pages} empty="No responses yet">
     {#snippet item(response)}
-        <Card>
+        <Card level={4}>
             {#snippet title()}
                 Response #{response.id}
             {/snippet}
@@ -84,7 +84,7 @@
     }
 
     .label {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 

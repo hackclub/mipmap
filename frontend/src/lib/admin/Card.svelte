@@ -5,12 +5,14 @@
         title,
         meta,
         dim = false,
+        level = 3,
         children,
         actions,
     }: {
         title: Snippet;
         meta?: Snippet;
         dim?: boolean;
+        level?: 3 | 4;
         children?: Snippet;
         actions?: Snippet;
     } = $props();
@@ -18,7 +20,9 @@
 
 <article class:dim>
     <header>
-        <div class="title">{@render title()}</div>
+        <svelte:element this={`h${level}`} class="title"
+            >{@render title()}</svelte:element
+        >
         {#if meta}<div class="meta">{@render meta()}</div>{/if}
     </header>
     {@render children?.()}
@@ -51,11 +55,13 @@
     }
 
     .title {
+        margin: 0;
+        font-size: 1em;
         font-weight: 700;
     }
 
     .meta {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.85rem;
     }
 
@@ -79,6 +85,11 @@
             color 0.3s;
     }
 
+    .actions :global(button[aria-disabled="true"]) {
+        opacity: 0.5;
+        cursor: default;
+    }
+
     .actions :global(button:focus-visible) {
         background-color: #ead7c2;
         color: #4f2f1f;
@@ -99,7 +110,7 @@
     }
 
     article :global(dt) {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 

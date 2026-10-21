@@ -6,6 +6,8 @@
     let {
         node,
         title,
+        name,
+        description,
         shape,
         x,
         y,
@@ -16,6 +18,8 @@
     }: {
         node: TreeNode;
         title: string;
+        name: string;
+        description: string;
         shape: Shape;
         x: number;
         y: number;
@@ -32,6 +36,7 @@
     const price = $derived(price_label(node, currency, unlocked, purchased));
     const unlocked_ring = $derived({ color: unlocked_border, width: border });
     const focus_ring = $derived({ color: "#ead7c2", width: border + 8 });
+    const uid = $props.id();
 </script>
 
 {#snippet cog(ring?: { color: string; width: number })}
@@ -90,9 +95,13 @@
         data-node={node.id}
         style:left="{x}px"
         style:top="{y}px"
-        aria-label="{title}, {price}"
+        aria-label="{name}, {price}"
+        aria-describedby={description ? `${uid}-description` : undefined}
         onclick={onselect}
     >
+        {#if description}
+            <span id="{uid}-description" hidden>{description}</span>
+        {/if}
         <div class="focus">
             {@render cog(focus_ring)}
             {@render label(focus_ring)}
@@ -166,12 +175,12 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 0.4rem 1.2rem;
+        padding: 6.4px 19.2px;
         background: #74472a;
         border: 2px solid #4f2f1f;
         border-radius: 7px;
         color: #ead7c2;
-        font-size: 2rem;
+        font-size: 32px;
         line-height: 1.15;
         text-align: center;
     }
@@ -190,7 +199,7 @@
 
     .label.token {
         padding: 0;
-        font-size: 1.7rem;
+        font-size: 27.2px;
         font-weight: 700;
     }
 
@@ -211,5 +220,12 @@
 
     .gray {
         filter: grayscale(1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .cog,
+        .label {
+            transition: none;
+        }
     }
 </style>

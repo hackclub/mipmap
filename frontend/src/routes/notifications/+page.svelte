@@ -109,7 +109,7 @@
                     href="https://auth.hackclub.com"
                     target="_blank"
                     rel="noopener">Hack Club Auth</a
-                >)
+                >, then log out and back in)
             </p>
         {/if}
         <form onsubmit={submit} onchange={() => (saved = false)}>
@@ -228,11 +228,13 @@
 
     input[type="checkbox"] {
         flex: none;
+        box-sizing: border-box;
         width: 1.25em;
         height: 1.25em;
         margin: 0;
         appearance: none;
         background: #4f2f1f;
+        border: 1px solid #d6ab70;
         cursor: pointer;
     }
 
@@ -247,6 +249,12 @@
 
     input[type="checkbox"]:focus-visible {
         outline: 2px solid #ead7c2;
+    }
+
+    @media (forced-colors: active) {
+        input[type="checkbox"] {
+            appearance: auto;
+        }
     }
 
     .actions {

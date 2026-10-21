@@ -1,5 +1,9 @@
 <script lang="ts">
-    let { values, labels }: { values: number[]; labels: string[] } = $props();
+    let {
+        values,
+        labels,
+        name,
+    }: { values: number[]; labels: string[]; name: string } = $props();
 
     const width = 100;
     const height = 100;
@@ -34,68 +38,157 @@
             .join(" "),
     );
 
+    const last = $derived(values.length - 1);
+    const summary = $derived.by(() => {
+        if (!values.length) return "";
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        return `${name}, ${labels[0]} to ${labels[last]}: lowest ${min.toLocaleString()}, highest ${max.toLocaleString()}, latest ${values[last].toLocaleString()}.`;
+    });
+    const samples = $derived.by(() => {
+        const count = Math.min(values.length, 8);
+        if (count < 2) return values.length ? [last] : [];
+        return [
+            ...new Set(
+                Array.from({ length: count }, (_, i) =>
+                    Math.round((i / (count - 1)) * last),
+                ),
+            ),
+        ];
+    });
+
+    let plot = $state<HTMLElement>();
     let hovered = $state<number>();
     const point = $derived(hovered === undefined ? undefined : points[hovered]);
+    const current = $derived(
+        Math.min(Math.max(hovered ?? last, 0), Math.max(last, 0)),
+    );
 
     function hover(event: PointerEvent) {
+        if (!values.length) return;
         const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
         const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
-        hovered = Math.round(ratio * (values.length - 1));
+        hovered = Math.round(ratio * last);
+    }
+
+    function leave(event: PointerEvent) {
+        if (event.pointerType !== "touch") hovered = undefined;
+    }
+
+    function key(event: KeyboardEvent) {
+        if (!values.length) return;
+        const page = Math.max(1, Math.round(values.length / 10));
+        const moves: Record<string, number> = {
+            ArrowLeft: current - 1,
+            ArrowDown: current - 1,
+            ArrowRight: current + 1,
+            ArrowUp: current + 1,
+            PageDown: current - page,
+            PageUp: current + page,
+            Home: 0,
+            End: last,
+        };
+        if (event.key === "Escape") {
+            if (hovered === undefined) return;
+            hovered = undefined;
+        } else if (event.key in moves) {
+            hovered = Math.min(last, Math.max(0, moves[event.key]));
+        } else return;
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function dismiss(event: KeyboardEvent) {
+        if (event.key === "Escape" && hovered !== undefined) hovered = undefined;
+    }
+
+    function outside(event: PointerEvent) {
+        if (hovered !== undefined && !plot?.contains(event.target as Node))
+            hovered = undefined;
     }
 </script>
 
+<svelte:window onkeydown={dismiss} onpointerdown={outside} />
+
 <div class="chart">
-    <div class="axis" aria-hidden="true">
-        {#each ticks as tick (tick)}
-            <span style:bottom="{(tick / top) * 100}%"
-                >{tick.toLocaleString()}</span
-            >
-        {/each}
-        <span class="sizer">{top.toLocaleString()}</span>
-    </div>
-    <div
-        class="plot"
-        role="presentation"
-        onpointermove={hover}
-        onpointerdown={hover}
-        onpointerleave={() => (hovered = undefined)}
-    >
-        <svg
-            viewBox="0 0 {width} {height}"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-        >
-            <polygon class="area" points="0,{height} {line} {width},{height}" />
+    {#if values.length}
+        <div class="axis" aria-hidden="true">
             {#each ticks as tick (tick)}
-                {@const y = height - (tick / top) * height}
-                <line class="grid" x1="0" x2={width} y1={y} y2={y} />
+                <span style:bottom="{(tick / top) * 100}%"
+                    >{tick.toLocaleString()}</span
+                >
             {/each}
-            <polyline class="line" points={line} />
-        </svg>
-        {#if hovered !== undefined && point}
-            <div class="cursor" style:left="{point.x}%" aria-hidden="true"></div>
-            <div
-                class="dot"
-                style:left="{point.x}%"
-                style:top="{point.y}%"
-                aria-hidden="true"
-            ></div>
-            <div
-                class="tip"
-                class:low={point.y < 50}
-                style:left="{point.x}%"
-                style:transform="translateX(-{point.x}%)"
+            <span class="sizer">{top.toLocaleString()}</span>
+        </div>
+        <div
+            class="plot"
+            bind:this={plot}
+            role="slider"
+            tabindex="0"
+            aria-label="{name} chart"
+            aria-valuemin={0}
+            aria-valuemax={last}
+            aria-valuenow={current}
+            aria-valuetext="{labels[current]}: {values[current].toLocaleString()}"
+            onpointermove={hover}
+            onpointerdown={hover}
+            onpointerleave={leave}
+            onkeydown={key}
+            onblur={() => (hovered = undefined)}
+        >
+            <svg
+                viewBox="0 0 {width} {height}"
+                preserveAspectRatio="none"
                 aria-hidden="true"
             >
-                <strong>{values[hovered].toLocaleString()}</strong>
-                <span>{labels[hovered]}</span>
-            </div>
-        {/if}
-    </div>
-    <div class="dates">
-        <span>{labels[0]}</span>
-        <span>{labels[labels.length - 1]}</span>
-    </div>
+                <polygon class="area" points="0,{height} {line} {width},{height}" />
+                {#each ticks as tick (tick)}
+                    {@const y = height - (tick / top) * height}
+                    <line class="grid" x1="0" x2={width} y1={y} y2={y} />
+                {/each}
+                <polyline class="line" points={line} />
+            </svg>
+            {#if hovered !== undefined && point}
+                <div class="cursor" style:left="{point.x}%" aria-hidden="true"></div>
+                <div
+                    class="dot"
+                    style:left="{point.x}%"
+                    style:top="{point.y}%"
+                    aria-hidden="true"
+                ></div>
+                <div
+                    class="tip"
+                    class:low={point.y < 50}
+                    style:left="{point.x}%"
+                    style:transform="translateX(-{point.x}%)"
+                    aria-hidden="true"
+                >
+                    <strong>{values[hovered].toLocaleString()}</strong>
+                    <span>{labels[hovered]}</span>
+                </div>
+            {/if}
+        </div>
+        <div class="dates" aria-hidden="true">
+            <span>{labels[0]}</span>
+            <span>{labels[last]}</span>
+        </div>
+        <div class="sr-only">
+            <p>{summary}</p>
+            <table>
+                <caption>{name}, sample points</caption>
+                <thead>
+                    <tr><th scope="col">Time</th><th scope="col">Value</th></tr>
+                </thead>
+                <tbody>
+                    {#each samples as i (i)}
+                        <tr><td>{labels[i]}</td><td>{values[i].toLocaleString()}</td></tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+    {:else}
+        <p class="empty">No data yet</p>
+    {/if}
 </div>
 
 <style>
@@ -109,7 +202,7 @@
 
     .axis {
         position: relative;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
         text-align: right;
@@ -130,6 +223,12 @@
     .plot {
         position: relative;
         touch-action: pan-y;
+        border-radius: 2px;
+    }
+
+    .plot:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 4px;
     }
 
     .cursor {
@@ -215,7 +314,23 @@
         display: flex;
         justify-content: space-between;
         margin-top: 0.25rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.8rem;
+    }
+
+    .empty {
+        grid-column: 1 / -1;
+        align-self: center;
+        margin: 0;
+        text-align: center;
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 </style>

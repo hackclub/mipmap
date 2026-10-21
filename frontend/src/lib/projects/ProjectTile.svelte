@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { image_error, image_types } from "$lib/api";
+    import { image_types } from "$lib/api";
+    import { dashboard } from "$lib/dashboard/state.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
-    import { upload_screenshot } from "$lib/projects/api";
+    import { upload_screenshot, uploading } from "$lib/projects/api";
     import type { Project } from "$lib/projects/types";
     import { days_left, hours } from "$lib/format";
     import { Task } from "$lib/load.svelte";
@@ -24,16 +25,22 @@
         return rounds.find((round) => round.ship_by >= shipped_on);
     });
 
+    const queued = $derived(
+        project.status === "shipped" && project.awaiting_id,
+    );
+    const slack = $derived(dashboard.data?.user.slack_linked ?? true);
+
     const status_line = $derived.by(() => {
         if (project.status === "draft") return "";
+        if (project.status === "rejected")
+            return slack
+                ? "Rejected, check your Slack DMs for more details"
+                : "Rejected";
+        if (queued) return "Waiting for ID verification";
         const parts =
-            project.status === "rejected"
-                ? ["Rejected, check your Slack DMs for more details"]
-                : project.awaiting_id
-                  ? ["Waiting for ID verification"]
-                  : project.status === "shipped"
-                    ? ["In review"]
-                    : ["Approved", `${project.mips_awarded} Mips earned`];
+            project.status === "shipped"
+                ? ["In review"]
+                : ["Approved", `${project.mips_awarded} Mips earned`];
         if (round) {
             parts.unshift(`Round ${rounds.indexOf(round) + 1}`);
             if (project.status === "shipped") {
@@ -52,11 +59,30 @@
 
     let picker = $state<HTMLInputElement>();
     const upload = new Task("Upload failed");
+    let uploaded = $state(false);
+    const busy = $derived(upload.pending || uploading.has(project.id));
 
     function autoscroll(text: HTMLElement) {
         const frame = text.parentElement!;
         const still = matchMedia("(prefers-reduced-motion: reduce)");
         let animation: Animation | undefined;
+        const shot = frame.closest("button")!;
+        const held = { hover: false, focus: false };
+        const sync = () => {
+            if (held.hover || held.focus) {
+                if (animation?.playState === "running") animation.pause();
+            } else if (animation?.playState === "paused") animation.play();
+        };
+        const track = (key: keyof typeof held, value: boolean) => () => {
+            held[key] = value;
+            sync();
+        };
+        const listeners: [string, () => void][] = [
+            ["pointerenter", track("hover", true)],
+            ["pointerleave", track("hover", false)],
+            ["focus", track("focus", true)],
+            ["blur", track("focus", false)],
+        ];
         const update = () => {
             animation?.cancel();
             const distance = text.offsetHeight - frame.clientHeight;
@@ -72,17 +98,22 @@
                     { transform: down, offset: (hold + scroll) / total },
                     { transform: down, offset: 1 },
                 ],
-                { duration: total, iterations: Infinity },
+                { duration: total, iterations: 2 },
             );
+            sync();
         };
         const observer = new ResizeObserver(update);
         observer.observe(frame);
         observer.observe(text);
         still.addEventListener("change", update);
+        for (const [type, listener] of listeners)
+            shot.addEventListener(type, listener);
         return {
             destroy() {
                 observer.disconnect();
                 still.removeEventListener("change", update);
+                for (const [type, listener] of listeners)
+                    shot.removeEventListener(type, listener);
                 animation?.cancel();
             },
         };
@@ -91,10 +122,12 @@
     async function pick(e: Event & { currentTarget: HTMLInputElement }) {
         const file = e.currentTarget.files?.[0];
         e.currentTarget.value = "";
-        if (!file || upload.pending) return;
-        upload.error = image_error(file);
-        if (upload.error) return;
-        await upload.run(() => upload_screenshot(project.id, file));
+        if (!file || busy) return;
+        uploaded = false;
+        await upload.run(
+            () => upload_screenshot(project.id, file),
+            () => (uploaded = true),
+        );
     }
 </script>
 
@@ -110,9 +143,29 @@
     {#if status_line}
         <p class="status">
             {status_line}
-            {#if project.status === "shipped" && round}
+            {#if queued}
+                <span class="note">
+                    It's sent for review as soon as your ID is verified. Ships
+                    wait up to 30 days, then get cancelled
+                </span>
+            {:else if project.status === "shipped" && round}
                 <span class="note">
                     Reviews start once the round's ship-by date passes
+                </span>
+            {:else if project.status === "rejected"}
+                <span class="note">
+                    {#if slack}
+                        Not seeing a DM? Make sure <a href="/notifications"
+                            >Slack DMs</a
+                        > are turned on
+                    {:else}
+                        Reviewers send the reason as a Slack DM, but your Hack
+                        Club account has no Slack linked. Link one in <a
+                            href="https://auth.hackclub.com"
+                            target="_blank"
+                            rel="noopener">Hack Club Auth</a
+                        >, then log out and back in to get DMs
+                    {/if}
                 </span>
             {/if}
         </p>
@@ -143,10 +196,14 @@
         type="button"
         class="shot"
         aria-label="Upload screenshot for {project.name}"
-        disabled={upload.pending || project.status === "shipped"}
+        disabled={busy || project.status === "shipped"}
         onclick={() => picker?.click()}
     >
-        {#if project.screenshot}
+        {#if busy}
+            <span class="placeholder" aria-hidden="true">
+                <span>Uploading…</span>
+            </span>
+        {:else if project.screenshot}
             <img src={project.screenshot} alt="" />
         {:else}
             <span class="placeholder">
@@ -168,7 +225,7 @@
         {#if project.status === "shipped"}
             <MipmapButton type="button" disabled>In review</MipmapButton>
         {:else}
-            <MipmapButton type="button" onclick={onship}>
+            <MipmapButton type="button" disabled={busy} onclick={onship}>
                 {project.status === "draft" ? "Ship" : "Re-ship"}
             </MipmapButton>
             {#if project.status !== "draft"}
@@ -176,8 +233,15 @@
             {/if}
         {/if}
     </div>
+    <p class="sr" role="status">
+        {busy
+            ? `Uploading screenshot for ${project.name}`
+            : uploaded
+              ? `Screenshot for ${project.name} uploaded`
+              : ""}
+    </p>
     {#if upload.error}
-        <div class="error">{upload.error}</div>
+        <div class="error" role="alert">{upload.error}</div>
     {/if}
 </article>
 
@@ -224,7 +288,7 @@
     .note {
         display: block;
         font-size: 0.85em;
-        opacity: 0.75;
+        opacity: 0.85;
     }
 
     .status {
@@ -327,7 +391,16 @@
 
     .reship {
         font-size: 0.75em;
-        opacity: 0.8;
+        opacity: 0.85;
+    }
+
+    .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
     .error {

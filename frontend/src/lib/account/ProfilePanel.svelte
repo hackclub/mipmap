@@ -1,8 +1,8 @@
 <script lang="ts">
     import Section from "$lib/dashboard/Section.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
-    import { json, request } from "$lib/api";
     import { Task } from "$lib/load.svelte";
+    import { log_out } from "$lib/account/logout";
     import type { User } from "$lib/dashboard/state.svelte";
     import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
 
@@ -15,13 +15,6 @@
         $props();
 
     const logout = new Task("Couldn't log out");
-
-    const log_out = () =>
-        logout.run(async () => {
-            const response = await request("/api/logout", { method: "POST" });
-            if (!response.ok) await json(response);
-            location.href = "/";
-        });
 </script>
 
 <Section title="Profile" {bounds} zoom={3} padded>
@@ -35,18 +28,22 @@
             <dd>{tokens} left to spend</dd>
         </dl>
         <div class="logout">
+            <a class="button" href="/notifications">
+                Manage your Slack DMs from Mipmap
+            </a>
             <MipmapButton
                 type="button"
-                onclick={() => (location.href = "/notifications")}
+                disabled={logout.pending}
+                onclick={() => logout.run(() => log_out())}
             >
-                Manage your Slack DMs from Mipmap
+                Log out
             </MipmapButton>
             <MipmapButton
                 type="button"
                 disabled={logout.pending}
-                onclick={log_out}
+                onclick={() => logout.run(() => log_out(true))}
             >
-                Log out
+                Log out everywhere
             </MipmapButton>
             {#if logout.error}
                 <p role="alert">{logout.error}</p>
@@ -76,6 +73,31 @@
         gap: 0.75rem;
         grid-column: 2;
         margin-top: 0.75rem;
+    }
+
+    .button,
+    .button:visited {
+        background-color: #4f2f1f;
+        color: #ead7c2;
+        padding: 0.75rem 1.5rem;
+        font-size: clamp(1.25rem, 2vw, 1.75rem);
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .button:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .button:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .logout p {

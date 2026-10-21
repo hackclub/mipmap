@@ -12,13 +12,13 @@ const tier_line = (tier: (typeof tiers)[number]) => `${tier.name}: ${tier.descri
 export const words: Word[] = [
   {
     name: "mipmap",
-    colour: "#8fcf6b",
+    colour: "#9fd680",
     match: "(?:hack club )?mipmap",
     description: "Hack Club program where you make a game without an engine and earn prizes!",
   },
   {
     name: "mip",
-    colour: "#ff9a3d",
+    colour: "#ffb978",
     match: "mips?",
     description: "Currency for unlocking nodes down the Tech Tree",
   },
@@ -33,19 +33,19 @@ export const words: Word[] = [
   },
   {
     name: "tech-tree",
-    colour: "#7cc4f0",
+    colour: "#93cef3",
     match: "tech trees?",
     description: "Your tree of fancy prizes!",
   },
   {
     name: "token",
-    colour: "#c3a3e6",
+    colour: "#d5bfee",
     match: "tokens?",
     description: "Currency for actually redeeming unlocked nodes to your door",
   },
   {
     name: "prize",
-    colour: "#f0788a",
+    colour: "#f7b6c0",
     match: "prizes?",
     description: "Real stuff down your Tech Tree, sent to your door with a Token",
   },
@@ -57,7 +57,7 @@ export const words: Word[] = [
   },
   {
     name: "hackatime",
-    colour: "#d6ab70",
+    colour: "#f2c065",
     match: "hackatime",
     description:
       "Tool for tracking your time, check it out [here](https://hackatime.hackclub.com/)!",
@@ -70,37 +70,53 @@ const pattern = new RegExp(
   `\\b(?:${words.map((word) => `(${word.match})`).join("|")})\\b`,
   "gi",
 );
-const skip = "a, script, style, noscript, textarea, [data-plain]";
+const skip =
+  "a, script, style, noscript, textarea, button, select, option, label, summary, [role=button], [role=tab], [data-plain]";
 const controls =
   "button, input, select, label, summary, [role=button], [role=link], [contenteditable]";
 const key = (name: string) => `word-${name}`;
 
+const highlights = words.map(() => null as Highlight | null);
 let hits = new Map<Node, Hit[]>();
 
-function scan(tip: HTMLElement) {
-  const ranges = words.map(() => [] as Range[]);
-  const found = new Map<Node, Hit[]>();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) =>
-      node.parentElement?.closest(skip)
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_ACCEPT,
-  });
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    for (const match of node.nodeValue!.matchAll(pattern)) {
-      const range = new Range();
-      range.setStart(node, match.index);
-      range.setEnd(node, match.index + match[0].length);
-      const word = words[match.slice(1).findIndex(Boolean)];
-      ranges[words.indexOf(word)].push(range);
-      if (!tip.contains(node)) {
-        found.set(node, [...(found.get(node) ?? []), { range, word }]);
-      }
-    }
+function forget(node: Node) {
+  for (const hit of hits.get(node) ?? []) {
+    highlights[words.indexOf(hit.word)]?.delete(hit.range);
   }
-  hits = found;
-  words.forEach((word, i) => CSS.highlights.set(key(word.name), new Highlight(...ranges[i])));
+  hits.delete(node);
 }
+
+function index_text(node: Text) {
+  forget(node);
+  if (!node.isConnected || node.parentElement?.closest(skip)) return;
+  const found: Hit[] = [];
+  for (const match of node.nodeValue!.matchAll(pattern)) {
+    const range = new Range();
+    range.setStart(node, match.index);
+    range.setEnd(node, match.index + match[0].length);
+    const word = words[match.slice(1).findIndex(Boolean)];
+    highlights[words.indexOf(word)]?.add(range);
+    found.push({ range, word });
+  }
+  if (found.length) hits.set(node, found);
+}
+
+function scan(root: Node) {
+  if (root instanceof Text) return index_text(root);
+  if (!(root instanceof Element)) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    index_text(node as Text);
+  }
+}
+
+function prune() {
+  for (const node of hits.keys()) {
+    if (!node.isConnected) forget(node);
+  }
+}
+
+export const word_at = (x: number, y: number) => !!hit_at(x, y);
 
 function hit_at(x: number, y: number) {
   const element = document.elementFromPoint(x, y);
@@ -203,6 +219,8 @@ export function colour_words() {
     shown = hit.range;
     const { description } = hit.word;
     fill(tip, typeof description === "function" ? description(hit.range.toString()) : description);
+    prune();
+    scan(tip);
     tip.style.left = "0px";
     tip.style.top = "0px";
     const box = tip.getBoundingClientRect();
@@ -259,16 +277,37 @@ export function colour_words() {
     if (e.key === "Escape") hide();
   };
 
+  words.forEach((word, i) => {
+    const highlight = new Highlight();
+    highlights[i] = highlight;
+    CSS.highlights.set(key(word.name), highlight);
+  });
+
   let frame = 0;
-  const observer = new MutationObserver(() => {
+  let dirty = new Set<Node>();
+  let stale = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      if (tip.contains(record.target)) continue;
+      if (record.type === "characterData") dirty.add(record.target);
+      else record.addedNodes.forEach((node) => dirty.add(node));
+      if (record.removedNodes.length) stale = true;
+    }
+    if (!dirty.size && !stale) return;
     frame ||= requestAnimationFrame(() => {
       frame = 0;
-      scan(tip);
+      const roots = dirty;
+      dirty = new Set();
+      if (stale) prune();
+      stale = false;
+      for (const node of roots) {
+        if (node.isConnected) scan(node);
+      }
       if (shown && !shown.startContainer.isConnected) hide();
     });
   });
   observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-  scan(tip);
+  scan(document.body);
 
   addEventListener("pointerdown", on_pointerdown, true);
   addEventListener("pointermove", on_pointermove);
@@ -293,5 +332,7 @@ export function colour_words() {
     tip.remove();
     style.remove();
     for (const word of words) CSS.highlights.delete(key(word.name));
+    highlights.fill(null);
+    hits = new Map();
   };
 }

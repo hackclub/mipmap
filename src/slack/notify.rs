@@ -1,4 +1,4 @@
-use super::{RECIPIENTS, messages};
+use super::{RECIPIENTS, USER_FOR_SLACK_ID, messages};
 use crate::{
     accounts::{self, hackatime::Totals},
     env,
@@ -92,12 +92,11 @@ async fn draft(pool: &PgPool, kind: &str, key: &str, text: &str) -> anyhow::Resu
     }
     match env::var("SLACK_ADMIN_ID") {
         Some(admin) => {
-            sqlx::query(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO slack_message (slack_id, user_id, kind, text, dedupe_key)
-                 VALUES ($1, (SELECT id FROM \"user\" WHERE slack_id = $1 ORDER BY deleted_at IS NOT NULL, id LIMIT 1),
-                     'admin', $2, $3)
-                 ON CONFLICT (dedupe_key) DO NOTHING",
-            )
+                 VALUES ($1, {USER_FOR_SLACK_ID}, 'admin', $2, $3)
+                 ON CONFLICT (dedupe_key) DO NOTHING"
+            )))
             .bind(&admin)
             .bind(messages::draft_waiting(kind, &accounts::site_url("/admin")))
             .bind(format!("admin:{key}"))
@@ -113,11 +112,18 @@ async fn draft(pool: &PgPool, kind: &str, key: &str, text: &str) -> anyhow::Resu
 async fn ship_updates(pool: &PgPool) -> sqlx::Result<()> {
     let mut tx = pool.begin().await?;
     let changed: Vec<(i32, String, String, i32, i32, Option<String>)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "WITH changed AS (
+        "WITH locked AS (
+             SELECT s.id FROM submission s
+             WHERE s.deleted_at IS NULL AND s.status_notified IS DISTINCT FROM CASE
+                 WHEN s.rejected THEN 'rejected'
+                 WHEN s.approved_at IS NOT NULL AND s.hours IS NOT NULL THEN 'approved' END
+             ORDER BY s.id FOR UPDATE
+         ), changed AS (
              UPDATE submission s SET status_notified = CASE
                  WHEN s.rejected THEN 'rejected'
                  WHEN s.approved_at IS NOT NULL AND s.hours IS NOT NULL THEN 'approved' END
-             WHERE s.deleted_at IS NULL AND s.status_notified IS DISTINCT FROM CASE
+             FROM locked WHERE s.id = locked.id
+             AND s.deleted_at IS NULL AND s.status_notified IS DISTINCT FROM CASE
                  WHEN s.rejected THEN 'rejected'
                  WHEN s.approved_at IS NOT NULL AND s.hours IS NOT NULL THEN 'approved' END
              RETURNING s.id, s.project_id, s.status_notified, s.mips

@@ -6,7 +6,6 @@ const projects_width = 2400;
 const side_width = 2400;
 const fulfillment_height = 1752;
 const orders_height = 780;
-const feedback_height = 2100;
 const help_height = 2100;
 const referral_height = 780;
 const challenge_height = 780;
@@ -82,12 +81,6 @@ export function arrange(tree: { width: number; height: number }) {
     width: snapshots_width,
     height: snapshots_height,
   });
-  const feedback = snap({
-    left: side_left,
-    top: tree.height,
-    width: side_width,
-    height: feedback_height,
-  });
   const help = snap({
     left: side_left,
     top: Math.max(tree.height, profile.top + profile.height + gap),
@@ -112,7 +105,6 @@ export function arrange(tree: { width: number; height: number }) {
     tree: tree_bounds,
     fulfillment,
     orders,
-    feedback,
     help,
     referral,
     challenge,

@@ -66,7 +66,7 @@
     .hint {
         margin: 0;
         font-size: 0.75em;
-        opacity: 0.75;
+        opacity: 0.85;
     }
 
     input {
@@ -80,17 +80,23 @@
         padding: 0.5rem 0.75rem;
         background: #4f2f1f;
         color: #ead7c2;
-        border: none;
+        border: 1px solid #d6ab70;
         border-radius: 0;
         font: inherit;
-        font-size: 0.85em;
+        font-size: max(1rem, 0.85em);
         resize: vertical;
+    }
+
+    input[aria-invalid="true"],
+    textarea[aria-invalid="true"] {
+        border-color: #ead7c2;
+        box-shadow: inset 0 0 0 1px #ead7c2;
     }
 
     input::placeholder,
     textarea::placeholder {
         color: inherit;
-        opacity: 0.6;
+        opacity: 0.75;
     }
 
     input:disabled,

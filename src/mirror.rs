@@ -10,6 +10,7 @@ struct Source {
 }
 
 const HIDDEN: &[&str] = &["changed_at", "held_image", "hold_reasons"];
+const UPSERT_CHUNK: usize = 10;
 
 const fn table(name: &'static str) -> Source {
     Source { name, table: name, changed: "updated_at" }
@@ -65,8 +66,13 @@ pub fn spawn(pool: PgPool) {
                 }
             };
             for source in SOURCES {
-                if let Err(e) = sync(&pool, token, base_id, source, &started).await {
-                    log::error!("Airtable mirror sync of {} failed: {e:#}", source.name);
+                match sync(&pool, token, base_id, source, &started).await {
+                    Ok(true) => {}
+                    Ok(false) => ready = false,
+                    Err(e) => {
+                        log::error!("Airtable mirror sync of {} failed: {e:#}", source.name);
+                        ready = false;
+                    }
                 }
             }
         }
@@ -182,16 +188,20 @@ async fn cutoff(pool: &PgPool) -> sqlx::Result<String> {
     Ok(started)
 }
 
+async fn upsert(airtable: &AirtableTable, records: Vec<Map<String, Value>>) -> anyhow::Result<()> {
+    upsert_records(airtable.clone(), records, vec!["id".to_string()]).await
+}
+
 async fn sync(
     pool: &PgPool,
     token: &str,
     base_id: &str,
     source: &Source,
     started: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let Source { name, table, changed } = source;
-    let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
-        "SELECT (to_jsonb(t) - $2::text[])::text FROM \"{name}\" t
+    let rows: Vec<(String, String)> = sqlx::query_as(AssertSqlSafe(format!(
+        "SELECT t.{changed}::text, (to_jsonb(t) - $2::text[])::text FROM \"{name}\" t
          WHERE t.{changed} > COALESCE((SELECT synced_until FROM airtable_sync WHERE table_name = $1), '-infinity') - interval '1 minute'
          ORDER BY t.id"
     )))
@@ -199,25 +209,42 @@ async fn sync(
     .bind(HIDDEN)
     .fetch_all(pool)
     .await?;
-    if !rows.is_empty() {
-        let records = rows
+    let airtable = AirtableTable {
+        token: token.to_string(),
+        base_id: base_id.to_string(),
+        table_id_or_name: table_name(table),
+    };
+    let mut failed: Vec<String> = Vec::new();
+    for (i, chunk) in rows.chunks(UPSERT_CHUNK).enumerate() {
+        let records = chunk
             .iter()
-            .map(|row| serde_json::from_str(row).map(flatten))
+            .map(|(_, row)| serde_json::from_str(row).map(flatten))
             .collect::<Result<Vec<_>, _>>()?;
-        let airtable = AirtableTable {
-            token: token.to_string(),
-            base_id: base_id.to_string(),
-            table_id_or_name: table_name(table),
-        };
-        upsert_records(airtable, records, vec!["id".to_string()]).await?;
+        if let Err(e) = upsert(&airtable, records.clone()).await {
+            log::error!("Airtable mirror sync of a {name} chunk failed, retrying its rows one by one: {e:#}");
+            let before = failed.len();
+            for ((changed_at, _), record) in chunk.iter().zip(records) {
+                let id = record.get("id").cloned().unwrap_or_default();
+                if let Err(e) = upsert(&airtable, vec![record]).await {
+                    log::error!("Airtable mirror sync of {name} row {id} failed: {e:#}");
+                    failed.push(changed_at.clone());
+                }
+            }
+            if failed.len() - before == chunk.len() {
+                failed.extend(rows.iter().skip((i + 1) * UPSERT_CHUNK).map(|(changed_at, _)| changed_at.clone()));
+                break;
+            }
+        }
     }
     sqlx::query(
-        "INSERT INTO airtable_sync (table_name, synced_until) VALUES ($1, $2::timestamptz)
-         ON CONFLICT (table_name) DO UPDATE SET synced_until = $2::timestamptz",
+        "INSERT INTO airtable_sync (table_name, synced_until)
+         VALUES ($1, LEAST($2::timestamptz, (SELECT min(t::timestamptz) FROM unnest($3::text[]) t)))
+         ON CONFLICT (table_name) DO UPDATE SET synced_until = EXCLUDED.synced_until",
     )
     .bind(name)
     .bind(started)
+    .bind(&failed)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(failed.is_empty())
 }

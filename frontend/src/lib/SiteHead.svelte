@@ -1,5 +1,9 @@
 <script lang="ts" module>
-	export const site_url = (import.meta.env.VITE_SITE_URL || '').trim().replace(/\/+$/, '');
+	const raw_site_url = (import.meta.env.VITE_SITE_URL || '').trim().replace(/\/+$/, '');
+	export const site_url =
+		raw_site_url && !/^[a-z][a-z\d+.-]*:\/\//i.test(raw_site_url)
+			? `https://${raw_site_url}`
+			: raw_site_url;
 </script>
 
 <script lang="ts">

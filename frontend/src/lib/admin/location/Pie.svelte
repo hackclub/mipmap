@@ -24,7 +24,7 @@
                 path,
                 color: other
                     ? "#4f2f1f"
-                    : ramp(1 - i / Math.max(1, slices.length - 1)),
+                    : ramp(0.4 + 0.6 * (1 - i / Math.max(1, slices.length - 1))),
                 share: total ? slice.value / total : 0,
             };
         });
@@ -36,7 +36,7 @@
 
 <div class="pie">
     <svg viewBox="-52 -52 104 104" role="img" aria-label="Share of people by country">
-        {#each arcs as arc, i (arc.label)}
+        {#each arcs as arc, i (i)}
             <path
                 d={arc.path}
                 fill={arc.color}
@@ -48,7 +48,7 @@
         {/each}
     </svg>
     <ul>
-        {#each arcs as arc, i (arc.label)}
+        {#each arcs as arc, i (i)}
             <li
                 class:active={hovered === i}
                 onpointerenter={() => (hovered = i)}
@@ -127,7 +127,7 @@
     }
 
     .value {
-        color: #d6ab70;
+        color: #ead7c2;
         white-space: nowrap;
     }
 </style>

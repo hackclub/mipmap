@@ -1,4 +1,4 @@
-use super::{Kind, STICKER, STICKER_TOKEN, TREE, tutorial};
+use super::{Kind, Node, STICKER, STICKER_TOKEN, TREE, tutorial};
 use crate::{
     accounts::{profile, session::User},
     dashboard,
@@ -6,7 +6,16 @@ use crate::{
 };
 use actix_web::{HttpResponse, post, web};
 use serde::Deserialize;
-use sqlx::{PgConnection, PgExecutor, PgPool};
+use sqlx::{AssertSqlSafe, PgConnection, PgExecutor, PgPool};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
+
+const ELIGIBLE_FOR: Duration = Duration::from_secs(5 * 60);
+
+static ELIGIBLE: LazyLock<Mutex<HashMap<i32, Instant>>> = LazyLock::new(Default::default);
 
 #[derive(Deserialize)]
 struct NodeRequest {
@@ -28,15 +37,16 @@ struct Locked {
     sticker_skipped: bool,
 }
 
-async fn lock_user(conn: &mut PgConnection, user_id: i32, verify: bool) -> Result<Locked, ApiError> {
+async fn read_user(db: impl PgExecutor<'_>, user_id: i32, verify: bool, lock: bool) -> Result<Locked, ApiError> {
     let (mips, onboarded, sticker_skipped, status, eligible): (i32, bool, bool, Option<String>, bool) =
-        sqlx::query_as(
+        sqlx::query_as(AssertSqlSafe(format!(
             "SELECT mips, onboarded_at IS NOT NULL, sticker_skipped_at IS NOT NULL,
                  verification_status, ysws_eligible
-             FROM \"user\" WHERE id = $1 FOR UPDATE",
-    )
+             FROM \"user\" WHERE id = $1{}",
+            if lock { " FOR UPDATE" } else { "" }
+        )))
     .bind(user_id)
-    .fetch_one(conn)
+    .fetch_one(db)
     .await?;
     match profile::shop_blocked(status.as_deref(), eligible).filter(|_| verify) {
         Some(reason) => Err(reject(reason)),
@@ -44,7 +54,67 @@ async fn lock_user(conn: &mut PgConnection, user_id: i32, verify: bool) -> Resul
     }
 }
 
+async fn lock_user(conn: &mut PgConnection, user_id: i32, verify: bool) -> Result<Locked, ApiError> {
+    read_user(conn, user_id, verify, true).await
+}
+
+fn can_unlock(node: &Node, practice: bool, user: &Locked, unlocked: &[i32]) -> Result<(), ApiError> {
+    if !user.onboarded && !practice {
+        return Err(reject("Finish the tutorial first"));
+    }
+    if unlocked.contains(&(node.id as i32)) {
+        return Err(reject("already unlocked"));
+    }
+    let reachable = node
+        .requires
+        .iter()
+        .any(|&req| unlocked.contains(&(req as i32)) || TREE.is(req, Kind::Origin));
+    if !reachable {
+        return Err(reject("Missing prerequisite, maybe you need to reload?"));
+    }
+    if user.mips < node.price {
+        return Err(reject(format!("Not enough {}", TREE.currency)));
+    }
+    Ok(())
+}
+
+fn can_purchase(node: &Node, user: &Locked, unlocked: &[i32], ordered: &[i32]) -> Result<(), ApiError> {
+    let sticker = node.id == STICKER;
+    if user.mips < 0 {
+        return Err(reject(format!("Your {} balance is negative", TREE.currency)));
+    }
+    if !unlocked.contains(&(node.id as i32)) {
+        return Err(reject("item not unlocked"));
+    }
+    if ordered.contains(&(node.id as i32)) {
+        return Err(reject("Item already redeemed"));
+    }
+    let available = if sticker {
+        !user.sticker_skipped && unlocked.contains(&(STICKER_TOKEN as i32))
+    } else {
+        tokens(unlocked) > ordered.iter().filter(|&&id| id != STICKER as i32).count()
+    };
+    if !available {
+        return Err(reject("No Tokens available"));
+    }
+    Ok(())
+}
+
+async fn ordered(db: impl PgExecutor<'_>, user_id: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar("SELECT node_id FROM \"order\" WHERE user_id = $1 AND deleted_at IS NULL")
+        .bind(user_id)
+        .fetch_all(db)
+        .await
+}
+
 async fn ensure_eligible(pool: &PgPool, user_id: i32) -> Result<(), ApiError> {
+    {
+        let mut eligible = ELIGIBLE.lock().unwrap_or_else(PoisonError::into_inner);
+        eligible.retain(|_, at| at.elapsed() < ELIGIBLE_FOR);
+        if eligible.contains_key(&user_id) {
+            return Ok(());
+        }
+    }
     let hca_id: String = sqlx::query_scalar("SELECT hca_id FROM \"user\" WHERE id = $1")
         .bind(user_id)
         .fetch_one(pool)
@@ -56,6 +126,10 @@ async fn ensure_eligible(pool: &PgPool, user_id: i32) -> Result<(), ApiError> {
     if !eligible {
         return Err(reject(profile::INELIGIBLE));
     }
+    ELIGIBLE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(user_id, Instant::now());
     Ok(())
 }
 
@@ -71,27 +145,13 @@ pub async fn unlock_item(
         .ok_or_else(|| reject("unknown node"))?;
     let practice = tutorial(node.id);
     if !practice {
+        let user = read_user(pool.get_ref(), user_id, true, false).await?;
+        can_unlock(node, practice, &user, &unlocked(pool.get_ref(), user_id).await?)?;
         ensure_eligible(&pool, user_id).await?;
     }
     let mut tx = pool.begin().await?;
-    let Locked { mips, onboarded, .. } = lock_user(&mut tx, user_id, !practice).await?;
-    if !onboarded && !practice {
-        return Err(reject("Finish the tutorial first"));
-    }
-    let unlocked = unlocked(&mut *tx, user_id).await?;
-    if unlocked.contains(&(node.id as i32)) {
-        return Err(reject("already unlocked"));
-    }
-    let reachable = node
-        .requires
-        .iter()
-        .any(|&req| unlocked.contains(&(req as i32)) || TREE.is(req, Kind::Origin));
-    if !reachable {
-        return Err(reject("Missing prerequisite, maybe you need to reload?"));
-    }
-    if mips < node.price {
-        return Err(reject(format!("Not enough {}", TREE.currency)));
-    }
+    let user = lock_user(&mut tx, user_id, !practice).await?;
+    can_unlock(node, practice, &user, &unlocked(&mut *tx, user_id).await?)?;
     sqlx::query("UPDATE \"user\" SET mips = mips - $2 WHERE id = $1")
         .bind(user_id)
         .bind(node.price)
@@ -123,6 +183,13 @@ pub async fn purchase_item(
         .ok_or_else(|| reject("unknown item"))?;
     let sticker = node.id == STICKER;
     if !sticker {
+        let user = read_user(pool.get_ref(), user_id, true, false).await?;
+        can_purchase(
+            node,
+            &user,
+            &unlocked(pool.get_ref(), user_id).await?,
+            &ordered(pool.get_ref(), user_id).await?,
+        )?;
         ensure_eligible(&pool, user_id).await?;
     }
     let addressed: bool =
@@ -135,29 +202,9 @@ pub async fn purchase_item(
     }
     let mut tx = pool.begin().await?;
     let locked = lock_user(&mut tx, user_id, !sticker).await?;
-    if locked.mips < 0 {
-        return Err(reject(format!("Your {} balance is negative", TREE.currency)));
-    }
     let unlocked = unlocked(&mut *tx, user_id).await?;
-    if !unlocked.contains(&(node.id as i32)) {
-        return Err(reject("item not unlocked"));
-    }
-    let ordered: Vec<i32> =
-        sqlx::query_scalar("SELECT node_id FROM \"order\" WHERE user_id = $1 AND deleted_at IS NULL")
-            .bind(user_id)
-            .fetch_all(&mut *tx)
-            .await?;
-    if ordered.contains(&(node.id as i32)) {
-        return Err(reject("Item already redeemed"));
-    }
-    let available = if sticker {
-        !locked.sticker_skipped && unlocked.contains(&(STICKER_TOKEN as i32))
-    } else {
-        tokens(&unlocked) > ordered.iter().filter(|&&id| id != STICKER as i32).count()
-    };
-    if !available {
-        return Err(reject("No Tokens available"));
-    }
+    let ordered = ordered(&mut *tx, user_id).await?;
+    can_purchase(node, &locked, &unlocked, &ordered)?;
     let inserted = sqlx::query(
         "INSERT INTO \"order\" (
              user_id, node_id, item_name, cost,
@@ -265,7 +312,7 @@ pub async fn refund(conn: &mut PgConnection, user_id: i32) -> anyhow::Result<()>
         .await?;
     let mut orders: Vec<(i32, i32, bool)> = sqlx::query_as(
         "SELECT id, node_id, fulfilled FROM \"order\" WHERE user_id = $1 AND deleted_at IS NULL
-         ORDER BY ordered_at DESC, id DESC",
+         ORDER BY ordered_at DESC, id DESC FOR UPDATE",
     )
     .bind(user_id)
     .fetch_all(&mut *conn)
@@ -335,7 +382,7 @@ pub async fn refund(conn: &mut PgConnection, user_id: i32) -> anyhow::Result<()>
             progressed = true;
         }
     }
-    sqlx::query("UPDATE \"order\" SET deleted_at = now() WHERE id = ANY($1)")
+    sqlx::query("UPDATE \"order\" SET deleted_at = now() WHERE id = ANY($1) AND NOT fulfilled AND deleted_at IS NULL")
         .bind(&cancelled)
         .execute(&mut *conn)
         .await?;

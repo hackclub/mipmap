@@ -1,13 +1,12 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
     import MipmapLogo from "$lib/landing/MipmapLogo.svelte";
-    import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import CogField from "$lib/landing/CogField.svelte";
     import FaqSection from "$lib/landing/FaqSection.svelte";
     import TextBlock from "$lib/landing/TextBlock.svelte";
     import SiteHead, { site_url } from "$lib/SiteHead.svelte";
     import { grid } from "$lib/cog_layout";
-    import { grow_field } from "$lib/landing/cog_field";
+    import { grow_field, type Blocked } from "$lib/landing/cog_field";
 
     let viewport_width = $state(1024);
     let viewport_height = $state(768);
@@ -127,13 +126,35 @@
         bottom: page_height + footer_height + 24,
     });
 
+    let grown = $state<{
+        width: number;
+        height: number;
+        blocked: Blocked[];
+    } | null>(null);
+
+    $effect(() => {
+        if (!field || footer_width <= 0 || footer_height <= 0) return;
+        const next = {
+            width: viewport_width,
+            height: cog_field_height,
+            blocked: [logo_blocked, footer_blocked],
+        };
+        const last = untrack(() => grown);
+        if (!last) {
+            grown = next;
+            return;
+        }
+        if (
+            last.width === next.width &&
+            Math.abs(last.height - next.height) < 120
+        )
+            return;
+        const timer = setTimeout(() => (grown = next), 250);
+        return () => clearTimeout(timer);
+    });
+
     const cogs = $derived(
-        field && footer_width > 0 && footer_height > 0
-            ? grow_field(viewport_width, cog_field_height, [
-                  logo_blocked,
-                  footer_blocked,
-              ])
-            : [],
+        grown ? grow_field(grown.width, grown.height, grown.blocked) : [],
     );
 
     function measure() {
@@ -142,16 +163,23 @@
     }
 
     onMount(() => {
+        let visited = false;
         try {
-            if (!localStorage.getItem("visited")) {
-                fetch("/api/visit", { method: "POST" })
-                    .then((r) => r.ok && localStorage.setItem("visited", "1"))
-                    .catch(() => {});
-            }
+            visited = !!localStorage.getItem("visited");
         } catch {}
+        if (!visited) {
+            fetch("/api/visit", { method: "POST" })
+                .then((r) => {
+                    if (!r.ok) return;
+                    try {
+                        localStorage.setItem("visited", "1");
+                    } catch {}
+                })
+                .catch(() => {});
+        }
         const code = new URLSearchParams(location.search).get("ref");
         if (code && /^[A-Za-z0-9]{1,32}$/.test(code)) {
-            document.cookie = `ref=${code}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`;
+            document.cookie = `__Host-ref=${code}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`;
         }
         measure();
         let reveal = window.requestAnimationFrame(() => {
@@ -197,6 +225,13 @@
 
 <svelte:head>
     <link rel="preload" as="image" href="/logo.svg" fetchpriority="high" />
+    <noscript>
+        <style>
+            main {
+                visibility: visible !important;
+            }
+        </style>
+    </noscript>
     {#if site_url}
         {@html `<script type="application/ld+json">${structured}</script>`}
     {/if}
@@ -209,11 +244,19 @@
 />
 
 <div class="page">
+    <header
+        class="logo"
+        style:top="{logo_top}px"
+        style:--aspect={logo_aspect}
+        bind:clientWidth={logo_width}
+    >
+        <MipmapLogo />
+    </header>
     <div class="field" style:height="{cog_field_height}px" aria-hidden="true">
         <CogField {cogs} {scroll_y} {viewport_height} {footer_blocked} />
     </div>
 
-    <main style:visibility={ready ? "visible" : "hidden"}>
+    <main class:pending={!ready}>
         <TextBlock
             x={container_x}
             y={container_y}
@@ -296,12 +339,9 @@
                 </form>
                 <div class="or" aria-hidden="true">OR</div>
                 <div class="actions">
-                    <MipmapButton
-                        type="button"
-                        onclick={() => (window.location.href = "/login")}
-                    >
+                    <a class="login" href="/login" rel="external">
                         Log in with Hack Club Auth
-                    </MipmapButton>
+                    </a>
                 </div>
             </div>
         </TextBlock>
@@ -369,20 +409,23 @@
         </p>
     </footer>
 
-    <header
-        class="logo"
-        style:top="{logo_top}px"
-        style:--aspect={logo_aspect}
-        bind:clientWidth={logo_width}
-    >
-        <MipmapLogo />
-    </header>
 </div>
 
 <style>
     .page {
         position: relative;
         overflow-x: clip;
+    }
+
+    main.pending {
+        visibility: hidden;
+        animation: reveal 0s 4s forwards;
+    }
+
+    @keyframes reveal {
+        to {
+            visibility: visible;
+        }
     }
 
     .site-footer {
@@ -414,13 +457,19 @@
         text-decoration: none;
     }
 
+    .made-with a {
+        text-decoration: underline;
+    }
+
     .site-footer a:focus-visible {
-        color: #d6ab70;
+        color: #ead7c2;
+        text-decoration: underline;
     }
 
     @media (hover: hover) {
         .site-footer a:hover {
-            color: #d6ab70;
+            color: #ead7c2;
+            text-decoration: underline;
         }
     }
 
@@ -430,7 +479,7 @@
     }
 
     .heart {
-        color: #f0788a;
+        color: #f7b6c0;
     }
 
     .field {
@@ -442,6 +491,7 @@
 
     .logo {
         position: absolute;
+        z-index: 1;
         width: min(75%, calc(70svh * var(--aspect)));
         left: calc((100% - min(75%, calc(70svh * var(--aspect)))) / 2);
     }
@@ -463,8 +513,33 @@
         margin-top: 1.25rem;
     }
 
-    .actions :global(button) {
+    .login {
+        display: block;
+        box-sizing: border-box;
         max-width: 100%;
+        min-height: 44px;
+        padding: 0.75rem 1.5rem;
+        background-color: #4f2f1f;
+        color: #ead7c2;
+        font-size: clamp(1.25rem, 2vw, 1.75rem);
+        font-weight: 700;
+        text-align: center;
+        text-decoration: none;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .login:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .login:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     .learn {
@@ -533,7 +608,7 @@
         margin: 0 auto;
     }
 
-    .start .actions :global(button) {
+    .start .login {
         width: 100%;
     }
 
@@ -542,7 +617,7 @@
         font-size: clamp(0.8rem, 1.4vw, 1.1rem);
         font-weight: 700;
         text-align: center;
-        opacity: 0.5;
+        opacity: 0.85;
     }
 
     .start .actions {
@@ -563,17 +638,18 @@
     .email input {
         box-sizing: border-box;
         width: 100%;
+        min-height: 44px;
         padding: 0.6rem 3.25rem 0.6rem 0.9rem;
         background: #4f2f1f;
         color: #ead7c2;
-        border: none;
+        border: 2px solid #d6ab70;
         border-radius: 0;
         font: inherit;
     }
 
     .email input::placeholder {
         color: inherit;
-        opacity: 0.6;
+        opacity: 0.75;
     }
 
     .email input:focus-visible {
@@ -620,17 +696,17 @@
     }
 
     @media (max-width: 600px) {
-        .actions :global(button) {
+        .login {
             padding: 0.5rem 0.75rem;
             font-size: 1rem;
         }
 
         .email input {
-            padding: 0.5rem 2.25rem 0.5rem 0.5rem;
+            padding: 0.5rem 3rem 0.5rem 0.5rem;
         }
 
         .email button {
-            width: 2rem;
+            width: 2.75rem;
         }
     }
 </style>

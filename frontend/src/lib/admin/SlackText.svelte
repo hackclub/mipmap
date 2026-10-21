@@ -12,7 +12,7 @@
     {#if footer}
         <p class="footer">
             <a href="/notifications" target="_blank">Manage these DMs</a> ·
-            <span class="link">Unsubscribe</span>
+            <span>Unsubscribe</span>
         </p>
     {/if}
 </div>
@@ -29,13 +29,18 @@
         margin: 0;
     }
 
-    .slack :global(a),
-    .link {
-        color: #a2b8eb;
+    .slack :global(a) {
+        color: #c8d5f3;
     }
 
-    .link {
-        text-decoration: underline;
+    .slack :global(a:hover),
+    .slack :global(a:focus-visible) {
+        color: #ead7c2;
+    }
+
+    .slack :global(.host) {
+        color: #ead7c2;
+        font-size: 0.85em;
     }
 
     .slack :global(code) {
@@ -82,7 +87,7 @@
 
     .footer {
         margin-top: 0.5rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 </style>

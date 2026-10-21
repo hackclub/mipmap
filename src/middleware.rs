@@ -4,12 +4,15 @@ use actix_web::{
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
     error::ErrorForbidden,
-    http::{Method, header},
+    http::{
+        Method,
+        header::{self, HeaderMap},
+    },
     middleware::Next,
 };
 use reqwest::Url;
 use std::{
-    net::{IpAddr, Ipv6Addr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     sync::LazyLock,
 };
 
@@ -70,17 +73,47 @@ fn is_cloudflare(ip: IpAddr) -> bool {
     CLOUDFLARE_RANGES.iter().any(|range| in_range(ip, range))
 }
 
+fn parse_addr(addr: &str) -> Option<IpAddr> {
+    let addr = addr.trim();
+    addr.parse::<IpAddr>()
+        .ok()
+        .or_else(|| addr.parse::<SocketAddr>().ok().map(|addr| addr.ip()))
+        .or_else(|| addr.strip_prefix('[')?.strip_suffix(']')?.parse().ok())
+}
+
+fn forwarded_for(req: &HttpRequest) -> Option<Option<IpAddr>> {
+    let mut values = req.headers().get_all("x-forwarded-for").peekable();
+    values.peek()?;
+    Some(
+        values
+            .map(|value| value.to_str().ok())
+            .collect::<Option<Vec<_>>>()
+            .and_then(|values| parse_addr(values.join(",").rsplit(',').next()?)),
+    )
+}
+
+enum Edge {
+    Known(IpAddr),
+    Missing,
+    Unreadable,
+}
+
+fn edge(req: &HttpRequest) -> Edge {
+    match req.peer_addr().map(|addr| addr.ip()).filter(|ip| http::is_public(*ip)) {
+        Some(ip) => Edge::Known(ip),
+        None => match forwarded_for(req) {
+            None => Edge::Missing,
+            Some(Some(ip)) => Edge::Known(ip),
+            Some(None) => Edge::Unreadable,
+        },
+    }
+}
+
 fn edge_ip(req: &HttpRequest) -> Option<IpAddr> {
-    req.peer_addr()
-        .map(|addr| addr.ip())
-        .filter(|ip| http::is_public(*ip))
-        .or_else(|| {
-            req.headers()
-                .get("x-forwarded-for")
-                .and_then(|value| value.to_str().ok())
-                .and_then(|list| list.rsplit(',').next())
-                .and_then(|addr| addr.trim().parse::<IpAddr>().ok())
-        })
+    match edge(req) {
+        Edge::Known(ip) => Some(ip),
+        Edge::Missing | Edge::Unreadable => None,
+    }
 }
 
 pub fn client_ip(req: &HttpRequest) -> Option<IpAddr> {
@@ -104,32 +137,72 @@ pub async fn cloudflare_only(
     req: ServiceRequest,
     next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
-    if *CLOUDFLARE_ONLY && edge_ip(req.request()).is_some_and(|ip| !is_cloudflare(ip)) {
+    let blocked = match edge(req.request()) {
+        Edge::Known(ip) => !is_cloudflare(ip),
+        Edge::Missing => false,
+        Edge::Unreadable => true,
+    };
+    if *CLOUDFLARE_ONLY && blocked {
         return Err(ErrorForbidden("Forbidden"));
     }
     next.call(req).await
+}
+
+pub async fn cache_control(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
+    let immutable = req.path().starts_with("/_app/immutable/");
+    let mut res = next.call(req).await?;
+    let immutable = immutable && res.status().is_success();
+    let headers = res.headers_mut();
+    if !headers.contains_key(header::CACHE_CONTROL) {
+        let html = headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("text/html"));
+        let value = match (immutable, html) {
+            (true, _) => Some("public, max-age=31536000, immutable"),
+            (false, true) => Some("no-cache"),
+            (false, false) => None,
+        };
+        if let Some(value) = value {
+            headers.insert(header::CACHE_CONTROL, header::HeaderValue::from_static(value));
+        }
+    }
+    Ok(res)
+}
+
+fn allowed_origin(origin: &str, base_url: &str) -> bool {
+    Url::parse(origin).is_ok_and(|origin| {
+        let host = origin.host_str().unwrap_or_default();
+        let secure = match origin.scheme() {
+            "https" => true,
+            "http" => matches!(host, "localhost" | "127.0.0.1" | "[::1]"),
+            _ => false,
+        };
+        let host = match origin.port() {
+            Some(port) => format!("{host}:{port}"),
+            None => host.to_string(),
+        };
+        secure && host.eq_ignore_ascii_case(base_url)
+    })
+}
+
+fn cross_site(headers: &HeaderMap, base_url: &str) -> bool {
+    match headers.get(header::ORIGIN) {
+        Some(origin) => !origin.to_str().is_ok_and(|origin| allowed_origin(origin, base_url)),
+        None => headers
+            .get("sec-fetch-site")
+            .is_some_and(|site| matches!(site.as_bytes(), b"cross-site" | b"same-site")),
+    }
 }
 
 pub async fn same_origin(
     req: ServiceRequest,
     next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
-    let cross_site = !matches!(*req.method(), Method::GET | Method::HEAD)
-        && req.headers().get(header::ORIGIN).is_some_and(|origin| {
-            origin
-                .to_str()
-                .ok()
-                .and_then(|origin| Url::parse(origin).ok())
-                .is_none_or(|origin| {
-                    let host = origin.host_str().unwrap_or_default();
-                    let host = match origin.port() {
-                        Some(port) => format!("{host}:{port}"),
-                        None => host.to_string(),
-                    };
-                    !host.eq_ignore_ascii_case(&hc_helper::keys::base_url())
-                })
-        });
-    if cross_site {
+    if !matches!(*req.method(), Method::GET | Method::HEAD) && cross_site(req.headers(), &hc_helper::keys::base_url()) {
         return Err(reject("Cross-site request blocked. Reload the page and try again").into());
     }
     next.call(req).await
@@ -152,15 +225,22 @@ mod tests {
         let proxy = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
 
         for (forwarded, expected) in [
-            (None, StatusCode::OK),
-            (Some("203.0.113.1, 162.158.1.2"), StatusCode::OK),
-            (Some("2606:4700::1"), StatusCode::OK),
-            (Some("203.0.113.1"), StatusCode::FORBIDDEN),
-            (Some("162.158.1.2, 203.0.113.1"), StatusCode::FORBIDDEN),
+            (&[][..], StatusCode::OK),
+            (&["203.0.113.1, 162.158.1.2"][..], StatusCode::OK),
+            (&["2606:4700::1"][..], StatusCode::OK),
+            (&["203.0.113.1, 162.158.1.2:443"][..], StatusCode::OK),
+            (&["[2606:4700::1]:443"][..], StatusCode::OK),
+            (&["[2606:4700::1]"][..], StatusCode::OK),
+            (&["203.0.113.1", "162.158.1.2"][..], StatusCode::OK),
+            (&["162.158.1.2", "203.0.113.1"][..], StatusCode::FORBIDDEN),
+            (&["203.0.113.1"][..], StatusCode::FORBIDDEN),
+            (&["162.158.1.2, 203.0.113.1"][..], StatusCode::FORBIDDEN),
+            (&["unknown"][..], StatusCode::FORBIDDEN),
+            (&["162.158.1.2, "][..], StatusCode::FORBIDDEN),
         ] {
             let mut request = test::TestRequest::get().uri("/").peer_addr(proxy);
-            if let Some(forwarded) = forwarded {
-                request = request.insert_header(("x-forwarded-for", forwarded));
+            for value in forwarded {
+                request = request.append_header(("x-forwarded-for", *value));
             }
             let status = match test::try_call_service(&app, request.to_request()).await {
                 Ok(response) => response.status(),
@@ -168,6 +248,35 @@ mod tests {
             };
             assert_eq!(status, expected, "{forwarded:?}");
         }
+    }
+
+    #[actix_web::test]
+    async fn origins_must_match_scheme_and_host() {
+        assert!(allowed_origin("https://mipmap.hackclub.com", "mipmap.hackclub.com"));
+        assert!(!allowed_origin("http://mipmap.hackclub.com", "mipmap.hackclub.com"));
+        assert!(!allowed_origin("https://evil.com", "mipmap.hackclub.com"));
+        assert!(!allowed_origin("null", "mipmap.hackclub.com"));
+        assert!(allowed_origin("http://localhost:8080", "localhost:8080"));
+        assert!(allowed_origin("http://[::1]:8080", "[::1]:8080"));
+    }
+
+    #[actix_web::test]
+    async fn missing_origin_uses_fetch_metadata() {
+        let headers = |pairs: &[(&'static str, &'static str)]| {
+            let mut headers = HeaderMap::new();
+            for (name, value) in pairs {
+                headers.insert(header::HeaderName::from_static(name), header::HeaderValue::from_static(value));
+            }
+            headers
+        };
+        let base = "mipmap.hackclub.com";
+        assert!(!cross_site(&headers(&[]), base));
+        assert!(!cross_site(&headers(&[("sec-fetch-site", "same-origin")]), base));
+        assert!(!cross_site(&headers(&[("sec-fetch-site", "none")]), base));
+        assert!(cross_site(&headers(&[("sec-fetch-site", "cross-site")]), base));
+        assert!(cross_site(&headers(&[("sec-fetch-site", "same-site")]), base));
+        assert!(cross_site(&headers(&[("origin", "http://mipmap.hackclub.com")]), base));
+        assert!(!cross_site(&headers(&[("origin", "https://mipmap.hackclub.com")]), base));
     }
 
     #[actix_web::test]

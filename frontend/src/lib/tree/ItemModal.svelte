@@ -2,7 +2,9 @@
     import { tick, type Snippet } from "svelte";
     import Dialog, { refocus } from "$lib/ui/Dialog.svelte";
     import { Task } from "$lib/load.svelte";
-    import { price_label } from "$lib/tree/style";
+    import { node_color, price_label } from "$lib/tree/style";
+    import { friendly } from "$lib/tree/api";
+    import CogArt from "$lib/tree/CogArt.svelte";
     import HoldButton from "$lib/tree/HoldButton.svelte";
     import AuthText from "$lib/ui/AuthText.svelte";
     import { STICKER } from "$lib/tree/tutorial";
@@ -15,6 +17,8 @@
         unlocked,
         purchased,
         tokens,
+        mips,
+        skipped = false,
         available,
         requires,
         blocked,
@@ -30,6 +34,8 @@
         unlocked: boolean;
         purchased: boolean;
         tokens: number;
+        mips: number;
+        skipped?: boolean;
         available: boolean;
         requires: string[];
         blocked: string | null;
@@ -51,21 +57,71 @@
             : meta?.description,
     );
     const has_image = $derived(Boolean(image || meta?.image));
+    const local = $derived(meta?.image.startsWith("/") ?? false);
     const actionable = $derived(
         !unlocked || (node.kind === "item" && !purchased),
     );
-    const label = $derived(
-        unlocked ? "Unlocked!" : available ? "Unlock" : "Prerequisite missing",
-    );
+    const price = $derived(node.price ?? 0);
+    const affordable = $derived(unlocked || price <= mips);
 
     const task = new Task();
+    const pending_text = {
+        unlock: "Unlocking…",
+        redeem: "Redeeming…",
+        skip: "Skipping…",
+    };
 
     let customs = $state(false);
+    let doing = $state<keyof typeof pending_text | null>(null);
+    let status = $state("");
+    let loaded = $state(false);
+    let attempt = $state(0);
+
+    const label = $derived(
+        doing === "unlock"
+            ? pending_text.unlock
+            : unlocked
+              ? "Unlocked!"
+              : !available
+                ? "Prerequisite missing"
+                : affordable
+                  ? "Unlock"
+                  : `Not enough ${currency}`,
+    );
+    const source = $derived(
+        local
+            ? meta!.image
+            : `/dashboard/item-images/${node.id}${attempt ? `?retry=${attempt}` : ""}`,
+    );
 
     let footer: HTMLDivElement;
+    let retry_timer = 0;
 
-    async function act(action: () => Promise<void>) {
-        await task.run(action);
+    $effect(() => () => clearTimeout(retry_timer));
+
+    function retry() {
+        if (local || attempt >= 12) return;
+        clearTimeout(retry_timer);
+        retry_timer = window.setTimeout(() => attempt++, 5000);
+    }
+
+    const done_text = (kind: keyof typeof pending_text) =>
+        kind === "unlock"
+            ? `Unlocked ${title}`
+            : kind === "redeem"
+              ? `Redeemed ${title}`
+              : "Skipped the sticker";
+
+    async function act(
+        kind: keyof typeof pending_text,
+        action: () => Promise<void>,
+    ) {
+        doing = kind;
+        status = pending_text[kind];
+        let succeeded = false;
+        await task.run(action, () => (succeeded = true));
+        doing = null;
+        status = succeeded ? done_text(kind) : "";
         await tick();
         refocus(footer, true);
     }
@@ -92,13 +148,21 @@
                     {#if image}
                         {@render image()}
                     {:else if meta}
+                        {#if !loaded}
+                            <CogArt
+                                kind="item"
+                                color={node_color(node)}
+                                size={160}
+                            />
+                        {/if}
                         <img
-                            src="/dashboard/item-images/{node.id}"
-                            alt=""
-                            onerror={(e) => {
-                                const img = e.currentTarget as HTMLImageElement;
-                                const fallback = new URL(meta.image, location.href).href;
-                                if (img.src !== fallback) img.src = fallback;
+                            src={source}
+                            alt={title}
+                            class:waiting={!loaded}
+                            onload={() => (loaded = true)}
+                            onerror={() => {
+                                loaded = false;
+                                retry();
                             }}
                         />
                     {/if}
@@ -112,10 +176,21 @@
             {#if !unlocked || node.kind === "token"}
                 <HoldButton
                     {label}
-                    disabled={unlocked || !available || !!blocked || task.pending}
+                    disabled={unlocked ||
+                        !available ||
+                        !affordable ||
+                        !!blocked ||
+                        task.pending}
                     autofocus
-                    onconfirm={() => act(onunlock)}
+                    onconfirm={() => act("unlock", onunlock)}
                 />
+                {#if !unlocked && available && !affordable}
+                    <p class="skip">
+                        You have {mips}
+                        {currency}, so you need {price - mips} more to unlock
+                        this
+                    </p>
+                {/if}
                 {#if !unlocked && !available && requires.length}
                     <div class="prereqs">
                         Unlock one of the following first:
@@ -137,15 +212,34 @@
                     <a href="https://auth.hackclub.com" target="_blank" rel="noopener">Hack Club Auth</a>
                 </p>
                 <HoldButton
-                    label="Redeem with Token ({tokens} {tokens === 1 ? 'token' : 'tokens'})"
-                    disabled={tokens === 0 || !customs || !!blocked || task.pending}
+                    label={doing === "redeem"
+                        ? pending_text.redeem
+                        : `Redeem with Token (${tokens} ${tokens === 1 ? "token" : "tokens"})`}
+                    disabled={tokens <= 0 ||
+                        mips < 0 ||
+                        !customs ||
+                        !!blocked ||
+                        task.pending}
                     autofocus
-                    onconfirm={() => act(onpurchase)}
+                    onconfirm={() => act("redeem", onpurchase)}
                 />
-                {#if tokens === 0}
+                {#if mips < 0}
                     <p class="skip">
-                        You need a Token to redeem this item. Unlock them in the
-                        tree!
+                        Your {currency} balance is negative, so you can't redeem
+                        prizes right now
+                    </p>
+                {:else if tokens <= 0}
+                    <p class="skip">
+                        {#if node.id === STICKER && skipped}
+                            You skipped the sticker, and regular Tokens can't be
+                            used to redeem it
+                        {:else if node.id === STICKER}
+                            You need the sticker Token to redeem this. Unlock it
+                            in the tree!
+                        {:else}
+                            You need a Token to redeem this item. Unlock them in
+                            the tree!
+                        {/if}
                     </p>
                 {/if}
                 {#if onskip}
@@ -155,9 +249,11 @@
                         purposes of this onboarding.
                     </p>
                     <HoldButton
-                        label="Skip getting sticker"
-                        disabled={tokens === 0 || task.pending}
-                        onconfirm={() => act(onskip)}
+                        label={doing === "skip"
+                            ? pending_text.skip
+                            : "Skip getting sticker"}
+                        disabled={tokens <= 0 || task.pending}
+                        onconfirm={() => act("skip", onskip)}
                     />
                 {/if}
             {/if}
@@ -169,9 +265,10 @@
                     </a>
                 </div>
             {/if}
+            <p class="visually-hidden" role="status">{status}</p>
             {#if task.error}
                 <div class="note" role="alert">
-                    <AuthText text={task.error} />
+                    <AuthText text={friendly(task.error)} />
                     {#if task.error.includes("Hack Club Auth account")}
                         <a href="https://auth.hackclub.com" target="_blank" rel="noopener">
                             Visit Hack Club Auth in order to receive prizes{node.id ===
@@ -239,6 +336,20 @@
         padding: 2px;
     }
 
+    .frame img.waiting {
+        display: none;
+    }
+
+    .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
     .frame :global(img),
     .frame :global(svg) {
         position: absolute;
@@ -298,17 +409,25 @@
 
     .customs input {
         flex: none;
+        box-sizing: border-box;
         width: 1.25em;
         height: 1.25em;
         margin: 0;
         appearance: none;
         background: #4f2f1f;
+        border: 2px solid #d6ab70;
         cursor: pointer;
+    }
+
+    @media (forced-colors: active) {
+        .customs input {
+            appearance: auto;
+        }
     }
 
     .customs input:checked {
         background: #d6ab70;
-        box-shadow: inset 0 0 0 0.25em #4f2f1f;
+        box-shadow: inset 0 0 0 calc(0.25em - 2px) #4f2f1f;
     }
 
     .customs input:focus-visible {

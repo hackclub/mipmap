@@ -10,6 +10,10 @@
 
     const size = 96;
     const wander_ms = 7000;
+    const roam_ms = 20000;
+    const edge = 16;
+    const gap = 12;
+    const controls_height = 3 * 48 + 4 * 2;
 
     let show = $state(false);
     let stage = $state<"floating" | "asking" | "survey" | "thanks" | "gone">(
@@ -17,39 +21,72 @@
     );
     let x = $state(0);
     let y = $state(0);
+    let parked = $state(false);
+
+    function controls_top() {
+        const controls = document.querySelector('[aria-label="Map controls"]');
+        const top = controls?.getBoundingClientRect().top;
+        return top && top > 0 ? top : innerHeight - edge - controls_height;
+    }
 
     function wander() {
-        x = Math.random() * Math.max(0, innerWidth - size);
-        y = Math.random() * Math.max(0, innerHeight - size);
+        const blocked = controls_top() - gap - size;
+        const right = innerWidth - edge - 52 - size;
+        for (let tries = 0; tries < 10; tries++) {
+            x = Math.random() * Math.max(0, innerWidth - size);
+            y = Math.random() * Math.max(0, innerHeight - size);
+            if (x < right || y < blocked) return;
+        }
+    }
+
+    function park() {
+        parked = true;
+        x = Math.max(0, innerWidth - edge - size);
+        y = Math.max(0, controls_top() - gap - size);
+    }
+
+    function clamp() {
+        if (parked) return park();
+        x = Math.min(x, Math.max(0, innerWidth - size));
+        y = Math.min(y, Math.max(0, innerHeight - size));
     }
 
     onMount(() => {
         const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        let start = 0;
         let timer = 0;
+        let stop = 0;
         let alive = true;
-        if (still) {
-            x = innerWidth - size - 24;
-            y = innerHeight - size - 24;
-        } else wander();
+        if (still) park();
+        else wander();
         visit_survey().then((due) => {
             if (!alive) return;
             show = due;
             if (!due || still) return;
-            setTimeout(wander, 100);
+            start = window.setTimeout(wander, 100);
             timer = window.setInterval(wander, wander_ms);
+            stop = window.setTimeout(() => {
+                clearInterval(timer);
+                park();
+            }, roam_ms);
         });
         return () => {
             alive = false;
+            clearTimeout(start);
             clearInterval(timer);
+            clearTimeout(stop);
         };
     });
 </script>
+
+<svelte:window onresize={clamp} />
 
 {#if show && active}
     {#if stage === "floating"}
         <button
             type="button"
             class="steve"
+            class:parked
             aria-label="Steve the Sprite has a question"
             style:transform="translate({x}px, {y}px)"
             style:--size="{size}px"
@@ -142,6 +179,10 @@
         flex-shrink: 0;
         width: 96px;
         height: 96px;
+    }
+
+    .steve.parked {
+        animation: none;
     }
 
     .steve:focus-visible {

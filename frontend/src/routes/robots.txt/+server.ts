@@ -11,6 +11,7 @@ Disallow: /api/
 Disallow: /login
 Disallow: /callback
 Disallow: /hackatime/
+Disallow: /surveys/
 ${site_url ? `\nSitemap: ${site_url}/sitemap.xml\n` : ""}`,
     { headers: { "Content-Type": "text/plain" } },
   );

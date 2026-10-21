@@ -34,6 +34,10 @@
             <span class="caption">Learn about all this stuff!</span>
         </a>
     </div>
+    <p>
+        Keyboard: arrow keys move the map, Shift + arrow keys jump between
+        items, + and − zoom
+    </p>
 </Section>
 
 <style>

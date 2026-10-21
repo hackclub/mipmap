@@ -79,7 +79,7 @@
 {/snippet}
 
 {#snippet faq_1()}
-    <strong>Wait, I get prizes for building projects?</strong>
+    <h2><strong>Wait, I get prizes for building projects?</strong></h2>
     <div>
         Yep! Hack Club Mipmap is a free online
         program where you track time towards engine-less games to accumulate
@@ -95,7 +95,7 @@
 {@render faq_card(0, faq_1)}
 
 {#snippet faq_2()}
-    <strong>What sorts of projects can I build?</strong>
+    <h2><strong>What sorts of projects can I build?</strong></h2>
     <div>
         <p>
             Your challenge is to make a video game <i>without</i> making use of
@@ -143,7 +143,7 @@
                     get a bit of a Mips boost compared
                     to projects in
                     Tier Romeo. The only projects that
-                    qualify are those that meet one of the following criteria:
+                    qualify are 3D games that meet one of the following criteria:
                 </p>
                 <ul>
                     <li>
@@ -157,7 +157,7 @@
                         > (no operating system!)
                     </li>
                     <li>
-                        3D game written in a <a
+                        Written in a <a
                             href="https://github.com/ssloy/tinyrenderer/wiki"
                             >software renderer</a
                         >, that is using no GPU library at all
@@ -170,13 +170,13 @@
 {@render faq_card(1, faq_2)}
 
 {#snippet faq_3()}
-    <strong>Who can get this stuff?</strong>
+    <h2><strong>Who can get this stuff?</strong></h2>
     <div>Any teenager! More specifically, anyone 13 through 18.</div>
 {/snippet}
 {@render faq_card(2, faq_3)}
 
 {#snippet faq_4()}
-    <strong>But I don't know how to do any of this!</strong>
+    <h2><strong>But I don't know how to do any of this!</strong></h2>
     <div>
         That's totally alright. It's exactly why Hack Club Mipmap has the <a
             href="/docs">Mipmap Docs</a
@@ -188,7 +188,7 @@
 {@render faq_card(3, faq_4)}
 
 {#snippet faq_5()}
-    <strong>How do I track my time?</strong>
+    <h2><strong>How do I track my time?</strong></h2>
     <div>
         After you <a href="/login" rel="external">sign in</a> and work through the onboarding, you'll link your <a
             href="https://hackatime.hackclub.com/">Hackatime</a
@@ -201,7 +201,7 @@
 {@render faq_card(4, faq_5)}
 
 {#snippet faq_6()}
-    <strong>Can I use AI?</strong>
+    <h2><strong>Can I use AI?</strong></h2>
     <div>
         <p>
             Graphics programming is a tough concept, so you may wish to get some
@@ -229,7 +229,7 @@
 {@render faq_card(5, faq_6)}
 
 {#snippet faq_7()}
-    <strong>And this is all free?</strong>
+    <h2><strong>And this is all free?</strong></h2>
     <div>
         Yep! This is a program by <a href="https://hackclub.com">Hack Club</a>,
         a nonprofit organization whose mission is getting teenagers building
@@ -239,7 +239,7 @@
 {@render faq_card(6, faq_7)}
 
 {#snippet faq_8()}
-    <strong>I have more questions!</strong>
+    <h2><strong>I have more questions!</strong></h2>
     <div>
         Ask in the <a
             href="https://hackclub.enterprise.slack.com/archives/C0C2UMX4S9E"

@@ -6,12 +6,19 @@
 
     let { bounds, code }: { bounds: Bounds; code: string } = $props();
 
+    const touch = matchMedia("(pointer: coarse)").matches;
     const shortcut = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "Cmd+C" : "Ctrl+C";
-    const labels = { idle: "Copy", copied: "Copied!", manual: `Press ${shortcut}` };
+    const labels = {
+        idle: "Copy",
+        copied: "Copied!",
+        manual: touch ? "Press and hold the link" : `Press ${shortcut}`,
+    };
     const announcements = {
         idle: "",
         copied: "Link copied",
-        manual: `Press ${shortcut} to copy the link`,
+        manual: touch
+            ? "Press and hold the link to copy it"
+            : `Press ${shortcut} to copy the link`,
     };
 
     const link = $derived(`${location.origin}/?ref=${code}`);

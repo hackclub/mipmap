@@ -4,6 +4,7 @@ use super::{
 };
 use actix_web::{
     HttpRequest, HttpResponse, get,
+    http::header,
     web::{self, Query},
 };
 use hc_helper::hackatime::{
@@ -112,19 +113,27 @@ pub async fn callback(
     )
     .await;
     let Some(token) = token.take() else {
-        return response;
+        return failed(&response, "failed");
     };
     match link(&pool, user_id, &token).await {
         Ok(Linked::Yes) => response,
-        Ok(Linked::Taken) => HttpResponse::Conflict()
-            .body("That Hackatime account is already linked to another Mipmap account"),
-        Ok(Linked::Other) => HttpResponse::Conflict()
-            .body("Your Mipmap account is already linked to a different Hackatime account"),
+        Ok(Linked::Taken) => failed(&response, "taken"),
+        Ok(Linked::Other) => failed(&response, "other"),
         Err(e) => {
             log::error!("linking Hackatime failed: {e:#}");
-            HttpResponse::InternalServerError().body("Couldn't link Hackatime, please try again")
+            failed(&response, "failed")
         }
     }
+}
+
+fn failed(response: &HttpResponse, code: &str) -> HttpResponse {
+    let mut failure = HttpResponse::SeeOther()
+        .append_header((header::LOCATION, format!("/dashboard?hackatime_error={code}")))
+        .finish();
+    for cookie in response.cookies() {
+        let _ = failure.add_cookie(&cookie);
+    }
+    failure
 }
 
 enum Linked {

@@ -4,7 +4,11 @@
     import Field from "$lib/ui/Field.svelte";
     import TierSelect from "$lib/projects/TierSelect.svelte";
     import HoldButton from "$lib/tree/HoldButton.svelte";
-    import { delete_project, update_project } from "$lib/projects/api";
+    import {
+        delete_project,
+        update_project,
+        uploading,
+    } from "$lib/projects/api";
     import { hours } from "$lib/format";
     import type {
         HackatimeProject,
@@ -34,6 +38,7 @@
     );
     const reviewing = untrack(() => project.status === "shipped");
     const locked = untrack(() => project.locked);
+    const saved_links = { repo: initial.repo, demo: initial.demo };
     let fields = $state<ProjectFields>(initial);
     let search = $state("");
     let confirming = $state(false);
@@ -48,6 +53,23 @@
             entry.name.toLowerCase().includes(search.trim().toLowerCase()),
         ),
     );
+
+    function link(label: string, value: string) {
+        const trimmed = value.trim();
+        if (!trimmed) return "";
+        const full = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
+            ? trimmed
+            : `https://${trimmed}`;
+        try {
+            if (/\s/.test(full)) throw new Error();
+            new URL(full);
+        } catch {
+            throw new Error(
+                `The ${label} link doesn't look right, try something like https://github.com/you/project`,
+            );
+        }
+        return full;
+    }
 
     function toggle(name: string, checked: boolean) {
         fields.hackatime = checked
@@ -72,8 +94,19 @@
     cancel
     extra={remove}
     locked={touring}
+    disabled={uploading.has(id)}
     onsubmit={async () => {
-        await update_project(id, $state.snapshot(fields));
+        const repo =
+            fields.repo === saved_links.repo
+                ? fields.repo
+                : link("repo", fields.repo);
+        const demo =
+            fields.demo === saved_links.demo
+                ? fields.demo
+                : link("demo", fields.demo);
+        fields.repo = repo;
+        fields.demo = demo;
+        await update_project(id, { ...$state.snapshot(fields), repo, demo });
         onsaved?.();
     }}
     {onclose}
@@ -81,11 +114,17 @@
     {#if reviewing}
         <p class="note">This project is in review, so only its name can change.</p>
     {/if}
+    {#if uploading.has(id)}
+        <p class="note" role="status">
+            You can save once the screenshot finishes uploading
+        </p>
+    {/if}
     <Field
         label="Name"
         hint="What your project is called"
         bind:value={fields.name}
         maxlength={100}
+        required
     />
     <Field
         label="Description"
@@ -99,7 +138,11 @@
         <Field
             label="Repo"
             hint="Your public code repository on GitHub, GitLab or Codeberg"
-            type="url"
+            type="text"
+            inputmode="url"
+            autocapitalize="off"
+            autocomplete="url"
+            spellcheck="false"
             bind:value={fields.repo}
             placeholder="https://"
             maxlength={500}
@@ -108,7 +151,11 @@
         <Field
             label="Demo"
             hint="A public link where people can try your project, like a release page or a hosted build"
-            type="url"
+            type="text"
+            inputmode="url"
+            autocapitalize="off"
+            autocomplete="url"
+            spellcheck="false"
             bind:value={fields.demo}
             placeholder="https://"
             maxlength={500}
@@ -208,7 +255,7 @@
     .hint {
         margin: 0;
         font-size: 0.75em;
-        opacity: 0.75;
+        opacity: 0.85;
     }
 
     h3 {
@@ -252,17 +299,18 @@
     .name {
         flex: 1;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
     }
 
     input[type="checkbox"] {
         flex: none;
+        box-sizing: border-box;
         width: 1.25em;
         height: 1.25em;
         margin: 0;
         appearance: none;
         background: #4f2f1f;
+        border: 1px solid #d6ab70;
         cursor: pointer;
     }
 
@@ -277,6 +325,12 @@
 
     input[type="checkbox"]:focus-visible {
         outline: 2px solid #ead7c2;
+    }
+
+    @media (forced-colors: active) {
+        input[type="checkbox"] {
+            appearance: auto;
+        }
     }
 
     @media (max-width: 560px) {

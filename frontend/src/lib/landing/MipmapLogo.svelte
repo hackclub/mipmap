@@ -18,32 +18,41 @@
 	let live = $state(false);
 
 	function phudu(cancelled: () => boolean) {
-		return new Promise<void>((resolve) => {
+		let tries = 0;
+		return new Promise<boolean>((resolve) => {
 			const check = () =>
 				document.fonts.load('500 16px Phudu').then(
-					(faces) => (faces.length || cancelled() ? resolve() : setTimeout(check, 100)),
-					() => resolve()
+					(faces) => {
+						if (faces.length) resolve(true);
+						else if (cancelled() || ++tries >= 50) resolve(false);
+						else setTimeout(check, 100);
+					},
+					() => resolve(false)
 				);
 			check();
 		});
 	}
 
+	const sized = $derived(width > 0);
+
 	$effect(() => {
-		if (!width || !root) return;
+		if (!sized || !root) return;
 		let cancelled = false;
 		const images = [...root.querySelectorAll('img.spin')].map((img) =>
 			(img as HTMLImageElement).decode().catch(() => {})
 		);
-		const font = phudu(() => cancelled);
 		const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
-		Promise.race([Promise.all([...images, font]), timeout]).then(() => {
-			if (!cancelled) live = true;
-		});
+		Promise.all([phudu(() => cancelled), Promise.race([Promise.all(images), timeout])]).then(
+			([font]) => {
+				if (!cancelled && font) live = true;
+			}
+		);
 		return () => {
 			cancelled = true;
 		};
 	});
-	const blur = $derived(width ? shadow_blur * view_width / width : 0);
+	const blur = $derived(width ? Math.round((shadow_blur * view_width / width) * 100) / 100 : 0);
+	const shadows = new Map<string, string>();
 	const pad = $derived(4 * blur);
 
 	function box(cog: (typeof cogs)[number], extra: number) {
@@ -55,14 +64,19 @@
 	}
 
 	function shadow(cog: (typeof cogs)[number]) {
+		const key = `${cog.x}:${blur}`;
+		const known = shadows.get(key);
+		if (known) return known;
 		const view = `${cog.x - radius - pad} ${cog.y - radius - pad} ${2 * (radius + pad)} ${2 * (radius + pad)}`;
 		const [x, y, size] = view.split(' ');
-		return svg_url(
+		const url = svg_url(
 			`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${view}">` +
 				`<filter id="s" filterUnits="userSpaceOnUse" x="${x}" y="${y}" width="${size}" height="${size}">` +
 				`<feGaussianBlur stdDeviation="${blur}"/></filter>` +
 				`<g opacity="0.45"><path filter="url(#s)" fill-rule="evenodd" d="${cog.d}"/></g></svg>`
 		);
+		shadows.set(key, url);
+		return url;
 	}
 </script>
 
@@ -146,7 +160,7 @@
 	{#each cogs as cog}
 		{@const b = box(cog, pad)}
 		<div class="cog" style:left={b.left} style:top={b.top} style:width={b.width} style:translate="{shadow_x}px {shadow_y}px">
-			<img decoding="sync" class="spin" class:reverse={cog.reverse} src={width ? shadow(cog) : undefined} alt="" />
+			<img decoding="async" class="spin" class:reverse={cog.reverse} src={width ? shadow(cog) : undefined} alt="" />
 		</div>
 	{/each}
 	{#each cogs as cog}

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { SvelteSet } from "svelte/reactivity";
     import { message } from "$lib/api";
     import { short_time } from "$lib/format";
     import HoldButton from "$lib/tree/HoldButton.svelte";
@@ -24,16 +25,17 @@
     rejections.reset();
 
     let busy = $state<number | null>(null);
-    let error = $state("");
+    let error = $state<{ id: number; text: string } | null>(null);
+    const shown = new SvelteSet<number>();
 
     async function review(id: number, approve: boolean) {
         busy = id;
-        error = "";
+        error = null;
         try {
             await review_snapshot(id, approve);
             held.remove(id);
         } catch (e) {
-            error = message(e);
+            error = { id, text: message(e) };
         } finally {
             busy = null;
         }
@@ -46,10 +48,9 @@
         Only their authors can see these until you approve them. Rejecting
         deletes the Snapshot
     </p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
     <PagedList pages={held} empty="Nothing held">
         {#snippet item(snapshot)}
-            <Card>
+            <Card level={4}>
                 {#snippet title()}
                     {snapshot.author}
                 {/snippet}
@@ -65,10 +66,31 @@
                 </ul>
                 <div class="body">
                     {#if safe_url(snapshot.image)}
-                        <img src={safe_url(snapshot.image)} alt="" loading="lazy" />
+                        <div class="shot">
+                            <img
+                                src={safe_url(snapshot.image)}
+                                alt="Held Snapshot image from {snapshot.author}"
+                                loading="lazy"
+                                class:blurred={!shown.has(snapshot.id)}
+                            />
+                            <button
+                                type="button"
+                                class="reveal"
+                                onclick={() =>
+                                    shown.has(snapshot.id)
+                                        ? shown.delete(snapshot.id)
+                                        : shown.add(snapshot.id)}
+                                >{shown.has(snapshot.id)
+                                    ? "Hide image"
+                                    : "Show image"}</button
+                            >
+                        </div>
                     {/if}
                     <p class="caption">{snapshot.caption}</p>
                 </div>
+                {#if error?.id === snapshot.id}
+                    <p class="error" role="alert">{error.text}</p>
+                {/if}
                 {#snippet actions()}
                     <HoldButton
                         label="Approve"
@@ -93,7 +115,7 @@
     <p class="note">These were refused outright. Images aren't kept</p>
     <PagedList pages={rejections} empty="Nothing rejected">
         {#snippet item(rejection)}
-            <Card dim>
+            <Card dim level={4}>
                 {#snippet title()}
                     {rejection.author}
                 {/snippet}
@@ -131,7 +153,7 @@
 
     .note {
         margin: 0;
-        color: #d6ab70;
+        color: #ead7c2;
     }
 
     .error {
@@ -159,6 +181,44 @@
         display: flex;
         flex-wrap: wrap;
         gap: 1rem;
+    }
+
+    .shot {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .reveal {
+        padding: 0.4rem 0.8rem;
+        background-color: #4f2f1f;
+        border: none;
+        color: #ead7c2;
+        font: inherit;
+        font-size: 0.85rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .reveal:focus-visible {
+        background-color: #ead7c2;
+        color: #4f2f1f;
+    }
+
+    @media (hover: hover) {
+        .reveal:hover {
+            background-color: #ead7c2;
+            color: #4f2f1f;
+        }
+    }
+
+    img.blurred {
+        filter: blur(1.25rem);
+        clip-path: inset(0);
     }
 
     img {

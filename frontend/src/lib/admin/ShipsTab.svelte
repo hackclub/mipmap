@@ -27,8 +27,12 @@
     let raw = $state("");
     let reason = $state("");
 
-    const parsed_percent = $derived(Number(percent || 0));
-    const parsed_raw = $derived(Number(raw || 0));
+    const number = (value: unknown) =>
+        value === null || value === undefined || `${value}`.trim() === ""
+            ? NaN
+            : Number(value);
+    const parsed_percent = $derived(number(percent));
+    const parsed_raw = $derived(number(raw));
     const valid = $derived(
         Number.isFinite(parsed_percent) &&
             parsed_percent >= 0 &&
@@ -64,6 +68,7 @@
 </script>
 
 <Filters
+    label="Ship status"
     options={[
         ["pending", "Pending"],
         ["approved", "Approved"],

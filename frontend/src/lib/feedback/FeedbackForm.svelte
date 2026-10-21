@@ -7,6 +7,9 @@
     let { onsent }: { onsent: () => void } = $props();
 
     const scores = Array.from({ length: 10 }, (_, i) => i + 1);
+    const low = "Not likely at all";
+    const high = "Extremely likely";
+    const uid = $props.id();
 
     let score = $state(0);
     let source = $state("");
@@ -25,7 +28,7 @@
 </script>
 
 <form onsubmit={submit}>
-    <fieldset>
+    <fieldset aria-describedby="{uid}-ends">
         <legend>How likely are you to recommend Mipmap to a friend?</legend>
         <div class="scores">
             {#each scores as value}
@@ -34,12 +37,21 @@
                         type="radio"
                         name="score"
                         {value}
+                        aria-label={value === 1
+                            ? `1, ${low}`
+                            : value === 10
+                              ? `10, ${high}`
+                              : String(value)}
                         checked={score === value}
                         onchange={() => (score = value)}
                     />
                     {value}
                 </label>
             {/each}
+        </div>
+        <div class="ends" id="{uid}-ends">
+            <span>1: {low}</span>
+            <span>10: {high}</span>
         </div>
     </fieldset>
     <Field
@@ -66,7 +78,7 @@
             Submit
         </MipmapButton>
         <div class="note" aria-live="polite">
-            {send.error}
+            {send.error || (score ? "" : "Pick a score from 1 to 10 to submit")}
         </div>
     </div>
 </form>
@@ -107,16 +119,54 @@
             color 0.3s;
     }
 
-    .scores label:has(:focus-visible),
     .scores label.chosen {
         background: #ead7c2;
         color: #4f2f1f;
     }
 
+    .scores label:has(:focus-visible) {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
     @media (hover: hover) {
-        .scores label:hover {
-            background: #ead7c2;
-            color: #4f2f1f;
+        .scores label:hover:not(.chosen) {
+            background: #5f4838;
+        }
+    }
+
+    .ends {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        font-size: 0.75em;
+        opacity: 0.85;
+    }
+
+    @media (max-width: 40rem) {
+        .scores {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .scores label {
+            padding: 0.75rem 0;
+        }
+    }
+
+    @media (forced-colors: active) {
+        .scores label {
+            border: 1px solid ButtonText;
+        }
+
+        .scores label.chosen {
+            forced-color-adjust: none;
+            background: Highlight;
+            color: HighlightText;
+        }
+
+        .scores label:has(:focus-visible) {
+            outline-color: CanvasText;
         }
     }
 

@@ -22,6 +22,8 @@
         onclose: () => void;
         children?: Snippet;
     } = $props();
+
+    const uid = $props.id();
 </script>
 
 <FormDialog
@@ -33,9 +35,7 @@
     {onsubmit}
     {onclose}
 >
-    {#if warning}
-        <p class="warning">{warning}</p>
-    {/if}
+    <p class="warning" id="{uid}-warning" aria-live="polite">{warning ?? ""}</p>
     {@render children?.()}
     {#if reason !== undefined}
         <Field
@@ -44,12 +44,17 @@
             required
             maxlength={500}
             focus={!children}
+            aria-describedby={warning ? `${uid}-warning` : undefined}
             bind:value={reason}
         />
     {/if}
 </FormDialog>
 
 <style>
+    .warning:empty {
+        display: none;
+    }
+
     .warning {
         margin: 0;
         font-size: 0.85em;

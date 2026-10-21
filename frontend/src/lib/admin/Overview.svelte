@@ -25,7 +25,10 @@
                 [
                     ["Signed up", count(stats.hours.at(-1)?.signed_up ?? 0)],
                     ["Logged in (last 24 hours)", count(totals.logged_in_last_day)],
-                    ["Daily active", count(stats.days.at(-1)?.active ?? 0)],
+                    [
+                        "Active today so far (UTC)",
+                        count(stats.days.at(-1)?.active ?? 0),
+                    ],
                 ],
             ],
             [
@@ -43,7 +46,10 @@
                     ["Hours approved", count(Math.round(totals.hours_approved))],
                     ["Mips awarded", count(totals.mips_awarded)],
                     ["Orders placed", count(totals.orders_placed)],
-                    ["Unfulfilled orders", count(overview.unfulfilled_orders)],
+                    [
+                        "Unfulfilled orders, stickers included",
+                        count(overview.unfulfilled_orders),
+                    ],
                 ],
             ],
         ] as const;
@@ -67,7 +73,8 @@
                 {/each}
             </section>
         {/each}
-    {:else if load.error}
+    {/if}
+    {#if load.error}
         <LoadError error={load.error} onretry={load.run} />
     {/if}
 </aside>
@@ -97,7 +104,7 @@
 
     h3 {
         margin: 0 0 0.5rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.9rem;
         font-weight: 400;
     }

@@ -18,7 +18,7 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 const CALLBACK: &str = "/callback";
-const REFERRAL_COOKIE: &str = "ref";
+const REFERRAL_COOKIE: &str = "__Host-ref";
 const NEXT_COOKIE: &str = "next";
 
 fn local_path(path: &str) -> bool {
@@ -119,7 +119,8 @@ pub async fn callback(
         Ok(Some(cookie)) => {
             let _ = response.add_cookie(&cookie);
             if referral.is_some() {
-                let _ = response.add_removal_cookie(&Cookie::build(REFERRAL_COOKIE, "").path("/").finish());
+                let removal = Cookie::build(REFERRAL_COOKIE, "").path("/").secure(true).finish();
+                let _ = response.add_removal_cookie(&removal);
             }
             return response;
         }

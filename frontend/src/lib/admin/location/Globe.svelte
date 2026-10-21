@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { untrack } from "svelte";
     import type { LocationCountry } from "../types";
     import { country_name, dim, load_world, scale, small } from "./geo";
 
@@ -16,16 +16,34 @@
     let canvas = $state<HTMLCanvasElement>();
     let hovered = $state<{ code: string; x: number; y: number } | null>(null);
     let failed = $state(false);
+    let attempt = $state(0);
+    let playing = $state(true);
+    let still = $state(false);
+    let pointed = $state(false);
+    let focused = $state(false);
+    let kick: (() => void) | null = null;
 
     const max = $derived(Math.max(0, ...[...countries.values()].map((c) => c.users)));
     const total = $derived([...countries.values()].reduce((sum, c) => sum + c.users, 0));
     const stats = $derived(hovered ? countries.get(hovered.code) : undefined);
     const rate = (part: number, whole: number) => `${Math.round((part / whole) * 100)}%`;
+    const spinning = () => playing && !still && !pointed && !focused;
 
-    onMount(() => {
+    $effect(() => {
+        void [playing, pointed, focused, selected, countries, hovered?.code];
+        kick?.();
+    });
+
+    $effect(() => {
+        void attempt;
+        return untrack(start);
+    });
+
+    function start() {
         let frame = 0;
         let stopped = false;
         let cleanup = () => {};
+        still = matchMedia("(prefers-reduced-motion: reduce)").matches;
         Promise.all([import("d3-geo"), load_world()]).then(([d3, world]) => {
             if (stopped || !canvas) return;
             const surface = canvas;
@@ -34,7 +52,6 @@
             const path = d3.geoPath(projection, context);
             const sphere = { type: "Sphere" } as const;
             const graticule = d3.geoGraticule10();
-            const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
             let rotation: [number, number] = [-20, -20];
             let target: [number, number] | null = null;
             let dragging: { x: number; y: number; from: [number, number] } | null = null;
@@ -43,7 +60,15 @@
             let pointer: [number, number] | null = null;
             let size = 0;
             let last = performance.now();
-            let focused: string | null = null;
+            let shown: string | null = null;
+            let visible = true;
+
+            const request = () => {
+                if (frame || !visible || document.hidden) return;
+                last = performance.now();
+                frame = requestAnimationFrame(draw);
+            };
+            kick = request;
 
             const resize = new ResizeObserver(() => {
                 const ratio = devicePixelRatio || 1;
@@ -52,8 +77,15 @@
                 surface.height = size * ratio;
                 context.setTransform(ratio, 0, 0, ratio, 0, 0);
                 projection.scale(size / 2 - 4).translate([size / 2, size / 2]);
+                request();
             });
             resize.observe(surface);
+
+            const seen = new IntersectionObserver(([entry]) => {
+                visible = entry.isIntersecting;
+                request();
+            });
+            seen.observe(surface);
 
             const at = (event: PointerEvent) => {
                 const box = surface.getBoundingClientRect();
@@ -78,25 +110,29 @@
             }
 
             function draw(now: number) {
+                frame = 0;
                 const dt = Math.min(100, now - last);
                 last = now;
-                if (selected !== focused) {
-                    focused = selected;
+                if (selected !== shown) {
+                    shown = selected;
                     const country = world.find((c) => c.code === selected);
                     const at = country ? d3.geoCentroid(country) : selected && small[selected];
                     if (at) target = [-at[0], Math.max(-60, Math.min(60, -at[1]))];
                 }
+                let turned = false;
                 if (target && !dragging) {
                     const step = still ? 1 : Math.min(1, dt / 250);
                     const delta = ((target[0] - rotation[0] + 540) % 360) - 180;
                     rotation = [rotation[0] + delta * step, rotation[1] + (target[1] - rotation[1]) * step];
                     if (Math.abs(delta) < 0.1 && Math.abs(target[1] - rotation[1]) < 0.1) target = null;
-                } else if (!dragging && now > resume) {
+                    turned = true;
+                } else if (!dragging && spinning() && now > resume) {
                     const ease = Math.min(1, (now - resume) / 1000);
                     rotation = [rotation[0] + dt * 0.006 * ease, rotation[1]];
+                    turned = true;
                 }
                 projection.rotate(rotation);
-                if (pointer && !dragging) {
+                if (turned && pointer && !dragging) {
                     const code = find(...pointer);
                     if (code !== hovered?.code)
                         hovered = code ? { code, x: pointer[0], y: pointer[1] } : null;
@@ -147,9 +183,9 @@
                 context.strokeStyle = "#4f2f1f";
                 context.lineWidth = 2;
                 context.stroke();
-                frame = requestAnimationFrame(draw);
+                if (target || (!dragging && spinning())) request();
             }
-            frame = requestAnimationFrame(draw);
+            request();
 
             const down = (event: PointerEvent) => {
                 const [x, y] = at(event);
@@ -161,6 +197,7 @@
             const move = (event: PointerEvent) => {
                 const [x, y] = at(event);
                 pointer = [x, y];
+                if (event.pointerType === "mouse") pointed = true;
                 if (dragging) {
                     const [dx, dy] = [x - dragging.x, y - dragging.y];
                     if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
@@ -169,35 +206,48 @@
                         dragging.from[0] + dx * speed,
                         Math.max(-70, Math.min(70, dragging.from[1] - dy * speed)),
                     ];
+                    request();
                 }
                 const code = dragging ? null : find(x, y);
                 hovered = code ? { code, x, y } : null;
+            };
+            const release = () => {
+                if (dragging) resume = performance.now() + 3000;
+                dragging = null;
+                request();
             };
             const up = (event: PointerEvent) => {
                 const [x, y] = at(event);
                 if (dragging && !moved) {
                     const code = find(x, y);
+                    hovered = code ? { code, x, y } : null;
                     if (code && countries.get(code)) onselect(code);
                 }
-                if (dragging) resume = performance.now() + 3000;
-                dragging = null;
+                release();
             };
-            const leave = () => {
+            const leave = (event: PointerEvent) => {
+                pointed = false;
+                if (event.pointerType === "touch") return;
                 pointer = null;
                 hovered = null;
             };
+            const shown_again = () => request();
             surface.addEventListener("pointerdown", down);
             surface.addEventListener("pointermove", move);
             surface.addEventListener("pointerup", up);
-            surface.addEventListener("pointercancel", up);
+            surface.addEventListener("pointercancel", release);
             surface.addEventListener("pointerleave", leave);
+            document.addEventListener("visibilitychange", shown_again);
             cleanup = () => {
+                kick = null;
                 resize.disconnect();
+                seen.disconnect();
                 surface.removeEventListener("pointerdown", down);
                 surface.removeEventListener("pointermove", move);
                 surface.removeEventListener("pointerup", up);
-                surface.removeEventListener("pointercancel", up);
+                surface.removeEventListener("pointercancel", release);
                 surface.removeEventListener("pointerleave", leave);
+                document.removeEventListener("visibilitychange", shown_again);
             };
         }, () => (failed = true));
         return () => {
@@ -205,16 +255,33 @@
             cancelAnimationFrame(frame);
             cleanup();
         };
-    });
+    }
+
+    function retry() {
+        failed = false;
+        attempt++;
+    }
 </script>
 
-<div class="globe">
+<div
+    class="globe"
+    onfocusin={() => (focused = true)}
+    onfocusout={() => (focused = false)}
+>
     {#if failed}
-        <p class="note">The globe couldn't load. Reload to try again.</p>
+        <div class="failed" role="alert">
+            <p class="note">The globe couldn't load.</p>
+            <button type="button" onclick={retry}>Retry</button>
+        </div>
     {:else}
         <canvas bind:this={canvas}>
-            Spinning globe shading each country by how many people are from there. The country list has the same numbers.
+            Globe shading each country by how many people are from there. The country list has the same numbers.
         </canvas>
+        {#if !still}
+            <button type="button" class="toggle" onclick={() => (playing = !playing)}
+                >{playing ? "Pause rotation" : "Play rotation"}</button
+            >
+        {/if}
         {#if hovered}
             <div
                 class="tip"
@@ -259,7 +326,47 @@
         width: 100%;
         aspect-ratio: 1;
         cursor: grab;
-        touch-action: none;
+        touch-action: pan-y;
+    }
+
+    .failed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+    }
+
+    button {
+        min-height: 2rem;
+        padding: 0.3rem 0.6rem;
+        background: #4f2f1f;
+        border: none;
+        color: #ead7c2;
+        font: inherit;
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+            background-color 0.3s,
+            color 0.3s;
+    }
+
+    .toggle {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+    }
+
+    button:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
+    @media (hover: hover) {
+        button:hover {
+            background: #ead7c2;
+            color: #4f2f1f;
+        }
     }
 
     canvas:active {
@@ -318,7 +425,7 @@
 
     .note {
         margin: 0;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.85rem;
     }
 </style>

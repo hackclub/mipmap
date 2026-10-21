@@ -14,3 +14,15 @@ export const purchase_item = (id: number) =>
 
 export const skip_sticker = () =>
   mutate("/api/skip-sticker", { method: "POST" });
+
+const messages: Record<string, string> = {
+  "already unlocked": "You've already unlocked this",
+  "unknown node": "This item doesn't exist anymore, try reloading the page",
+  "unknown item": "This item doesn't exist anymore, try reloading the page",
+  "item not unlocked": "Unlock this item before redeeming it",
+  "Item already redeemed": "You've already redeemed this item",
+  "Sticker already skipped": "You've already skipped the sticker",
+  "No Tokens available": "You don't have any Tokens to spend",
+};
+
+export const friendly = (error: string) => messages[error] ?? error;

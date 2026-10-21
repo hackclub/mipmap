@@ -236,6 +236,8 @@
         { key: "Goodbye", say: goodbye, center: true, frame: "home" },
     ];
 
+    export const tutorial = $state({ mips: 0 });
+
     export const index = (key: string) =>
         steps.findIndex((step) => step.key === key);
 </script>
@@ -277,16 +279,16 @@
     goes. Higher tiers earn more points towards prizes
     <ul>
         <li>
-            Tier Quebec: 2D games without an engine,
-            maybe in a JS canvas?
+            Tier Quebec: 2D games without engines using
+            simpler libraries, maybe a JS canvas?
         </li>
         <li>
-            Tier Romeo: 3D games in most low level
-            graphics libraries
+            Tier Romeo: 2D or 3D games in most low-level
+            graphics libraries (OpenGL, DirectX, BGFX, etc.)
         </li>
         <li>
-            Tier Sierra: 3D game in either Vulkan, a
-            software renderer (no graphics libraries), or on bare metal
+            Tier Sierra: a 3D game in Vulkan, a software
+            renderer (no graphics libraries), or on bare metal
         </li>
     </ul>
 {/snippet}
@@ -343,7 +345,7 @@
 {/snippet}
 
 {#snippet practice()}
-    I'll give you 120 Mips for the sticker!
+    I'll give you {tutorial.mips || "some"} Mips for the sticker!
 {/snippet}
 
 {#snippet unlock_sticker()}

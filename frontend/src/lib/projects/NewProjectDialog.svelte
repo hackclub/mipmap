@@ -17,6 +17,7 @@
     submit="Create"
     width="32rem"
     valid={!!name.trim()}
+    problem="Give your project a name first"
     onsubmit={async () => {
         await create_project(name.trim());
         onsaved?.();
@@ -28,6 +29,7 @@
         label="Name"
         bind:value={name}
         maxlength={100}
+        required
         focus
         data-tour="name"
     />

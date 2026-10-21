@@ -6,6 +6,7 @@ export class Pages<T extends { id: number }> {
   error = $state("");
   loading = $state(false);
   done = $state(false);
+  removed = $state.raw<{ index: number } | null>(null);
   #run = 0;
 
   constructor(private fetcher: (before?: number) => Promise<T[]>) {}
@@ -17,14 +18,18 @@ export class Pages<T extends { id: number }> {
     return this.more();
   };
 
-  more = async () => {
+  refresh = () => this.#load(undefined, true);
+
+  more = () => this.#load(this.items.at(-1)?.id, false);
+
+  #load = async (before: number | undefined, replace: boolean) => {
     const run = ++this.#run;
     this.loading = true;
     this.error = "";
     try {
-      const items = await this.fetcher(this.items.at(-1)?.id);
+      const items = await this.fetcher(before);
       if (run !== this.#run) return;
-      this.items = [...this.items, ...items];
+      this.items = replace ? items : [...this.items, ...items];
       this.done = items.length < page_size;
     } catch (e) {
       if (run === this.#run) this.error = message(e);
@@ -38,6 +43,9 @@ export class Pages<T extends { id: number }> {
   };
 
   remove = (id: number) => {
+    const index = this.items.findIndex((item) => item.id === id);
+    if (index < 0) return;
     this.items = this.items.filter((item) => item.id !== id);
+    this.removed = { index };
   };
 }

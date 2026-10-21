@@ -6,12 +6,16 @@
     import type { Project } from "$lib/projects/types";
     import type { TreeNode } from "$lib/tree/types";
     import { message } from "$lib/api";
+    import { dashboard } from "$lib/dashboard/state.svelte";
     import { STICKER, STICKER_TOKEN } from "$lib/tree/tutorial";
+    import { scroll_focus } from "$lib/ui/scroll_focus";
+    import { word_at } from "$lib/words";
     import Avatar from "$lib/onboarding/Avatar.svelte";
     import { finish, grant_mips, join_slack, save_step } from "$lib/onboarding/api";
     import {
         index,
         steps,
+        tutorial,
         type Context,
         type Frame,
         type Hole,
@@ -104,6 +108,9 @@
     let controls_height = $state(0);
     let controls: HTMLDivElement;
     let root: HTMLDivElement;
+    let next_button = $state<HTMLButtonElement>();
+    let visual_top = $state(0);
+    let visual_height = $state(0);
     let dialog_open = $state(false);
     let text = $state<HTMLDivElement>();
     let choices = $state<HTMLDivElement>();
@@ -121,11 +128,19 @@
     let talk_timer = 0;
     let switch_timer = 0;
     let switching = false;
+    let creating = false;
     let opened: HTMLElement | null = null;
     let settle_until = 0;
     let tilt_timer = 0;
     let reframe_timer = 0;
+    let finish_timer = 0;
+    let aim_timer = 0;
+    let aim_due = 0;
     let furthest = -1;
+    let wake: (ms?: number) => void = () => {};
+
+    const reduced = () =>
+        matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const current = $derived<Step | undefined>(steps[at]);
     const target = $derived(
@@ -151,7 +166,12 @@
     );
     const first = $derived(steps.findIndex((step) => !skipped(step)));
     const reserve = $derived(controls_height + margin);
-    const narrow = $derived(view_width < 760 || view_width < view_height);
+    const narrow = $derived(
+        view_width < 760 || view_width < view_height || view_height < 500,
+    );
+    const squeezed = $derived(
+        visual_height > 0 && visual_height < view_height - 80,
+    );
     const column_width = $derived(
         Math.min(Math.max(352, view_width * 0.24), 520, view_width - 2 * margin),
     );
@@ -171,6 +191,7 @@
                     reserve -
                     (place.layout === "column" ? avatar_size + 14 : 0),
                 place.layout === "row" ? view_height * 0.38 : Infinity,
+                squeezed ? visual_height * 0.3 : Infinity,
             ),
         ),
     );
@@ -249,6 +270,11 @@
                 return inside('[data-tour="tier"]');
             case "hackatime":
                 return inside('[data-tour="hackatime"]');
+            case "sticker":
+            case "token":
+                return document.querySelector<HTMLElement>(
+                    `button[data-node="${hole === "sticker" ? STICKER : STICKER_TOKEN}"]`,
+                );
         }
     }
 
@@ -345,7 +371,7 @@
                 layout: "row",
                 side: "top",
                 x: margin,
-                y: margin,
+                y: margin + (squeezed ? visual_top : 0),
                 width: view_width - 2 * margin,
             };
             if (narrow) return top;
@@ -446,7 +472,7 @@
                         : "24px";
                 el.scrollIntoView({
                     block: place.layout === "row" ? "start" : "center",
-                    behavior: "smooth",
+                    behavior: reduced() ? "instant" : "smooth",
                 });
             }
         }
@@ -463,6 +489,7 @@
             bottom: side === "bottom" ? guide_height + 2 * margin + reserve : 0,
         };
         panzoom.show(bounds, {
+            smooth: !reduced(),
             ms: fly_ms,
             padding: 32,
             cap: Infinity,
@@ -549,6 +576,7 @@
         let i = at - 1;
         while (i > first && skipped(steps[i])) i -= 1;
         rewind(Math.max(i, first));
+        next_button?.focus({ preventScroll: true });
     }
 
     async function end() {
@@ -575,18 +603,34 @@
         }
         phase = "out";
         talking = false;
-        setTimeout(onfinish, 900);
+        finish_timer = window.setTimeout(onfinish, 900);
     }
 
-    export function saved(kind: "new" | "edit") {
+    export async function saved(kind: "new" | "edit") {
         const step = current;
         if (!step) return;
         if (
-            (kind === "new" && step.wait === "created") ||
-            (kind === "edit" && step.wait === "saved")
+            !(kind === "new" && step.wait === "created") &&
+            !(kind === "edit" && step.wait === "saved")
         )
-            go(at + 1);
+            return;
+        if (kind === "new" && !target) {
+            creating = true;
+            try {
+                await dashboard.run();
+                await tick();
+            } finally {
+                creating = false;
+            }
+        }
+        if (current === step) go(at + 1);
     }
+
+    $effect(() => {
+        tutorial.mips =
+            (nodes.get(STICKER)?.price ?? 0) +
+            (nodes.get(STICKER_TOKEN)?.price ?? 0);
+    });
 
     let previous: Step | undefined;
     $effect(() => {
@@ -608,9 +652,11 @@
             }
             talking = false;
             clearTimeout(talk_timer);
-            talk_timer = window.setTimeout(
-                () => (talking = true),
-                phase === "in" ? 1150 : moved ? 700 : 200,
+            const delay = phase === "in" ? 1150 : moved ? 700 : 200;
+            talk_timer = window.setTimeout(() => (talking = true), delay);
+            aim_later(
+                step,
+                Math.max(delay, moved && !reduced() ? fly_ms + 100 : 0),
             );
             if (step.grant && !replay) run_grant();
             frame_step(step);
@@ -645,7 +691,7 @@
         const step = current;
         if (!step?.dialog || !step.resume || dialog) return;
         untrack(() => {
-            if (!switching) go(Math.max(index(step.resume!), 0));
+            if (!switching && !creating) go(Math.max(index(step.resume!), 0));
         });
     });
 
@@ -688,6 +734,10 @@
         let timer = 0;
         untrack(() => {
             let paths = branches();
+            if (reduced()) {
+                demo = new Set(paths.flat());
+                return;
+            }
             let depth = 0;
             const advance = () => {
                 const longest = Math.max(0, ...paths.map((path) => path.length));
@@ -733,7 +783,10 @@
             const open = modal();
             if (!open) return;
             open.style.scrollMarginBottom = `${reserve + margin}px`;
-            open.scrollIntoView({ block: "end", behavior: "smooth" });
+            open.scrollIntoView({
+                block: "end",
+                behavior: reduced() ? "instant" : "smooth",
+            });
         }, 400);
         return () => clearTimeout(timer);
     });
@@ -768,15 +821,18 @@
     }
 
     function onkeydown(e: KeyboardEvent) {
-        if (at < 0 || phase === "out") return;
-        if (e.key === "Escape") {
-            if (modal()) return;
-        } else if (usable(e.target as Node | null)) return;
+        if (at < 0 || phase === "out" || e.key === "Escape") return;
+        const target = e.target as Element | null;
+        if (usable(target)) return;
+        if (target && root.contains(target) && target.closest("a, button"))
+            return;
         if (
             e.ctrlKey ||
             e.metaKey ||
             e.altKey ||
-            /^(Shift|Control|Alt|Meta|Tab|Arrow\w+|Page\w+|Home|End|F\d+)$/.test(e.key)
+            /^(Shift|Control|Alt|Meta|Tab|Arrow\w+|Page\w+|Home|End|F\d+|[-+=_])$/.test(
+                e.key,
+            )
         )
             return;
         e.preventDefault();
@@ -784,7 +840,69 @@
         if (!e.repeat && (e.key === " " || e.key === "Enter")) next();
     }
 
+    function aim_later(step: Step, ms: number) {
+        clearTimeout(aim_timer);
+        aim_due = performance.now() + ms;
+        aim_timer = window.setTimeout(() => aim(step), ms);
+    }
+
+    function aim(step: Step) {
+        if (current !== step || phase === "out" || modal()) return;
+        if (step.wait === "slack-answer") return;
+        const active = document.activeElement;
+        const hole = step.wait && step.holes?.find((hole) => hole !== "dialog");
+        const el = hole && element(hole);
+        if (el) {
+            if (!el.contains(active)) el.focus({ preventScroll: true });
+            return;
+        }
+        if (
+            !active ||
+            active === document.body ||
+            (root.contains(active) && !active.closest(".text"))
+        )
+            next_button?.focus({ preventScroll: true });
+    }
+
     const focus = (node: HTMLElement) => node.focus({ preventScroll: true });
+
+    function wait_hint(step: Step) {
+        const pick = (tap: string, click: string) => (touch ? tap : click);
+        switch (step.wait) {
+            case "new-open":
+            case "edit-open":
+                return pick(
+                    "Tap the highlighted button",
+                    "Click the highlighted button or press Enter on it",
+                );
+            case "created":
+            case "saved":
+                return pick(
+                    "Tap the highlighted button when you're ready",
+                    "Click the highlighted button or press Enter on it when you're ready",
+                );
+            case "sticker-unlocked":
+            case "token-unlocked":
+            case "sticker-redeemed":
+                return dialog_open
+                    ? pick(
+                          "Press and hold the button in the popup",
+                          "Press and hold the button in the popup, or hold Space/Enter on it",
+                      )
+                    : pick(
+                          "Tap the highlighted node",
+                          "Click the highlighted node or press Enter on it",
+                      );
+        }
+        return "";
+    }
+
+    function ontext(e: MouseEvent) {
+        const at_point = e.target as Element;
+        if (at_point.closest("a")) return;
+        if (touch && word_at(e.clientX, e.clientY)) return;
+        if (!blocking && !picking) next();
+    }
 
     function portal(node: HTMLElement) {
         document.body.appendChild(node);
@@ -809,10 +927,23 @@
         a.y === b.y &&
         a.width === b.width;
 
+    function lost() {
+        const edge = 24;
+        return measure().some(
+            (shape) =>
+                shape.left + shape.width < edge ||
+                shape.top + shape.height < edge ||
+                shape.left > view_width - edge ||
+                shape.top > view_height - edge,
+        );
+    }
+
     function reframe(camera: boolean, delay: number) {
         clearTimeout(reframe_timer);
         reframe_timer = window.setTimeout(() => {
-            if (current && phase !== "out") frame_step(current, camera);
+            if (!current || phase === "out") return;
+            if (camera && !lost()) return;
+            frame_step(current, camera);
         }, delay);
     }
 
@@ -823,9 +954,12 @@
 
     let pressed: { x: number; y: number } | null = null;
     const onwheel = (e: WheelEvent) => {
+        wake();
         if (on_camera(e.target)) reframe(true, 400);
     };
     const onpointerdown = (e: PointerEvent) => {
+        touch = e.pointerType !== "mouse";
+        wake();
         pressed = on_camera(e.target) ? { x: e.clientX, y: e.clientY } : null;
     };
     const onpointerup = (e: PointerEvent) => {
@@ -833,7 +967,27 @@
             reframe(true, 150);
         pressed = null;
     };
-    const onresize = () => reframe(false, 250);
+    const onresize = () => {
+        wake();
+        reframe(false, 250);
+    };
+    const onmotion = (e: Event) => {
+        if (e.type !== "pointermove" || (e as PointerEvent).buttons) wake();
+    };
+    const motion = [
+        "keydown",
+        "pointermove",
+        "pointerup",
+        "scroll",
+        "transitionrun",
+        "animationstart",
+    ];
+
+    $effect(() => {
+        void [at, phase, dialog, guide_height, controls_height];
+        void [view_width, view_height, visual_top, visual_height];
+        untrack(() => wake(fly_ms + 400));
+    });
 
     onMount(() => {
         touch = matchMedia("(pointer: coarse)").matches;
@@ -846,18 +1000,26 @@
             (step, i) => i < start && step.required && !skipped(step),
         );
         if (!replay && unfinished >= 0) start = unfinished;
-        go(start);
+        const begin = setTimeout(() => go(start), 100);
         const idle = setTimeout(() => {
             if (phase === "in") phase = "idle";
         }, 1400);
         let frame = 0;
+        let awake_until = 0;
         const loop = () => {
+            frame = 0;
             const open = !!modal();
-            if (open !== dialog_open) dialog_open = open;
+            if (open !== dialog_open) {
+                dialog_open = open;
+                if (!open && current)
+                    aim_later(current, Math.max(0, aim_due - performance.now()));
+            }
             const next_shapes = measure();
-            if (!same_shapes(next_shapes, shapes)) shapes = next_shapes;
+            let moving = !same_shapes(next_shapes, shapes);
+            if (moving) shapes = next_shapes;
             const next_place = placement();
             if (!same_place(next_place, place)) {
+                moving = true;
                 if (ready && Math.abs(next_place.x - place.x) > 40) {
                     tilt = next_place.x > place.x ? 10 : -10;
                     clearTimeout(tilt_timer);
@@ -865,10 +1027,49 @@
                 }
                 place = next_place;
             }
-            if (!ready && guide_height) requestAnimationFrame(() => (ready = true));
-            frame = requestAnimationFrame(loop);
+            if (moving) awake_until = Math.max(awake_until, performance.now() + 300);
+            if (!ready && guide_height && current)
+                requestAnimationFrame(() => (ready = true));
+            const until = Math.max(awake_until, settle_until);
+            if (!ready || performance.now() < until)
+                frame = requestAnimationFrame(loop);
         };
-        loop();
+        wake = (ms = 600) => {
+            awake_until = Math.max(awake_until, performance.now() + ms);
+            if (!frame) frame = requestAnimationFrame(loop);
+        };
+        wake(2000);
+        const changes = new MutationObserver((records) => {
+            if (records.some((record) => !root.contains(record.target))) wake();
+        });
+        changes.observe(document.body, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true,
+        });
+        const onload = () => wake();
+        document.addEventListener("load", onload, true);
+        document.fonts.addEventListener("loadingdone", onload);
+        const visual = window.visualViewport;
+        const onvisual = () => {
+            if (!visual) return;
+            visual_top = visual.offsetTop;
+            visual_height = visual.height;
+            const active = document.activeElement;
+            if (
+                squeezed &&
+                current?.dialog &&
+                active instanceof HTMLElement &&
+                modal()?.contains(active)
+            ) {
+                active.style.scrollMarginTop = `${guide_height + 2 * margin + 24}px`;
+                active.scrollIntoView({ block: "nearest" });
+            }
+        };
+        onvisual();
+        visual?.addEventListener("resize", onvisual);
+        visual?.addEventListener("scroll", onvisual);
         window.addEventListener("keydown", onkeydown, true);
         for (const type of ["pointerdown", "mousedown", "click"])
             window.addEventListener(type, guard, true);
@@ -877,13 +1078,24 @@
         window.addEventListener("pointerup", onpointerup, true);
         window.addEventListener("pointercancel", onpointerup, true);
         window.addEventListener("resize", onresize);
+        for (const type of motion)
+            window.addEventListener(type, onmotion, { capture: true, passive: true });
         return () => {
+            clearTimeout(begin);
             clearTimeout(reframe_timer);
+            clearTimeout(finish_timer);
+            clearTimeout(aim_timer);
             cancelAnimationFrame(frame);
+            changes.disconnect();
+            document.removeEventListener("load", onload, true);
+            document.fonts.removeEventListener("loadingdone", onload);
+            wake = () => {};
             clearTimeout(idle);
             clearTimeout(talk_timer);
             clearTimeout(switch_timer);
             clearTimeout(tilt_timer);
+            visual?.removeEventListener("resize", onvisual);
+            visual?.removeEventListener("scroll", onvisual);
             window.removeEventListener("keydown", onkeydown, true);
             for (const type of ["pointerdown", "mousedown", "click"])
                 window.removeEventListener(type, guard, true);
@@ -892,6 +1104,8 @@
             window.removeEventListener("pointerup", onpointerup, true);
             window.removeEventListener("pointercancel", onpointerup, true);
             window.removeEventListener("resize", onresize);
+            for (const type of motion)
+                window.removeEventListener(type, onmotion, true);
         };
     });
 </script>
@@ -952,44 +1166,51 @@
         <div
             class="bubble"
             class:shown={talking}
-            role="status"
             style:max-height="{bubble_max}px"
         >
-            {#if current}
-                <div
-                    class="text"
-                    bind:this={text}
-                    role="presentation"
-                    onpointerdown={() =>
-                        (picking = !!modal()?.querySelector('[aria-expanded="true"]'))}
-                    onclick={() => {
-                        if (!blocking && !picking) next();
-                    }}
-                >
-                    <p>{@render current.say()}</p>
-                    {#if current.sub && (!current.sub_when || (!replay && current.sub_when(context())))}
-                        <p class="sub">{@render current.sub()}</p>
+            <div
+                class="text"
+                bind:this={text}
+                role="presentation"
+                data-scroll
+                {@attach scroll_focus}
+                onpointerdown={() =>
+                    (picking = !!modal()?.querySelector('[aria-expanded="true"]'))}
+                onclick={ontext}
+            >
+                <div role="status">
+                    {#if current}
+                        <p>{@render current.say()}</p>
+                        {#if current.sub && (!current.sub_when || (!replay && current.sub_when(context())))}
+                            <p class="sub">{@render current.sub()}</p>
+                        {/if}
                     {/if}
                 </div>
+            </div>
+            {#if current}
                 {#if failure}
                     <p class="hint">
-                        {failure.text}. {touch ? "Tap" : "Click"} to try again
+                        {failure.text}. {touch
+                            ? "Tap"
+                            : "Click or press Space/Enter"} to try again
                     </p>
                 {:else if current.wait === "slack-answer"}
-                    <div
-                        class="choices"
-                        tabindex="-1"
-                        bind:this={choices}
-                        {@attach focus}
-                    >
-                        <button type="button" disabled={busy} onclick={() => answer(true)}>
+                    <div class="choices" bind:this={choices}>
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onclick={() => answer(true)}
+                            {@attach focus}
+                        >
                             Yay
                         </button>
                         <button type="button" disabled={busy} onclick={() => answer(false)}>
                             Nay
                         </button>
                     </div>
-                {:else if !blocking && !busy}
+                {:else if blocking && !busy}
+                    <p class="hint">{wait_hint(current)}</p>
+                {:else if !busy}
                     <p class="hint">
                         {touch
                             ? "Tap anywhere to continue"
@@ -1004,6 +1225,7 @@
     </div>
     <div
         class="controls"
+        class:narrow
         bind:this={controls}
         bind:clientHeight={controls_height}
     >
@@ -1017,9 +1239,21 @@
         <button
             type="button"
             disabled={at <= first || busy}
-            onclick={() => rewind(first)}
+            aria-label={narrow ? "Restart Onboarding" : undefined}
+            onclick={() => {
+                rewind(first);
+                next_button?.focus({ preventScroll: true });
+            }}
         >
-            Restart Onboarding
+            {narrow ? "Restart" : "Restart Onboarding"}
+        </button>
+        <button
+            type="button"
+            disabled={blocking || busy || phase === "out"}
+            bind:this={next_button}
+            onclick={next}
+        >
+            {failure ? "Try again" : "Next"}
         </button>
     </div>
 </div>
@@ -1167,10 +1401,6 @@
         pointer-events: auto;
     }
 
-    .choices:focus {
-        outline: none;
-    }
-
     .controls {
         position: absolute;
         right: 1rem;
@@ -1195,8 +1425,17 @@
         font-weight: 700;
     }
 
+    .controls button {
+        min-height: 44px;
+    }
+
     .mips span {
-        color: #ff9a3d;
+        color: #ffb978;
+    }
+
+    .controls.narrow .mips,
+    .controls.narrow button {
+        padding: 0.45rem 0.8rem;
     }
 
     .choices button {
@@ -1208,6 +1447,7 @@
         font: inherit;
         font-size: 0.9em;
         font-weight: 700;
+        min-height: 44px;
     }
 
     .controls button,
@@ -1290,7 +1530,7 @@
     .hint {
         margin-top: 0.6rem;
         font-size: 0.7em;
-        opacity: 0.6;
+        opacity: 0.85;
     }
 
     @keyframes fade {

@@ -12,13 +12,20 @@
     let open = $state(false);
     let armed = true;
     let pointer = "";
+    let nearby_at = 0;
+
+    export function focus() {
+        toggle.focus();
+    }
 
     function grow(node: HTMLElement) {
         const { offsetWidth: width, offsetHeight: height } = node;
         const min = (node.previousElementSibling as HTMLElement).offsetWidth;
         const border = parseFloat(getComputedStyle(node).borderBottomWidth);
         return {
-            duration: 200,
+            duration: matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? 0
+                : 200,
             easing: cubicOut,
             css: (t: number) =>
                 `overflow: hidden; width: ${min + (width - min) * t}px; height: ${height * t}px; border-bottom-width: ${border * t}px`,
@@ -44,8 +51,10 @@
         if (e.pointerType !== "mouse") return;
         const d = distance(e);
         if (d >= reach()) armed = true;
-        if (!open && armed && d < reach()) open = true;
-        else if (open && d > 2 * reach()) close();
+        if (!open && armed && d < reach() && !menu.closest("[inert]")) {
+            open = true;
+            nearby_at = performance.now();
+        } else if (open && d > 2 * reach()) close();
     }}
     onpointerdown={(e) => {
         if (
@@ -59,7 +68,7 @@
     onblur={close}
 />
 
-<nav class="menu" bind:this={menu} aria-label="Sections">
+<nav class="menu" bind:this={menu} aria-label="Sections" data-overlay>
     <button
         bind:this={toggle}
         type="button"
@@ -68,7 +77,13 @@
         aria-expanded={open}
         onpointerdown={(e) => (pointer = e.pointerType)}
         onclick={() => {
-            open = pointer === "mouse" || !open;
+            const just_opened =
+                pointer === "mouse" &&
+                open &&
+                performance.now() - nearby_at < 1000;
+            if (open && !just_opened) close();
+            else open = true;
+            nearby_at = 0;
             pointer = "";
         }}
     >
@@ -81,7 +96,7 @@
         </svg>
     </button>
     {#if open}
-        <ul bind:this={list} transition:grow>
+        <ul bind:this={list} role="list" transition:grow>
             {#each items as item (item.label)}
                 <li>
                     <button
@@ -104,6 +119,7 @@
         bottom: 1rem;
         display: flex;
         flex-direction: column-reverse;
+        max-height: calc(100dvh - 2rem);
         overflow: hidden;
         background: #74472a;
         border: 2px solid #4f2f1f;
@@ -111,6 +127,9 @@
     }
 
     ul {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
         margin: 0;
         padding: 0;
         list-style: none;
@@ -143,6 +162,7 @@
     }
 
     .toggle {
+        flex: none;
         place-items: center;
         width: 3rem;
         padding: 0;

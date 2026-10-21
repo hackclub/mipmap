@@ -35,7 +35,7 @@
 
 <style>
     .label {
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
     }
 

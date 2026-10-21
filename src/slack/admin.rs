@@ -1,4 +1,4 @@
-use super::{RECIPIENTS, SendError, TEXT_LIMIT, UNCONFIRMED, mrkdwn};
+use super::{RECIPIENTS, SendError, TEXT_LIMIT, UNCONFIRMED, USER_FOR_SLACK_ID, mrkdwn};
 use crate::{
     admin::{Admin, admin_ids},
     error::{ApiError, reject, reject_with},
@@ -6,16 +6,16 @@ use crate::{
 use actix_web::{HttpResponse, get, http::StatusCode, post, web};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{PgConnection, PgExecutor, PgPool};
 
 const PAGE: i64 = 50;
 const THREADS: i64 = 100;
 const THREAD_MESSAGES: i64 = 200;
-const USER_FOR_SLACK_ID: &str = "(SELECT id FROM \"user\" WHERE slack_id = $1 ORDER BY deleted_at IS NOT NULL, id LIMIT 1)";
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((get_log, create_announcement, get_drafts, send_draft, dismiss_draft, refresh_draft, send_direct))
-        .service((get_threads, get_thread, reply, get_admins, get_templates));
+        .service((get_threads, get_thread, mark_read, reply, get_admins, get_templates));
 }
 
 fn text(text: &str) -> Result<&str, ApiError> {
@@ -102,9 +102,12 @@ async fn send_now(
     key: &str,
 ) -> Result<(), ApiError> {
     let key = dedupe_key(key)?;
-    let unsubscribed: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT EXISTS (SELECT 1 FROM slack_preference WHERE user_id = {USER_FOR_SLACK_ID} AND NOT enabled)"
-    )))
+    let unsubscribed: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM slack_preference p JOIN \"user\" u ON u.id = p.user_id
+             WHERE u.slack_id = $1 AND u.deleted_at IS NULL AND NOT p.enabled
+         )",
+    )
     .bind(slack_id)
     .fetch_one(pool)
     .await?;
@@ -155,11 +158,18 @@ async fn send_now(
             Ok(())
         }
         Err(error @ SendError::Unconfirmed(_)) => {
+            let mut tx = pool.begin().await?;
             sqlx::query("UPDATE slack_message SET failed_at = now(), error = $2 WHERE id = $1")
                 .bind(id)
                 .bind(UNCONFIRMED)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await?;
+            let summary = match kind {
+                "reply" => format!("Replied to {slack_id} on Slack, but Slack didn't confirm it"),
+                _ => format!("Sent a Slack DM to {slack_id}, but Slack didn't confirm it"),
+            };
+            audit(&mut *tx, admin_id, &format!("slack_{kind}"), user_id, summary).await?;
+            tx.commit().await?;
             Err(send_error(error))
         }
         Err(error) => {
@@ -278,17 +288,25 @@ async fn create_announcement(
     )
     .bind(text)
     .bind(admin_id)
-    .bind(key)
+    .bind(&key)
     .fetch_optional(&mut *tx)
     .await?
     else {
-        return Ok(HttpResponse::NoContent().finish());
+        drop(tx);
+        let recipients: i64 = sqlx::query_scalar(
+            "SELECT count(m.id) FROM slack_announcement a LEFT JOIN slack_message m ON m.announcement_id = a.id
+             WHERE a.dedupe_key = $1",
+        )
+        .bind(&key)
+        .fetch_one(pool.get_ref())
+        .await?;
+        return Ok(HttpResponse::Ok().json(json!({ "recipients": recipients })));
     };
     let recipients = broadcast(&mut tx, admin_id, id, "announcement", text).await?;
     let summary = format!("Sent Slack announcement #{id} to {}", people(recipients));
     audit(&mut *tx, admin_id, "slack_announcement", None, summary).await?;
     tx.commit().await?;
-    Ok(HttpResponse::NoContent().finish())
+    Ok(HttpResponse::Ok().json(json!({ "recipients": recipients })))
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -466,7 +484,7 @@ async fn get_threads(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, 
          ) last
          LEFT JOIN LATERAL (
              SELECT id, first_name, last_name FROM \"user\" WHERE slack_id = t.slack_id
-             ORDER BY deleted_at IS NOT NULL, id LIMIT 1
+             ORDER BY deleted_at IS NOT NULL, GREATEST(last_activity_at, last_login_at) DESC NULLS LAST, id DESC LIMIT 1
          ) u ON true
          ORDER BY t.unread > 0 DESC, last.at DESC LIMIT $1",
     )
@@ -499,16 +517,21 @@ async fn thread(pool: &PgPool, slack_id: &str) -> sqlx::Result<Vec<Message>> {
     .fetch_all(pool)
     .await?;
     messages.reverse();
-    sqlx::query("UPDATE slack_message SET read_at = now() WHERE slack_id = $1 AND incoming AND read_at IS NULL")
-        .bind(slack_id)
-        .execute(pool)
-        .await?;
     Ok(messages)
 }
 
 #[get("/slack/threads/{slack_id}")]
 async fn get_thread(_: Admin, pool: web::Data<PgPool>, path: web::Path<String>) -> Result<HttpResponse, ApiError> {
     Ok(HttpResponse::Ok().json(thread(&pool, slack_id(&path)?).await?))
+}
+
+#[post("/slack/threads/{slack_id}/read")]
+async fn mark_read(_: Admin, pool: web::Data<PgPool>, path: web::Path<String>) -> Result<HttpResponse, ApiError> {
+    sqlx::query("UPDATE slack_message SET read_at = now() WHERE slack_id = $1 AND incoming AND read_at IS NULL")
+        .bind(slack_id(&path)?)
+        .execute(pool.get_ref())
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[derive(Deserialize)]

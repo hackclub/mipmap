@@ -1,12 +1,16 @@
 <script lang="ts">
-    import { tick } from "svelte";
+    import { onDestroy, tick } from "svelte";
     import { message } from "$lib/api";
     import { dashboard } from "$lib/dashboard/state.svelte";
     import AuthText from "$lib/ui/AuthText.svelte";
     import Cog from "$lib/ui/Cog.svelte";
     import Dialog, { refocus } from "$lib/ui/Dialog.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
-    import { ship_project } from "$lib/projects/api";
+    import {
+        ConnectionLost,
+        ship_project,
+        uploading,
+    } from "$lib/projects/api";
     import type { CheckEvent, Project } from "$lib/projects/types";
 
     let { project, onclose }: { project: Project; onclose: () => void } =
@@ -21,6 +25,23 @@
     let waiting = $state(false);
     let agreed = $state(false);
     let error = $state("");
+    let lost = $state(false);
+    let recheck = 0;
+    const landed = $derived(lost && project.status === "shipped");
+    const done = $derived(shipped || landed);
+    const queued = $derived(shipped ? waiting : project.awaiting_id);
+    const words: Record<CheckEvent["status"], string> = {
+        running: "checking",
+        passed: "passed",
+        unverified: "couldn't be verified",
+        failed: "failed",
+    };
+    const latest = $derived(checks.at(-1));
+    const summary = $derived(
+        running && latest
+            ? `${latest.label ?? latest.check}: ${words[latest.status]}`
+            : "",
+    );
     const submit_failed = $derived(
         checks.some(
             (entry) => entry.check === "submit" && entry.status === "failed",
@@ -40,19 +61,29 @@
         started = true;
         running = true;
         error = "";
+        lost = false;
+        clearTimeout(recheck);
         checks = [];
         try {
             ({ waiting } = await ship_project(project.id, apply));
             shipped = true;
         } catch (e) {
             error = message(e);
+            lost = e instanceof ConnectionLost;
             dashboard.run();
+            if (lost) recheck = window.setTimeout(dashboard.run, 60_000);
         } finally {
             running = false;
         }
         await tick();
         refocus(actions);
     }
+
+    $effect(() => {
+        if (landed) tick().then(() => refocus(actions));
+    });
+
+    onDestroy(() => clearTimeout(recheck));
 </script>
 
 <Dialog
@@ -71,10 +102,14 @@
         </label>
     {/if}
     {#if running}
-        <p class="note">Keep this tab open till' your project's done shipping!</p>
+        <p class="note">
+            Checking your project, this can take a minute. Closing the tab
+            won't cancel the ship
+        </p>
     {/if}
+    <p class="sr" role="status">{summary}</p>
     {#if checks.length}
-        <ol>
+        <ol aria-label="Ship checks">
             {#each checks as entry (entry.check)}
                 <li class={entry.status}>
                     <span class="marker" role="img" aria-label={entry.status}>
@@ -102,17 +137,18 @@
             {/each}
         </ol>
     {/if}
-    {#if shipped && waiting}
-        <p class="note">
+    {#if done && queued}
+        <p class="note" role="status">
             Your ship will be automatically submitted as soon as your ID
             verification comes through. This won't affect the date and time
             when you pressed the button, so you'll still count for previous
-            Limited Time Challenges and Fulfillment Rounds
+            Limited Time Challenges and Fulfillment Rounds. Ships wait up to 30
+            days for verification, then get cancelled
         </p>
-    {:else if shipped}
-        <p class="note">Shipped! It's waiting for review</p>
+    {:else if done}
+        <p class="note" role="status">Shipped! It's waiting for review</p>
     {/if}
-    {#if error}
+    {#if error && !landed}
         <p class="note" role="alert">
             {#if submit_failed}
                 Submission failed. Try again once or twice, then bug
@@ -125,15 +161,19 @@
         </p>
     {/if}
     <div class="actions" bind:this={actions}>
-        {#if shipped}
+        {#if done}
             <MipmapButton type="button" onclick={onclose}>Close</MipmapButton>
         {:else if error}
-            <MipmapButton type="button" onclick={ship}>Try again</MipmapButton>
+            <MipmapButton
+                type="button"
+                disabled={uploading.has(project.id)}
+                onclick={ship}>Try again</MipmapButton
+            >
         {:else}
             <MipmapButton
                 type="button"
                 data-autofocus
-                disabled={running || !agreed}
+                disabled={running || !agreed || uploading.has(project.id)}
                 onclick={ship}
             >
                 Ship
@@ -159,11 +199,13 @@
 
     .agree input {
         flex: none;
+        box-sizing: border-box;
         width: 1.25em;
         height: 1.25em;
         margin: 0;
         appearance: none;
         background: #4f2f1f;
+        border: 1px solid #d6ab70;
         cursor: pointer;
     }
 
@@ -174,6 +216,21 @@
 
     .agree input:focus-visible {
         outline: 2px solid #ead7c2;
+    }
+
+    @media (forced-colors: active) {
+        .agree input {
+            appearance: auto;
+        }
+    }
+
+    .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
     ol {

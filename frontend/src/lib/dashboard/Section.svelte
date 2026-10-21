@@ -31,7 +31,7 @@
     style:height="{bounds.height}px"
 >
     <header>
-        <h2 id={uid}>{title}</h2>
+        <h2 id={uid} tabindex="-1" data-heading={title}>{title}</h2>
         {@render actions?.()}
     </header>
     <div class="body" class:padded data-scroll style:zoom {@attach scroll_focus}>
@@ -70,6 +70,15 @@
         line-height: 1.15;
     }
 
+    h2:focus {
+        outline: none;
+    }
+
+    h2:focus-visible {
+        outline: 3px solid #e8c58c;
+        outline-offset: -3px;
+    }
+
     header > :global(button) {
         width: 12rem;
         padding: 0;
@@ -102,6 +111,11 @@
         flex: 1;
         min-height: 0;
         overflow: auto;
+        touch-action: none;
+    }
+
+    .body:global([tabindex]) {
+        touch-action: pan-y;
     }
 
     .body:focus-visible {

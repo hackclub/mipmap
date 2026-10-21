@@ -15,16 +15,29 @@
         challenges.filter((c) => c.starts <= now && now < c.ends),
     );
 
-    function countdown(ends: number) {
+    function parts(ends: number) {
         const seconds = Math.max(0, Math.floor((ends - now) / 1000));
         return [
             Math.floor(seconds / 86400),
             Math.floor(seconds / 3600) % 24,
             Math.floor(seconds / 60) % 60,
             seconds % 60,
-        ]
-            .map((part) => String(part).padStart(2, "0"))
-            .join(":");
+        ];
+    }
+
+    function countdown(ends: number) {
+        const [days, hours, minutes, seconds] = parts(ends);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+    }
+
+    function spoken(ends: number) {
+        const units = ["day", "hour", "minute"];
+        const said = parts(ends)
+            .slice(0, 3)
+            .map((n, i) => (n ? `${n} ${units[i]}${n === 1 ? "" : "s"}` : ""))
+            .filter(Boolean);
+        return said.length ? said.join(", ") : "less than a minute";
     }
 </script>
 
@@ -32,7 +45,11 @@
     {#each running as challenge}
         <article>
             <h3>{challenge.name}</h3>
-            <p class="countdown">Ends in {countdown(challenge.ends)}</p>
+            <p class="countdown">
+                <span aria-hidden="true" data-time={countdown(challenge.ends)}
+                ></span>
+                <span class="spoken">Ends in {spoken(challenge.ends)}</span>
+            </p>
             <p class="description">{challenge.description}</p>
             <p class="fine">
                 Project must be shipped before the Challenge's countdown deadline. Reviewers
@@ -68,13 +85,26 @@
     .fine {
         margin-top: 0.5rem;
         font-size: 0.75em;
-        opacity: 0.75;
+        opacity: 0.85;
     }
 
     .countdown {
         margin-bottom: 0.5rem;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.85em;
         font-variant-numeric: tabular-nums;
+    }
+
+    .countdown [data-time]::before {
+        content: "Ends in " attr(data-time);
+    }
+
+    .spoken {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 </style>

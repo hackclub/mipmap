@@ -30,7 +30,7 @@ export function ramp(t: number) {
   return mix(stops[i], stops[i + 1], at - i);
 }
 
-export const dim = (t: number) => ramp(t * 0.6);
+export const dim = (t: number) => ramp(0.25 + t * 0.35);
 
 export const scale = (users: number, max: number) =>
   max <= 0 ? 0 : Math.log1p(users) / Math.log1p(max);
@@ -54,6 +54,9 @@ export function load_world() {
     for (const feature of collection.features)
       feature.code = (numeric as Record<string, string>)[String(feature.id)];
     return collection.features;
+  }).catch((error) => {
+    world = undefined;
+    throw error;
   });
   return world;
 }

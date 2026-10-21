@@ -1,6 +1,52 @@
 <script lang="ts" module>
-    const open: { node: HTMLElement; restore: HTMLElement[] }[] = [];
+    type Restore = { el: HTMLElement; trail: Element[] };
+    const open: { node: HTMLElement; restore: Restore[] }[] = [];
     const holds = new Map<Element, number>();
+    let unlock: (() => void) | null = null;
+
+    const focusable =
+        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+    const usable = (el: Element): el is HTMLElement =>
+        el instanceof HTMLElement && el.isConnected && !el.closest("[inert]");
+    const shown = (el: Element): el is HTMLElement =>
+        usable(el) && !el.matches(":disabled") && el.getClientRects().length > 0;
+
+    function trail(el: Element) {
+        const chain: Element[] = [];
+        for (
+            let at = el.parentElement;
+            at && at !== document.body;
+            at = at.parentElement
+        )
+            chain.push(at);
+        return chain;
+    }
+
+    function fallback(restore: Restore[]) {
+        for (const { trail } of restore)
+            for (const ancestor of trail) {
+                if (!usable(ancestor)) continue;
+                const target = [
+                    ...ancestor.querySelectorAll<HTMLElement>(focusable),
+                ].find(shown);
+                if (target) return target;
+            }
+        const main = document.querySelector<HTMLElement>("main, [role=main]");
+        if (main && !main.hasAttribute("tabindex")) main.tabIndex = -1;
+        return main;
+    }
+
+    function lock() {
+        const html = document.documentElement;
+        const { overflow, paddingRight } = html.style;
+        const gap = innerWidth - html.clientWidth;
+        html.style.overflow = "hidden";
+        if (gap > 0) html.style.paddingRight = `${gap}px`;
+        return () => {
+            html.style.overflow = overflow;
+            html.style.paddingRight = paddingRight;
+        };
+    }
 
     export function refocus(
         container: HTMLElement | undefined,
@@ -32,14 +78,42 @@
         labelledby,
         corner = "top-left",
         width = "48rem",
+        busy = false,
         onclose,
     }: {
         children: Snippet;
         labelledby: string;
         corner?: "top-left" | "bottom-right";
         width?: string;
+        busy?: boolean;
         onclose?: () => void;
     } = $props();
+
+    let pressed = false;
+    let released = false;
+
+    function close() {
+        if (!busy) onclose?.();
+    }
+
+    function onkeydown(e: KeyboardEvent) {
+        if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+        if (e.defaultPrevented || open.at(-1)?.node !== overlay) return;
+        const target = e.target;
+        if (
+            target instanceof HTMLInputElement &&
+            target.type === "search" &&
+            target.value
+        ) {
+            e.preventDefault();
+            target.value = "";
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+        }
+        if (!onclose || busy) return;
+        e.preventDefault();
+        onclose();
+    }
 
     const big_size = 160;
     const small_size = 80;
@@ -142,9 +216,10 @@
         const parent = open.find((entry) => entry.node.contains(active));
         const entry = {
             node,
-            restore: [active, ...(parent?.restore ?? [])].filter(
-                (el): el is HTMLElement => el !== null,
-            ),
+            restore: [
+                ...(active ? [{ el: active, trail: trail(active) }] : []),
+                ...(parent?.restore ?? []),
+            ],
         };
         const background = [...document.body.children].filter(
             (el) =>
@@ -152,6 +227,7 @@
                 (holds.has(el) || !el.hasAttribute("inert")),
         );
         document.body.appendChild(node);
+        if (!open.length) unlock = lock();
         open.push(entry);
         background.forEach((el) => {
             holds.set(el, (holds.get(el) ?? 0) + 1);
@@ -170,17 +246,22 @@
                 el.removeAttribute("inert");
             });
             open.splice(open.indexOf(entry), 1);
+            if (!open.length) {
+                unlock?.();
+                unlock = null;
+            }
             node.remove();
             const focused = document.activeElement;
             if (open.some((other) => other.node.contains(focused))) return;
-            entry.restore
-                .find((el) => el.isConnected && !el.closest("[inert]"))
-                ?.focus({ preventScroll: true });
+            (
+                entry.restore.find(({ el }) => shown(el))?.el ??
+                fallback(entry.restore)
+            )?.focus({ preventScroll: true });
         };
     }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && onclose?.()} />
+<svelte:window {onkeydown} />
 
 <div
     class="overlay {corner}"
@@ -191,14 +272,21 @@
     out:dim
     role="presentation"
     onpointerdown={(e) => {
-        if (e.target === e.currentTarget) onclose?.();
+        pressed = e.target === e.currentTarget;
+        released = false;
+    }}
+    onpointerup={(e) => (released = pressed && e.target === e.currentTarget)}
+    onpointercancel={() => (pressed = released = false)}
+    onclick={(e) => {
+        if (released && e.target === e.currentTarget) close();
+        pressed = released = false;
     }}
 >
     <div
         class="dialog"
         tabindex="-1"
         out:drop
-        style:width="min(90vw, {width})"
+        style:width="min(100%, {width})"
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledby}
@@ -231,13 +319,14 @@
             </div>
         </div>
 
-        <div class="box">
+        <div class="box" class:closable={!!onclose}>
             {#if onclose}
                 <button
                     type="button"
                     class="close"
                     aria-label="Close"
-                    onclick={onclose}
+                    disabled={busy}
+                    onclick={close}
                 >
                     <svg viewBox="0 0 10 10" aria-hidden="true">
                         <path
@@ -271,7 +360,9 @@
         inset: 0;
         z-index: 1000;
         display: flex;
+        overflow-x: hidden;
         overflow-y: auto;
+        overscroll-behavior: contain;
         box-sizing: border-box;
         padding: max(5rem, var(--tour-top, 0px)) 1.5rem calc(2rem + var(--tour-space, 0px));
         background-color: rgba(0, 0, 0, 0.45);
@@ -377,12 +468,17 @@
         transition: opacity 0.3s;
     }
 
-    .close:focus-visible {
+    .close:focus-visible:not(:disabled) {
         opacity: 1;
     }
 
+    .close:disabled {
+        cursor: not-allowed;
+        opacity: 0.3;
+    }
+
     @media (hover: hover) {
-        .close:hover {
+        .close:hover:not(:disabled) {
             opacity: 1;
         }
     }
@@ -399,6 +495,11 @@
         font-size: calc(clamp(2rem, 4vw, 3.5rem) * 0.75);
         font-weight: 700;
         line-height: 1.15;
+        overflow-wrap: anywhere;
+    }
+
+    .closable :global(h2) {
+        padding-right: 1.75rem;
     }
 
     @keyframes dim {

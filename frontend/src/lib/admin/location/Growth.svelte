@@ -24,6 +24,7 @@
     let hovered = $state<number | null>(null);
 
     function hover(event: PointerEvent) {
+        if (!weeks.length) return (hovered = null);
         const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
         const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
         hovered = Math.round(ratio * (weeks.length - 1));
@@ -46,21 +47,21 @@
             {#each [0, 25, 50, 75, 100] as line (line)}
                 <line class="grid" x1="0" x2="100" y1={line} y2={line} />
             {/each}
-            {#each series as s, i (s.label)}
+            {#each series as s, i (i)}
                 <polyline
                     points={s.values.map((v, w) => `${x(w)},${y(v)}`).join(" ")}
                     stroke={styles[i % styles.length].color}
                     stroke-dasharray={styles[i % styles.length].dash}
                 />
             {/each}
-            {#if hovered !== null}
+            {#if hovered !== null && weeks[hovered]}
                 <line class="cursor" x1={x(hovered)} x2={x(hovered)} y1="0" y2="100" />
             {/if}
         </svg>
-        {#if hovered !== null}
+        {#if hovered !== null && weeks[hovered]}
             <div class="tip" class:left={x(hovered) > 60} style:left="{x(hovered)}%">
                 <strong>Week of {short_date(weeks[hovered])}</strong>
-                {#each series as s (s.label)}
+                {#each series as s, i (i)}
                     <span>{s.label}: {s.values[hovered].toLocaleString()}</span>
                 {/each}
             </div>
@@ -70,8 +71,29 @@
         <span>{weeks.length ? short_date(weeks[0]) : ""}</span>
         <span>{weeks.length ? short_date(weeks[weeks.length - 1]) : ""}</span>
     </div>
+    <table class="sr">
+        <caption>Total signups by week</caption>
+        <thead>
+            <tr>
+                <th scope="col">Week of</th>
+                {#each series as s, i (i)}
+                    <th scope="col">{s.label}</th>
+                {/each}
+            </tr>
+        </thead>
+        <tbody>
+            {#each weeks as week, w (week)}
+                <tr>
+                    <th scope="row">{short_date(week)}</th>
+                    {#each series as s, i (i)}
+                        <td>{s.values[w].toLocaleString()}</td>
+                    {/each}
+                </tr>
+            {/each}
+        </tbody>
+    </table>
     <ul class="legend">
-        {#each series as s, i (s.label)}
+        {#each series as s, i (i)}
             <li>
                 <svg viewBox="0 0 20 4" aria-hidden="true">
                     <line
@@ -100,7 +122,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
         text-align: right;
     }
@@ -161,8 +183,17 @@
         grid-column: 2;
         display: flex;
         justify-content: space-between;
-        color: #d6ab70;
+        color: #ead7c2;
         font-size: 0.75rem;
+    }
+
+    .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
     .legend {

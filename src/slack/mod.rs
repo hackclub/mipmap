@@ -19,6 +19,8 @@ pub use preferences::{pages, routes};
 
 pub const TEXT_LIMIT: usize = 3000;
 const CHANNELS_JSON: &str = include_str!("../../frontend/src/lib/assets/slack_channels.json");
+const USER_FOR_SLACK_ID: &str = "(SELECT id FROM \"user\" WHERE slack_id = $1
+    ORDER BY deleted_at IS NOT NULL, GREATEST(last_activity_at, last_login_at) DESC NULLS LAST, id DESC LIMIT 1)";
 const RECIPIENTS: &str =
     "u.slack_id IS NOT NULL AND u.deleted_at IS NULL AND NOT u.is_banned AND p.enabled";
 

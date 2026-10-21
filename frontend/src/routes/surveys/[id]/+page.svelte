@@ -16,20 +16,40 @@
     let texts = $state<Record<string, string>>({});
     const send = new Task();
 
-    const missing = $derived(
-        survey.questions.reduce(
-            (total, question) =>
-                question.type === "scale"
-                    ? total +
-                      question.items.filter(
-                          (item) => !ratings[question.key]?.[item.key],
-                      ).length
-                    : !question.optional && !texts[question.key]?.trim()
-                      ? total + 1
-                      : total,
-            0,
+    const unrated = $derived(
+        survey.questions.flatMap((question) =>
+            question.type === "scale"
+                ? question.items
+                      .filter((item) => !ratings[question.key]?.[item.key])
+                      .map((item) => item.label)
+                : [],
         ),
     );
+    const unanswered = $derived(
+        survey.questions.filter(
+            (question) =>
+                question.type === "text" &&
+                !question.optional &&
+                !texts[question.key]?.trim(),
+        ).length,
+    );
+    const missing = $derived(unrated.length + unanswered);
+    const missing_note = $derived(
+        unrated.length && unrated.length <= 3
+            ? `Rate ${unrated.length} more: ${unrated.join(", ")}`
+            : unrated.length
+              ? `Rate ${unrated.length} more`
+              : unanswered
+                ? `Answer ${unanswered} more`
+                : "",
+    );
+    const has_scale = $derived(
+        survey.questions.some((question) => question.type === "scale"),
+    );
+
+    function reveal(node: HTMLElement) {
+        node.focus();
+    }
 
     onMount(() => {
         for (const question of survey.questions) {
@@ -66,6 +86,12 @@
                     >{:else}{segment.text}{/if}{/each}
         </h1>
         <p class="note">Responses are anonymous</p>
+        {#if has_scale}
+            <p class="note">
+                Every rating is required (Unsure counts). Questions marked
+                optional can be left blank
+            </p>
+        {/if}
     </header>
 
     {#if status === "done"}
@@ -74,7 +100,9 @@
             thing tucked away in your browser's private local storage
         </p>
     {:else if status === "sent"}
-        <p class="status">Thanks! Your response has been recorded.</p>
+        <p class="status" role="status" tabindex="-1" {@attach reveal}>
+            Thanks! Your response has been recorded.
+        </p>
     {:else if status === "open"}
         <form onsubmit={submit}>
             {#each survey.questions as question (question.key)}
@@ -83,10 +111,13 @@
                 {:else}
                     <div class="text">
                         <Field
-                            label={question.label}
+                            label="{question.label} ({question.optional
+                                ? 'optional'
+                                : 'required'})"
                             multiline
                             rows={3}
                             maxlength={2000}
+                            required={!question.optional}
                             bind:value={texts[question.key]}
                         />
                     </div>
@@ -97,9 +128,7 @@
                     >Submit</MipmapButton
                 >
                 <p class="note" aria-live="polite">
-                    {missing
-                        ? `Rate ${missing} more`
-                        : send.error}
+                    {missing ? missing_note : send.error}
                 </p>
             </div>
         </form>
@@ -141,6 +170,7 @@
 
     .status {
         font-size: 1.25rem;
+        outline: none;
     }
 
     form {

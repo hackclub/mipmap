@@ -15,7 +15,7 @@ use actix_web::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{PgConnection, PgPool};
+use sqlx::{PgConnection, PgExecutor, PgPool};
 use std::{future::Future, pin::Pin};
 
 pub const PAGE: i64 = 50;
@@ -93,7 +93,7 @@ impl FromRequest for Admin {
 async fn page(req: HttpRequest) -> HttpResponse {
     match lookup(&req).await {
         Ok(Some(_)) => crate::html(&req, "admin").await,
-        Ok(None) => HttpResponse::NotFound().finish(),
+        Ok(None) => crate::not_found_page(),
         Err(e) => {
             log::error!("admin lookup failed: {e:#}");
             HttpResponse::InternalServerError().finish()
@@ -130,6 +130,16 @@ async fn record(
     .bind(reason)
     .execute(conn)
     .await?;
+    Ok(())
+}
+
+pub async fn record_read(db: impl PgExecutor<'_>, admin_id: i32, action: &str, summary: String) -> sqlx::Result<()> {
+    sqlx::query("INSERT INTO admin_action (admin_id, action, summary) VALUES ($1, $2, $3)")
+        .bind(admin_id)
+        .bind(action)
+        .bind(summary)
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -208,7 +218,7 @@ async fn fetch_ships(
              u.id AS user_id, concat_ws(' ', u.first_name, u.last_name) AS user_name, u.email,
              s.tier, s.review_status, s.rejected, s.hours, s.tracked_hours, s.mips_per_hour, s.multiplier,
              s.mips, s.bonus_percent, s.bonus_mips, s.created_at, s.approved_at,
-             s.record_id IS NULL AS awaiting_id, s.record_id
+             s.record_id IS NULL AND s.sending_at IS NULL AS awaiting_id, s.record_id
          FROM submission s JOIN project p ON p.id = s.project_id JOIN \"user\" u ON u.id = p.user_id
          WHERE s.deleted_at IS NULL
          AND ($1::int IS NULL OR s.id = $1)
@@ -269,17 +279,28 @@ async fn set_bonus(
     if !(0..=MAX_BONUS_MIPS).contains(&body.mips) {
         return Err(reject(format!("Raw bonuses must be from 0 to {MAX_BONUS_MIPS}")));
     }
-    let mut tx = pool.begin().await?;
-    let (project_id, project, user_id, percent, raw, before): (i32, String, i32, f64, i32, i32) =
-        sqlx::query_as(
-            "SELECT s.project_id, p.name, p.user_id, s.bonus_percent, s.bonus_mips, s.mips
-             FROM submission s JOIN project p ON p.id = s.project_id
-             WHERE s.id = $1 AND s.deleted_at IS NULL FOR UPDATE OF s",
-        )
+    let project_id: i32 = sqlx::query_scalar("SELECT project_id FROM submission WHERE id = $1 AND deleted_at IS NULL")
         .bind(id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(pool.get_ref())
         .await?
         .ok_or_else(|| reject("Unknown ship"))?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT id FROM submission WHERE project_id = $1 ORDER BY created_at, id FOR UPDATE")
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await?;
+    let (project, user_id, percent, raw, before): (String, i32, f64, i32, i32) = sqlx::query_as(
+        "SELECT p.name, p.user_id, s.bonus_percent, s.bonus_mips, s.mips
+         FROM submission s JOIN project p ON p.id = s.project_id
+         WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(project_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| reject("Unknown ship"))?;
+    not_self(admin_id, user_id)?;
+    not_admin(&mut tx, user_id).await?;
     sqlx::query("UPDATE submission SET bonus_percent = $2, bonus_mips = $3 WHERE id = $1")
         .bind(id)
         .bind(body.percent)
@@ -367,6 +388,8 @@ async fn shadowban(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| reject("Unknown Snapshot"))?;
+    not_self(admin_id, user_id)?;
+    not_admin(&mut tx, user_id).await?;
     let (action, verb) = if body.shadowbanned {
         ("shadowban", "Shadowbanned")
     } else {
@@ -427,13 +450,11 @@ async fn review_snapshot(
     body: web::Json<ReviewRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let id = id.into_inner();
-    let mut tx = pool.begin().await?;
-    let (user_id, author, image): (i32, String, Vec<u8>) = sqlx::query_as(
-        "SELECT user_id, display_name, held_image FROM snapshot
-         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL FOR UPDATE",
+    let image: Vec<u8> = sqlx::query_scalar(
+        "SELECT held_image FROM snapshot WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL",
     )
     .bind(id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(pool.get_ref())
     .await?
     .ok_or_else(|| reject("Unknown Snapshot"))?;
     let url = if body.approve {
@@ -441,6 +462,15 @@ async fn review_snapshot(
     } else {
         None
     };
+    let mut tx = pool.begin().await?;
+    let (user_id, author): (i32, String) = sqlx::query_as(
+        "SELECT user_id, display_name FROM snapshot
+         WHERE id = $1 AND deleted_at IS NULL AND held_image IS NOT NULL FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| reject("That Snapshot was already reviewed"))?;
     sqlx::query(
         "UPDATE snapshot SET held_image = NULL, image_url = COALESCE($2, image_url),
          deleted_at = CASE WHEN $2 IS NULL THEN now() END
@@ -533,7 +563,7 @@ async fn fetch_user(conn: &mut PgConnection, id: i32) -> sqlx::Result<UserRow> {
 
 #[get("/users")]
 async fn get_users(
-    _: Admin,
+    Admin(admin_id): Admin,
     pool: web::Data<PgPool>,
     query: web::Query<PageQuery>,
 ) -> Result<HttpResponse, ApiError> {
@@ -548,6 +578,12 @@ async fn get_users(
     .bind(PAGE)
     .fetch_all(pool.get_ref())
     .await?;
+    let search = query.q.as_deref().map(str::trim).filter(|q| !q.is_empty());
+    let summary = match search {
+        Some(q) => format!("Searched users for \"{}\" ({} shown)", q.chars().take(100).collect::<String>(), users.len()),
+        None => format!("Viewed the user list ({} shown)", users.len()),
+    };
+    record_read(pool.get_ref(), admin_id, "view_users", summary).await?;
     Ok(HttpResponse::Ok().json(mark_admins(users)))
 }
 
@@ -565,6 +601,17 @@ async fn lock_user(conn: &mut PgConnection, id: i32) -> Result<(String, i32, boo
 fn not_self(admin_id: i32, id: i32) -> Result<(), ApiError> {
     if admin_id == id {
         return Err(reject("You can't do that to your own account"));
+    }
+    Ok(())
+}
+
+async fn not_admin(conn: &mut PgConnection, id: i32) -> Result<(), ApiError> {
+    let hca_id: Option<String> = sqlx::query_scalar("SELECT hca_id FROM \"user\" WHERE id = $1")
+        .bind(id)
+        .fetch_optional(conn)
+        .await?;
+    if hca_id.is_some_and(|hca_id| admin_ids().contains(&hca_id)) {
+        return Err(reject("You can't do that to another admin's account"));
     }
     Ok(())
 }
@@ -598,6 +645,7 @@ async fn set_mips(
     not_self(admin_id, id)?;
     let mut tx = pool.begin().await?;
     let (name, before, _) = lock_user(&mut tx, id).await?;
+    not_admin(&mut tx, id).await?;
     sqlx::query("UPDATE \"user\" SET mips = $2 WHERE id = $1")
         .bind(id)
         .bind(body.mips)
@@ -638,6 +686,7 @@ async fn adjust_mips(
     not_self(admin_id, id)?;
     let mut tx = pool.begin().await?;
     let (name, before, _) = lock_user(&mut tx, id).await?;
+    not_admin(&mut tx, id).await?;
     let after = i64::from(before) + i64::from(body.change);
     if !(0..=i64::from(MAX_MIPS)).contains(&after) {
         return Err(reject(format!("That would leave them with {after} Mips, it has to be from 0 to {MAX_MIPS}")));
@@ -675,6 +724,7 @@ async fn ban(
     not_self(admin_id, id)?;
     let mut tx = pool.begin().await?;
     let (name, ..) = lock_user(&mut tx, id).await?;
+    not_admin(&mut tx, id).await?;
     sqlx::query("UPDATE \"user\" SET is_banned = $2 WHERE id = $1")
         .bind(id)
         .bind(body.banned)
@@ -717,7 +767,7 @@ const ORDER_SELECT: &str = "SELECT o.id, o.user_id, concat_ws(' ', u.first_name,
 
 #[get("/orders")]
 async fn get_orders(
-    _: Admin,
+    Admin(admin_id): Admin,
     pool: web::Data<PgPool>,
     query: web::Query<PageQuery>,
 ) -> Result<HttpResponse, ApiError> {
@@ -734,6 +784,8 @@ async fn get_orders(
     .bind(tree::STICKER as i32)
     .fetch_all(pool.get_ref())
     .await?;
+    let summary = format!("Viewed the order list with addresses ({} shown)", orders.len());
+    record_read(pool.get_ref(), admin_id, "view_orders", summary).await?;
     Ok(HttpResponse::Ok().json(orders))
 }
 
@@ -767,6 +819,10 @@ async fn fulfill(
         return Err(reject(format!("Tracking numbers can be at most {TRACKING_LIMIT} characters")));
     }
     let mut tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM \"user\" WHERE id = (SELECT user_id FROM \"order\" WHERE id = $1) FOR UPDATE")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     let (user_id, item): (i32, String) = sqlx::query_as(
         "UPDATE \"order\" SET fulfilled = $2, tracking_number = $3
          WHERE id = $1 AND deleted_at IS NULL RETURNING user_id, item_name",
@@ -1062,7 +1118,7 @@ fn csv_line<S: AsRef<str>>(fields: impl IntoIterator<Item = S>) -> String {
 }
 
 #[get("/stickers/waves/{id}/csv")]
-async fn wave_csv(_: Admin, pool: web::Data<PgPool>, id: web::Path<i32>) -> Result<HttpResponse, ApiError> {
+async fn wave_csv(Admin(admin_id): Admin, pool: web::Data<PgPool>, id: web::Path<i32>) -> Result<HttpResponse, ApiError> {
     let id = id.into_inner();
     let created_at: DateTime<Utc> = sqlx::query_scalar("SELECT created_at FROM sticker_wave WHERE id = $1")
         .bind(id)
@@ -1083,6 +1139,9 @@ async fn wave_csv(_: Admin, pool: web::Data<PgPool>, id: web::Path<i32>) -> Resu
     .bind(id)
     .fetch_all(pool.get_ref())
     .await?;
+    let plural = if rows.len() == 1 { "" } else { "es" };
+    let summary = format!("Exported sticker wave #{id} as CSV ({} address{plural})", rows.len());
+    record_read(pool.get_ref(), admin_id, "export_sticker_csv", summary).await?;
     let body = rows.iter().fold(csv_line(CSV_FIELDS), |body, row| body + &csv_line(row));
     let filename = format!("mipmap-stickers-{}-wave-{id}.csv", created_at.format("%Y-%m-%d"));
     Ok(HttpResponse::Ok()

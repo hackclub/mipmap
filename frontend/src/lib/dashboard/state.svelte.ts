@@ -45,29 +45,42 @@ export const account = $state({ suspended: false });
 
 const suspended = "Your account has been suspended";
 
-async function parse(response: Response) {
+async function parse<T = Dashboard>(response: Response) {
   if (response.status === 403) {
     const body = await response.clone().json().catch(() => ({}));
     if (body.error === suspended) account.suspended = true;
   }
-  return json<Dashboard>(response);
+  return json<T>(response);
 }
 
-export const dashboard = new Load(() => request("/api/dashboard").then(parse));
+export const dashboard = new Load(() =>
+  request("/api/dashboard").then((r) => parse(r)),
+);
 
 let pending = 0;
 let overlapped = false;
 
 export async function mutate(input: string, init: RequestInit) {
   if (pending++ > 0) overlapped = true;
-  let data: Dashboard | undefined;
+  let data: Dashboard | null | undefined;
   try {
-    data = await request(input, init).then(parse);
+    data = await request(input, init).then((r) =>
+      parse<Dashboard | null>(r),
+    );
   } finally {
     if (--pending === 0) {
-      if (overlapped) dashboard.run();
-      else if (data) dashboard.set(data);
+      const stale = overlapped || data === null;
       overlapped = false;
+      if (stale) await dashboard.run();
+      else if (data) dashboard.set(data);
     }
   }
+}
+
+let refreshing: Promise<void> | undefined;
+
+export function refresh() {
+  if (pending > 0) overlapped = true;
+  else
+    refreshing ??= dashboard.run().finally(() => (refreshing = undefined));
 }
