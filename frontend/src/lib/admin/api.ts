@@ -116,6 +116,8 @@ export const send_draft = (id: number) =>
   post<Draft[]>(`slack/drafts/${id}/send`, {});
 export const dismiss_draft = (id: number) =>
   post<Draft[]>(`slack/drafts/${id}/dismiss`, {});
+export const refresh_draft = (id: number) =>
+  post<Draft[]>(`slack/drafts/${id}/refresh`, {});
 
 const post_empty = (path: string, body: unknown) =>
   request(`/api/admin/${path}`, send_json("POST", body)).then(async (r) => {

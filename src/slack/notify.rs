@@ -203,6 +203,14 @@ pub async fn snapshot_reminder(pool: &PgPool, user_id: i32, totals: &Totals, pro
     Ok(())
 }
 
+pub fn current_text(key: &str) -> Option<String> {
+    if let Some(name) = key.strip_prefix("challenge:") {
+        let challenge = CHALLENGES.iter().find(|c| c.name == name)?;
+        return Some(messages::challenge(&challenge.name, &challenge.description));
+    }
+    Some(messages::round(key.strip_prefix("round:")?.parse().ok()?))
+}
+
 pub fn templates() -> Vec<(&'static str, String)> {
     let now = Utc::now();
     let today = now.date_naive();
@@ -268,11 +276,21 @@ fn eastern_at(date: NaiveDate, time: NaiveTime) -> DateTime<Utc> {
 
 #[cfg(test)]
 mod tests {
-    use super::eastern;
+    use super::{current_text, eastern, messages};
+    use chrono::NaiveDate;
 
     #[test]
     fn converts_eastern_wall_time() {
         assert_eq!(eastern("2026-10-15T12:00", false).unwrap().to_rfc3339(), "2026-10-15T16:00:00+00:00");
         assert_eq!(eastern("2026-12-01", true).unwrap().to_rfc3339(), "2026-12-02T05:00:00+00:00");
+    }
+
+    #[test]
+    fn rebuilds_draft_text_from_its_key() {
+        let ship_by = NaiveDate::from_ymd_opt(2026, 11, 1).unwrap();
+        assert_eq!(current_text("round:2026-11-01"), Some(messages::round(ship_by)));
+        assert_eq!(current_text("round:soon"), None);
+        assert_eq!(current_text("challenge:Not a real challenge"), None);
+        assert_eq!(current_text("admin:abc"), None);
     }
 }

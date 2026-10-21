@@ -14,7 +14,7 @@ const THREAD_MESSAGES: i64 = 200;
 const USER_FOR_SLACK_ID: &str = "(SELECT id FROM \"user\" WHERE slack_id = $1 ORDER BY deleted_at IS NOT NULL, id LIMIT 1)";
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service((get_log, create_announcement, get_drafts, send_draft, dismiss_draft, send_direct))
+    cfg.service((get_log, create_announcement, get_drafts, send_draft, dismiss_draft, refresh_draft, send_direct))
         .service((get_threads, get_thread, reply, get_admins, get_templates));
 }
 
@@ -343,6 +343,39 @@ async fn dismiss_draft(
     let draft = claim_draft(&mut tx, admin_id, id.into_inner(), "dismissed_at").await?;
     let summary = format!("Didn't send {} Slack message #{}", draft.kind, draft.id);
     audit(&mut *tx, admin_id, "slack_announcement", None, summary).await?;
+    tx.commit().await?;
+    Ok(HttpResponse::Ok().json(drafts(pool.get_ref()).await?))
+}
+
+#[post("/slack/drafts/{id}/refresh")]
+async fn refresh_draft(
+    Admin(admin_id): Admin,
+    pool: web::Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<HttpResponse, ApiError> {
+    let id = id.into_inner();
+    let mut tx = pool.begin().await?;
+    let (kind, key, old): (String, Option<String>, String) = sqlx::query_as(
+        "SELECT kind, dedupe_key, text FROM slack_announcement
+         WHERE id = $1 AND sent_at IS NULL AND dismissed_at IS NULL FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| reject("That message was already sent or skipped"))?;
+    let text = key
+        .as_deref()
+        .and_then(super::notify::current_text)
+        .ok_or_else(|| reject("The challenge or round this message is about is gone, so it can't be refreshed"))?;
+    if text != old {
+        sqlx::query("UPDATE slack_announcement SET text = $2 WHERE id = $1")
+            .bind(id)
+            .bind(&text)
+            .execute(&mut *tx)
+            .await?;
+        let summary = format!("Refreshed the wording of {kind} Slack message #{id}");
+        audit(&mut *tx, admin_id, "slack_announcement", None, summary).await?;
+    }
     tx.commit().await?;
     Ok(HttpResponse::Ok().json(drafts(pool.get_ref()).await?))
 }

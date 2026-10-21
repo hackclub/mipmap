@@ -10,6 +10,7 @@
         fetch_slack_admins,
         fetch_slack_log,
         fetch_slack_templates,
+        refresh_draft,
         send_announcement,
         send_direct,
         send_draft,
@@ -87,6 +88,18 @@
             log.reset();
         });
 
+    const refresh = (draft: Draft) =>
+        draft_action(async () => {
+            const updated = await refresh_draft(draft.id);
+            const same =
+                updated.find((other) => other.id === draft.id)?.text ===
+                draft.text;
+            notice = same
+                ? "That message already uses the current wording"
+                : "Updated to the current wording";
+            return updated;
+        });
+
     function who(entry: LogEntry) {
         if (entry.recipients > 1) return people(entry.recipients);
         return entry.user_name || entry.slack_id || "";
@@ -134,6 +147,11 @@
                                 onconfirm={() =>
                                     draft_action(() => send_draft(draft.id))}
                             />
+                            <button
+                                type="button"
+                                disabled={task.pending}
+                                onclick={() => refresh(draft)}>Refresh</button
+                            >
                             <button
                                 type="button"
                                 disabled={task.pending}
