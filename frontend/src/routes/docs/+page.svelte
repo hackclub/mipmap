@@ -227,6 +227,99 @@
         },
     ];
 
+    const roadmaps = [
+        {
+            name: "JavaScript canvas game",
+            steps: [
+                "Put a canvas on a page",
+                "Draw some rectangles",
+                "Set up a game loop",
+                "Keyboard and mouse input",
+                "Move a player around",
+                "Collisions",
+                "Sprites and animation",
+                "Sound and menus",
+                "Polish and ship it!",
+            ],
+        },
+        {
+            name: "OpenGL game",
+            steps: [
+                "Open a window",
+                "Load OpenGL and clear the screen",
+                "Your first triangle",
+                "Write some shaders",
+                "Textures",
+                "Transforms and a camera",
+                "Load models",
+                "Lighting",
+                "Input and gameplay",
+                "Polish and ship it!",
+            ],
+        },
+        {
+            name: "Vulkan game",
+            steps: [
+                "Open a window",
+                "Instance and device",
+                "Swapchain",
+                "Pipeline and shaders",
+                "Your first triangle",
+                "Vertex and uniform buffers",
+                "Descriptors and textures",
+                "Depth buffer and camera",
+                "Models and lighting",
+                "Input and gameplay",
+                "Polish and ship it!",
+            ],
+        },
+        {
+            name: "Software rendered game",
+            steps: [
+                "Get a pixel buffer on screen",
+                "Draw pixels and lines",
+                "Fill in triangles",
+                "Vectors and matrices",
+                "Project 3D onto the screen",
+                "Depth buffer",
+                "Shading and textures",
+                "Camera and input",
+                "Gameplay",
+                "Polish and ship it!",
+            ],
+        },
+    ];
+
+    let roadmap = $state(0);
+    let steps_width = $state(0);
+
+    const steps = $derived.by(() => {
+        const rem = steps_width
+            ? parseFloat(getComputedStyle(document.documentElement).fontSize)
+            : 16;
+        const width = steps_width || 40 * rem;
+        const gap = 2.5 * rem;
+        const columns = Math.max(
+            width - gap >= 14 * rem ? 2 : 1,
+            Math.floor((width + gap) / (9 * rem + gap)),
+        );
+        const size = Math.min(9 * rem, (width - (columns - 1) * gap) / columns);
+        const boxes = roadmaps[roadmap].steps.map((text, index) => ({
+            text,
+            x: (index % columns) * (size + gap),
+            y: Math.floor(index / columns) * (size + gap),
+        }));
+        const arrows = boxes.slice(1).map((next, index) => {
+            const { x, y } = boxes[index];
+            if (next.y === y)
+                return `M${x + size + 4} ${y + size / 2}H${next.x - 4}m-6 -6l6 6l-6 6`;
+            const end_x = next.x + size / 2;
+            return `M${x + size / 2} ${y + size + 4}v${gap / 2 - 4}H${end_x}V${next.y - 4}m-6 -6l6 6l6 -6`;
+        });
+        const rows = Math.ceil(boxes.length / columns);
+        return { boxes, arrows, size, height: rows * size + (rows - 1) * gap };
+    });
+
     const misc = [
         {
             text: "Calculate normal of a single triangle in 3D space",
@@ -249,9 +342,70 @@
     <header class="card title">
         <h1>Mipmap Docs</h1>
     </header>
-    <article class="card markdown">
-        {@html data.html}
-    </article>
+    <div class="docs">
+        <article class="card markdown">
+            {@html data.html}
+        </article>
+        <section class="card wide">
+            <h2>Rough Roadmaps</h2>
+            <div class="picker">
+                <button
+                    type="button"
+                    aria-label="Previous roadmap"
+                    onclick={() => (roadmap = (roadmap + roadmaps.length - 1) % roadmaps.length)}
+                >
+                    <svg viewBox="0 0 24 12" aria-hidden="true">
+                        <path d="M23 6H3M8 1L3 6l5 5" />
+                    </svg>
+                </button>
+                <div class="dots" role="radiogroup" aria-label="Roadmap">
+                    {#each roadmaps as { name }, index}
+                        <input
+                            type="radio"
+                            name="roadmap"
+                            value={index}
+                            aria-label={name}
+                            title={name}
+                            bind:group={roadmap}
+                        />
+                    {/each}
+                </div>
+                <button
+                    type="button"
+                    aria-label="Next roadmap"
+                    onclick={() => (roadmap = (roadmap + 1) % roadmaps.length)}
+                >
+                    <svg viewBox="0 0 24 12" aria-hidden="true">
+                        <path d="M1 6h20M16 1l5 5-5 5" />
+                    </svg>
+                </button>
+            </div>
+            <h3>{roadmaps[roadmap].name}</h3>
+            <div
+                class="steps"
+                bind:clientWidth={steps_width}
+                style:height="{steps.height}px"
+            >
+                <svg aria-hidden="true">
+                    {#each steps.arrows as arrow}
+                        <path d={arrow} />
+                    {/each}
+                </svg>
+                <ol>
+                    {#each steps.boxes as { text, x, y }}
+                        <li
+                            style:left="{x}px"
+                            style:top="{y}px"
+                            style:width="{steps.size}px"
+                            style:height="{steps.size}px"
+                        >
+                            {text}
+                        </li>
+                    {/each}
+                </ol>
+            </div>
+        </section>
+    </div>
     <div class="resources">
         <section class="card wide">
             <h2>Video</h2>
@@ -325,6 +479,7 @@
         grid-column: 1 / -1;
     }
 
+    .docs,
     .resources {
         display: flex;
         flex-direction: column;
@@ -482,6 +637,121 @@
 
     .wide {
         width: 100%;
+    }
+
+    .picker {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .picker button {
+        display: grid;
+        padding: 0.25rem;
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+
+    .picker svg {
+        width: 1.75rem;
+        fill: none;
+        stroke: #d6ab70;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: stroke 0.3s;
+    }
+
+    .picker button:focus-visible {
+        outline: 2px solid #ead7c2;
+    }
+
+    .picker button:focus-visible svg {
+        stroke: #ead7c2;
+    }
+
+    @media (hover: hover) {
+        .picker button:hover svg {
+            stroke: #ead7c2;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .picker {
+            justify-content: flex-start;
+        }
+    }
+
+    .dots {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .dots input {
+        width: 1rem;
+        height: 1rem;
+        margin: 0;
+        appearance: none;
+        background-color: #4f2f1f;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .dots input:checked {
+        background-color: #ead7c2;
+    }
+
+    .dots input:focus-visible {
+        outline: 2px solid #ead7c2;
+        outline-offset: 2px;
+    }
+
+    @media (hover: hover) {
+        .dots input:not(:checked):hover {
+            background-color: #d6ab70;
+        }
+    }
+
+    .steps {
+        position: relative;
+        margin-top: 1rem;
+    }
+
+    .steps svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        fill: none;
+        stroke: #d6ab70;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .steps ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .steps li {
+        box-sizing: border-box;
+        position: absolute;
+        display: grid;
+        place-items: center;
+        padding: 0.5rem;
+        background: #5f4838;
+        border: 2px solid #4f2f1f;
+        border-radius: 7px;
+        font-size: 1.25rem;
+        line-height: 1.2;
+        text-align: center;
+        overflow-wrap: break-word;
     }
 
     h1 {
