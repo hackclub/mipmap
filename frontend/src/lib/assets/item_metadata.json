@@ -214,5 +214,38 @@
     "description": "some tell the legend of their sticker leading to new beginnings",
     "facts": "Sticker that says 'Mipmap' on it",
     "image": "/sticker.png"
+  },
+  "55": {
+    "title": "$200 Computer Grant",
+    "description": "oh!",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Laptop_der_Marke_exone_go_20240203_HOF06886_RAW-Export_000276.png/960px-Laptop_der_Marke_exone_go_20240203_HOF06886_RAW-Export_000276.png"
+  },
+  "56": {
+    "title": "$300 Computer Grant",
+    "description": "ohhhhhhhhhhhhh!",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Laptop_der_Marke_exone_go_20240203_HOF06886_RAW-Export_000276.png/960px-Laptop_der_Marke_exone_go_20240203_HOF06886_RAW-Export_000276.png"
+  },
+  "57": {
+    "title": "MacBook Neo",
+    "description": "this one is crazy value",
+    "facts": "This gets the upper model",
+    "image": "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/macbook-neo-indigo-cto-hero-202603?wid=904&hei=840&fmt=jpeg&qlt=90"
+  },
+  "58": {
+    "title": "MacBook Air",
+    "description": "when you want to take a byte out of an apple but lightweight",
+    "facts": "This is the 16GB RAM model",
+    "image": "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/mba13-skyblue-select-202503?wid=904&hei=840&fmt=jpeg&qlt=90"
+  },
+  "59": {
+    "title": "Zimablade",
+    "description": "zoom!",
+    "facts": "Little single board computer for servers",
+    "image": "https://www.cnx-software.com/wp-content/uploads/2023/09/ZimaBlade-board-720x520.jpg"
+  },
+  "60": {
+    "title": "$100 Computer Parts Grant",
+    "description": "oh?",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Personal_computer%2C_exploded_5%2C_unlabeled.svg/960px-Personal_computer%2C_exploded_5%2C_unlabeled.svg.png"
   }
 }

@@ -1,5 +1,5 @@
 use crate::http;
-use actix_web::{HttpResponse, get, web};
+use actix_web::{HttpResponse, get, rt::time::sleep, web};
 use futures_util::future::join_all;
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage, imageops::FilterType};
 use serde::Deserialize;
@@ -10,6 +10,7 @@ use std::{
         Arc, LazyLock, PoisonError, RwLock,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 use tract_onnx::prelude::*;
 
@@ -24,6 +25,8 @@ const MAX_DOWNLOAD: usize = 20_000_000;
 const MAX_OUTPUT: usize = 100_000;
 const WHITE: u8 = 0xf0;
 const IMAGE_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MAX_ATTEMPTS: u32 = 4;
+const MAX_WAIT: u64 = 10;
 
 #[derive(Deserialize)]
 struct Meta {
@@ -118,7 +121,23 @@ fn load_model() -> anyhow::Result<Model> {
 }
 
 async fn download(url: &str) -> anyhow::Result<Stored> {
-    let mut response = http::CLIENT.get(url).send().await?.error_for_status()?;
+    let mut attempt = 1;
+    let mut response = loop {
+        let response = http::CLIENT.get(url).send().await?;
+        if response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS || attempt == MAX_ATTEMPTS {
+            break response.error_for_status()?;
+        }
+        let wait = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0)
+            .max(2u64.pow(attempt))
+            .min(MAX_WAIT);
+        sleep(Duration::from_secs(wait)).await;
+        attempt += 1;
+    };
     let content_type = response
         .headers()
         .get("content-type")
