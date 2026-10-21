@@ -75,7 +75,7 @@ impl Drop for Slot {
 
 pub fn warn_unconfigured() {
     if env::var("OPENAI_API_KEY").is_none() {
-        log::warn!("OPENAI_API_KEY not set, image uploads and snapshots will fail");
+        log::warn!("OPENAI_API_KEY not set, snapshots will fail");
     }
 }
 
@@ -118,11 +118,7 @@ struct ModerationResult {
 }
 
 pub async fn upload(slot: &Slot, bytes: &[u8]) -> Result<String, ApiError> {
-    let webp = prepare(slot, bytes).await?;
-    if !image_flags(&webp).await?.is_empty() {
-        return Err(reject("This image isn't allowed"));
-    }
-    Ok(store(webp).await?)
+    Ok(store(prepare(slot, bytes).await?).await?)
 }
 
 pub async fn prepare(_slot: &Slot, bytes: &[u8]) -> Result<Vec<u8>, ApiError> {
