@@ -26,6 +26,7 @@ const MAX_PIXELS: u64 = 50_000_000;
 const MAX_ALLOC: u64 = 256 * 1024 * 1024;
 const INVALID: &str = "Please choose a PNG, JPEG or WebP image";
 const TOO_LARGE: &str = "Images can be at most 50 megapixels";
+const TOO_HEAVY: &str = "That image is too large to process, please save it at a smaller size";
 const UPLOADS_PER_HOUR: usize = 30;
 const HOUR: Duration = Duration::from_secs(60 * 60);
 
@@ -191,7 +192,7 @@ async fn moderate(key: &str, input: Value) -> anyhow::Result<Vec<BTreeSet<String
 
 fn unreadable(error: ImageError) -> ApiError {
     match error {
-        ImageError::Limits(_) => reject(TOO_LARGE),
+        ImageError::Limits(_) => reject(TOO_HEAVY),
         _ => reject(INVALID),
     }
 }

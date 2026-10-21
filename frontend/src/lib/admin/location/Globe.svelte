@@ -16,7 +16,6 @@
     let canvas = $state<HTMLCanvasElement>();
     let hovered = $state<{ code: string; x: number; y: number } | null>(null);
     let failed = $state(false);
-    let attempt = $state(0);
     let playing = $state(true);
     let still = $state(false);
     let pointed = $state(false);
@@ -34,10 +33,7 @@
         kick?.();
     });
 
-    $effect(() => {
-        void attempt;
-        return untrack(start);
-    });
+    $effect(() => untrack(start));
 
     function start() {
         let frame = 0;
@@ -256,11 +252,6 @@
             cleanup();
         };
     }
-
-    function retry() {
-        failed = false;
-        attempt++;
-    }
 </script>
 
 <div
@@ -271,7 +262,7 @@
     {#if failed}
         <div class="failed" role="alert">
             <p class="note">The globe couldn't load.</p>
-            <button type="button" onclick={retry}>Retry</button>
+            <button type="button" onclick={() => location.reload()}>Reload</button>
         </div>
     {:else}
         <canvas bind:this={canvas}>

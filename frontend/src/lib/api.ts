@@ -123,7 +123,7 @@ export async function shrink_image(file: File): Promise<File> {
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, type, 0.9),
     );
-    if (!blob || blob.size >= file.size) return file;
+    if (!blob) return file;
     const extension = blob.type.split("/")[1] ?? "jpeg";
     const name = file.name.replace(/\.[^.]*$/, "") || "image";
     return new File([blob], `${name}.${extension}`, { type: blob.type });

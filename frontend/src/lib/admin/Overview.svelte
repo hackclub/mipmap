@@ -23,8 +23,8 @@
             [
                 "Users",
                 [
-                    ["Signed up", count(stats.hours.at(-1)?.signed_up ?? 0)],
-                    ["Logged in (last 24 hours)", count(totals.logged_in_last_day)],
+                    ["Signed up", count(stats.days.at(-1)?.signed_up ?? 0)],
+                    ["Logged in (last 24 hours)", count(totals.logged_in_last_day ?? 0)],
                     [
                         "Active today so far (UTC)",
                         count(stats.days.at(-1)?.active ?? 0),

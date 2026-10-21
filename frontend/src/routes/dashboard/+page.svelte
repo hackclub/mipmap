@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
     import { replaceState } from "$app/navigation";
     import { message } from "$lib/api";
     import { log_out } from "$lib/account/logout";
@@ -70,7 +70,16 @@
     };
 
     const shown_notice = (key: string) => !dismissed.includes(key);
-    const dismiss = (key: string) => (dismissed = [...dismissed, key]);
+    const dismiss = (key: string) => close_notice(() => (dismissed = [...dismissed, key]));
+
+    async function close_notice(close: () => void) {
+        close();
+        await tick();
+        if (document.activeElement !== document.body) return;
+        const next = notices?.querySelector<HTMLElement>(".dismiss");
+        if (next) next.focus();
+        else nav?.focus();
+    }
 
     const structure = new Load(() =>
         Promise.all([fetch_tree(), fetch_layout()]),
@@ -333,7 +342,7 @@
                         type="button"
                         class="dismiss"
                         aria-label="Dismiss notice"
-                        onclick={() => (late = "")}
+                        onclick={() => close_notice(() => (late = ""))}
                     >
                         {@render cross()}
                     </button>

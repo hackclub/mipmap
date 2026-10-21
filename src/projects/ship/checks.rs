@@ -1,4 +1,4 @@
-use super::{Draft, queue, repos, repos::Repo};
+use super::{Draft, history, queue, repos, repos::Repo};
 use crate::{
     accounts::{
         profile,
@@ -22,7 +22,7 @@ use reqwest::Url;
 use serde::de::IgnoredAny;
 use sqlx::{PgPool, types::Json};
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     sync::{LazyLock, Mutex, PoisonError},
 };
 
@@ -104,7 +104,12 @@ pub struct Hackatime {
     hours: f64,
 }
 
-pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<Hackatime, ApiError> {
+pub async fn hackatime(
+    pool: &PgPool,
+    table: &AirtableTable,
+    user_id: i32,
+    project: &Draft,
+) -> Result<Hackatime, ApiError> {
     let names = &project.hackatime;
     ensure_hackatime_free(pool, user_id, project.id, names).await?;
     let token = tokens::load(pool, user_id, Provider::Hackatime)
@@ -141,12 +146,24 @@ pub async fn hackatime(pool: &PgPool, user_id: i32, project: &Draft) -> Result<H
         .map(|project| project.total_duration_seconds)
         .sum();
     let tracked = (seconds / 36.0).round() / 100.0;
+    let wanted: BTreeSet<String> = names.iter().cloned().collect();
+    let same: Vec<i32> = history::shipped(pool, table, user_id)
+        .await
+        .map_err(|e| {
+            log::warn!("Reading earlier ships' Hackatime projects failed: {e:#}");
+            reject("Couldn't check your earlier ships. Please try again")
+        })?
+        .into_iter()
+        .filter(|shipped| shipped.names == wanted)
+        .map(|shipped| shipped.id)
+        .collect();
     let approved: Option<f64> = sqlx::query_scalar(
         "SELECT max(COALESCE(tracked_hours, hours)) FROM submission
-         WHERE project_id = $1 AND deleted_at IS NULL AND NOT rejected AND review_status = $2",
+         WHERE (project_id = $1 OR id = ANY($3)) AND deleted_at IS NULL AND NOT rejected AND review_status = $2",
     )
     .bind(project.id)
     .bind(review::APPROVED)
+    .bind(&same)
     .fetch_one(pool)
     .await?;
     let hours = ((tracked - approved.unwrap_or(0.0)) * 100.0).round() / 100.0;

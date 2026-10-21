@@ -129,6 +129,7 @@
     let switch_timer = 0;
     let switching = false;
     let creating = false;
+    let caught = false;
     let opened: HTMLElement | null = null;
     let settle_until = 0;
     let tilt_timer = 0;
@@ -617,8 +618,10 @@
         if (kind === "new" && !target) {
             creating = true;
             try {
-                await dashboard.run();
-                await tick();
+                for (let tries = 0; tries < 3 && !target; tries++) {
+                    await dashboard.run();
+                    await tick();
+                }
             } finally {
                 creating = false;
             }
@@ -1040,7 +1043,14 @@
         };
         wake(2000);
         const changes = new MutationObserver((records) => {
-            if (records.some((record) => !root.contains(record.target))) wake();
+            if (
+                records.some(
+                    (record) =>
+                        !root.contains(record.target) &&
+                        record.attributeName !== "data-time",
+                )
+            )
+                wake();
         });
         changes.observe(document.body, {
             subtree: true,
@@ -1154,7 +1164,15 @@
         {/each}
     </div>
     {#if !blocking && !current?.interactive}
-        <div class="catch" role="presentation" onclick={next}></div>
+        <div
+            class="catch"
+            role="presentation"
+            onpointerdown={() => (caught = true)}
+            onclick={() => {
+                if (caught) next();
+                caught = false;
+            }}
+        ></div>
     {/if}
     <div
         class="guide {place.layout} {place.side}"

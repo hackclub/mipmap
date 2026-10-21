@@ -34,7 +34,10 @@ async fn send_next(pool: &PgPool) -> anyhow::Result<Duration> {
     let mut tx = pool.begin().await?;
     let next: Option<(i32, String, String, i32, bool, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT m.id, m.slack_id, m.text, m.attempts,
-             m.kind = 'admin' OR COALESCE(u.slack_id = m.slack_id AND {RECIPIENTS} AND {PREFERENCE}, false),
+             m.kind = 'admin' OR COALESCE(u.slack_id = m.slack_id AND {RECIPIENTS} AND {PREFERENCE}, false)
+                 AND NOT EXISTS (SELECT 1 FROM \"user\" o JOIN slack_preference p ON p.user_id = o.id
+                                 WHERE o.slack_id = m.slack_id AND o.deleted_at IS NULL
+                                 AND NOT (p.enabled AND {PREFERENCE})),
              m.kind <> 'admin'
          FROM slack_message m
          LEFT JOIN \"user\" u ON u.id = m.user_id

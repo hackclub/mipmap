@@ -253,6 +253,8 @@ async fn broadcast(conn: &mut PgConnection, admin_id: i32, id: i32, kind: &str, 
          SELECT u.slack_id, u.id, $2, $3, 'announcement:' || $1 || ':' || u.slack_id, $1, $4
          FROM \"user\" u JOIN slack_preference p ON p.user_id = u.id
          WHERE {RECIPIENTS} AND p.{column}
+         AND NOT EXISTS (SELECT 1 FROM \"user\" o JOIN slack_preference op ON op.user_id = o.id
+                         WHERE o.slack_id = u.slack_id AND o.deleted_at IS NULL AND NOT (op.enabled AND op.{column}))
          ORDER BY u.id
          ON CONFLICT (dedupe_key) DO NOTHING"
     )))

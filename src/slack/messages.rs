@@ -25,7 +25,7 @@ pub fn ship_approved(project: &str, mips: i32) -> String {
 
 pub fn ship_rejected(project: &str) -> String {
     format!(
-        "*{}* wasn't approved this time. A rejection reason should come to these DMs shortly.",
+        "*{}* wasn't approved this time. Check your Dashboard to see why.",
         literal(project)
     )
 }

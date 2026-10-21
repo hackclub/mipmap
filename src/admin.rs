@@ -143,6 +143,22 @@ pub async fn record_read(db: impl PgExecutor<'_>, admin_id: i32, action: &str, s
     Ok(())
 }
 
+pub async fn record_view(db: impl PgExecutor<'_>, admin_id: i32, action: &str, summary: String) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO admin_action (admin_id, action, summary) SELECT $1, $2, $3
+         WHERE NOT EXISTS (
+             SELECT 1 FROM admin_action WHERE admin_id = $1 AND action = $2 AND summary = $3
+             AND created_at > now() - interval '10 minutes'
+         )",
+    )
+    .bind(admin_id)
+    .bind(action)
+    .bind(summary)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 fn like(query: &Option<String>) -> Option<String> {
     query
         .as_deref()
@@ -583,7 +599,7 @@ async fn get_users(
         Some(q) => format!("Searched users for \"{}\" ({} shown)", q.chars().take(100).collect::<String>(), users.len()),
         None => format!("Viewed the user list ({} shown)", users.len()),
     };
-    record_read(pool.get_ref(), admin_id, "view_users", summary).await?;
+    record_view(pool.get_ref(), admin_id, "view_users", summary).await?;
     Ok(HttpResponse::Ok().json(mark_admins(users)))
 }
 
@@ -785,7 +801,7 @@ async fn get_orders(
     .fetch_all(pool.get_ref())
     .await?;
     let summary = format!("Viewed the order list with addresses ({} shown)", orders.len());
-    record_read(pool.get_ref(), admin_id, "view_orders", summary).await?;
+    record_view(pool.get_ref(), admin_id, "view_orders", summary).await?;
     Ok(HttpResponse::Ok().json(orders))
 }
 

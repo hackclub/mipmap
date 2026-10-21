@@ -36,10 +36,14 @@
     const hour_label = memo(short_time);
     const day_label = memo(short_date);
 
-    const hourly = (hours: Hour[], pick: (hour: Hour) => number) => ({
-        values: hours.map(pick),
-        labels: hours.map((hour) => hour_label(hour.hour)),
-    });
+    const hourly = (hours: Hour[], pick: (hour: Hour) => number | null) => {
+        const values = hours.map(pick);
+        if (values.some((value) => value === null)) return null;
+        return {
+            values: values as number[],
+            labels: hours.map((hour) => hour_label(hour.hour)),
+        };
+    };
     const daily = (days: Day[], pick: (day: Day) => number) => ({
         values: days.map(pick),
         labels: days.map((day) => day_label(day.date)),
@@ -244,7 +248,7 @@
         </p>
     </header>
 
-    {#if data && signed_up_chart && logged_in_chart && quick && steps && onboarding_steps && onboarding_quick}
+    {#if data && quick && steps && onboarding_steps && onboarding_quick}
         <div class="pair">
             <section class="card split">
                 <div class="half">
@@ -266,14 +270,22 @@
                         </div>
                     </div>
                     <div class="big">
-                        {(data.hours.at(-1)?.signed_up ?? 0).toLocaleString()}
+                        {(data.days.at(-1)?.signed_up ?? 0).toLocaleString()}
                     </div>
-                    <LineChart name="Signed up users" {...signed_up_chart} />
+                    {#if signed_up_chart}
+                        <LineChart name="Signed up users" {...signed_up_chart} />
+                    {:else}
+                        <p class="note">Hidden while fewer than 5 people signed up.</p>
+                    {/if}
                 </div>
                 <div class="half">
                     <h2 class="label">Users who signed in with Hack Club ({range[2]})</h2>
-                    <div class="big">{(logged_in ?? 0).toLocaleString()}</div>
-                    <LineChart name="Users who signed in" {...logged_in_chart} />
+                    <div class="big">{count(logged_in ?? null)}</div>
+                    {#if logged_in_chart}
+                        <LineChart name="Users who signed in" {...logged_in_chart} />
+                    {:else}
+                        <p class="note">Hidden while an hour has fewer than 5 sign-ins.</p>
+                    {/if}
                 </div>
             </section>
             <section class="card column">
@@ -305,7 +317,7 @@
             <p class="note">
                 Percentages are of the previous step. Visits only count the home
                 page, so sign-ins can be higher.{#if masked}
-                    Counts under 5 are hidden.{/if}
+                    {" "}Counts under 5 are hidden.{/if}
             </p>
             <Funnel {steps} />
         </section>

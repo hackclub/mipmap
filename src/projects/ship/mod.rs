@@ -18,6 +18,7 @@ use std::{
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 mod checks;
+pub mod history;
 mod queue;
 mod repos;
 
@@ -48,7 +49,7 @@ impl Shipping {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(project_id)
-            .then_some(Shipping(project_id))
+            .then(|| Shipping(project_id))
     }
 }
 
@@ -134,7 +135,7 @@ pub async fn ship_project(
         .ok_or_else(|| reject_with(StatusCode::SERVICE_UNAVAILABLE, "Shipping isn't open yet"))?;
     ensure_owned(&pool, user_id, *id).await?;
     let shipping = Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is already being shipped"))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, super::BUSY))?;
     let project: Draft = sqlx::query_as(
         "SELECT id, name, description, COALESCE(repo_url, '') AS repo, COALESCE(demo_url, '') AS demo,
              screenshot_url AS screenshot, tier, hackatime_projects AS hackatime,
@@ -196,7 +197,7 @@ async fn run(
         )
         .await;
     let hackatime = events
-        .check("hackatime", "Hackatime", checks::hackatime(pool, user_id, project))
+        .check("hackatime", "Hackatime", checks::hackatime(pool, &table, user_id, project))
         .await;
     if account.is_none() || hackatime.is_none() {
         return Err(FAILED);

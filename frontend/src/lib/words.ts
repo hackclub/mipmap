@@ -71,7 +71,7 @@ const pattern = new RegExp(
   "gi",
 );
 const skip =
-  "a, script, style, noscript, textarea, button, select, option, label, summary, [role=button], [role=tab], [data-plain]";
+  "a, script, style, noscript, textarea, button, select, option, label, summary, [role=button], [role=tab], [role=option], [data-plain]";
 const controls =
   "button, input, select, label, summary, [role=button], [role=link], [contenteditable]";
 const key = (name: string) => `word-${name}`;

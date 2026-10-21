@@ -1,7 +1,9 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import Field from "$lib/ui/Field.svelte";
     import MipmapButton from "$lib/ui/MipmapButton.svelte";
     import { send_feedback } from "$lib/feedback/api";
+    import { refocus } from "$lib/ui/Dialog.svelte";
     import { Task } from "$lib/load.svelte";
 
     let { onsent }: { onsent: () => void } = $props();
@@ -16,6 +18,7 @@
     let positives = $state("");
     let improvements = $state("");
     const send = new Task();
+    let actions = $state<HTMLElement>();
 
     async function submit(e: SubmitEvent) {
         e.preventDefault();
@@ -24,6 +27,9 @@
             () => send_feedback({ score, source, positives, improvements }),
             onsent,
         );
+        if (!send.error) return;
+        await tick();
+        refocus(actions, true);
     }
 </script>
 
@@ -73,7 +79,7 @@
         rows={2}
         maxlength={2000}
     />
-    <div class="actions">
+    <div class="actions" bind:this={actions}>
         <MipmapButton type="submit" disabled={!score || send.pending}>
             Submit
         </MipmapButton>

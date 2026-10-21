@@ -100,8 +100,9 @@
     <div role="alert">
         {#if session.ended}
             <p class="ended">
-                Your admin session ended. <a href="/login?next=/admin"
-                    >Log in again</a
+                Your admin session ended. <a
+                    href="/login?next={encodeURIComponent(`/admin?tab=${tab}`)}"
+                    rel="external">Log in again</a
                 >
             </p>
         {/if}

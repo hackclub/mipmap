@@ -7,8 +7,8 @@ export type Day = {
 
 export type Hour = {
   hour: string;
-  signed_up: number;
-  logged_in: number;
+  signed_up: number | null;
+  logged_in: number | null;
 };
 
 export type Stats = {
@@ -23,7 +23,7 @@ export type Stats = {
     snapshots_shared: number;
     successful_referrals: number;
     orders_placed: number;
-    logged_in_last_day: number;
+    logged_in_last_day: number | null;
     logged_in_last_week: number;
     logged_in_ever: number;
     awaiting_review: number;

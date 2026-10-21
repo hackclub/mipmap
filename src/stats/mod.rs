@@ -369,6 +369,20 @@ fn public(stats: &Stats) -> serde_json::Result<Value> {
     }
     mask_small(&mut value["funnel"]["day"]);
     mask_small(&mut value["onboarding"]["day"]);
+    mask_small(&mut value["totals"]["logged_in_last_day"]);
+    let signups = match (stats.hours.first(), stats.hours.last()) {
+        (Some(first), Some(last)) => last.signed_up - first.signed_up,
+        _ => 0,
+    };
+    let logins = stats.hours.iter().any(|hour| (1..PUBLIC_MIN).contains(&hour.logged_in));
+    for hour in value["hours"].as_array_mut().into_iter().flatten() {
+        if signups < PUBLIC_MIN {
+            hour["signed_up"] = Value::Null;
+        }
+        if logins {
+            hour["logged_in"] = Value::Null;
+        }
+    }
     Ok(value)
 }
 

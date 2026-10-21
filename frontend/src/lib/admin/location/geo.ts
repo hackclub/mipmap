@@ -54,9 +54,6 @@ export function load_world() {
     for (const feature of collection.features)
       feature.code = (numeric as Record<string, string>)[String(feature.id)];
     return collection.features;
-  }).catch((error) => {
-    world = undefined;
-    throw error;
   });
   return world;
 }

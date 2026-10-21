@@ -21,7 +21,6 @@
     let picked = $state<string | null>(null);
     let offsets = $state.raw<Map<string, number> | null>(null);
     let offsets_failed = $state(false);
-    let attempt = $state(0);
 
     const countries = $derived(load.data?.countries ?? []);
     const counts = $derived(new Map(countries.map((c) => [c.code, c.users])));
@@ -107,7 +106,6 @@
     });
 
     $effect(() => {
-        void attempt;
         if (!countries.length) return;
         let stale = false;
         offsets_failed = false;
@@ -194,7 +192,7 @@
             {#if offsets_failed}
                 <div class="unavailable" role="alert">
                     <p class="note">The world map didn't load, so this can't be worked out for people outside the US.</p>
-                    <button type="button" class="open" onclick={() => attempt++}>Retry</button>
+                    <button type="button" class="open" onclick={() => location.reload()}>Reload</button>
                 </div>
             {:else if !offsets}
                 <p class="note" role="status">Loading…</p>

@@ -19,6 +19,7 @@ const NAME_LIMIT: usize = 100;
 const DESCRIPTION_LIMIT: usize = 5000;
 const LINK_LIMIT: usize = 500;
 const HACKATIME_LIMIT: usize = 50;
+const BUSY: &str = "This project is being saved or shipped, try again in a moment";
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((
@@ -63,6 +64,7 @@ pub struct Project {
     locked: bool,
     shipped_at: Option<DateTime<Utc>>,
     mips_awarded: i32,
+    rejection_reason: Option<String>,
     #[serde(skip)]
     total_seconds: i64,
     #[serde(skip)]
@@ -143,10 +145,11 @@ pub async fn list(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<Project>> {
              latest.created_at AS shipped_at,
              (SELECT COALESCE(sum(mips), 0)::int FROM submission WHERE project_id = p.id)
                  AS mips_awarded,
+             CASE WHEN latest.rejected THEN latest.rejection_reason END AS rejection_reason,
              p.total_seconds, p.last_logged_at
          FROM project p
          LEFT JOIN LATERAL (
-             SELECT review_status, rejected, created_at, record_id, sending_at FROM submission
+             SELECT review_status, rejected, rejection_reason, created_at, record_id, sending_at FROM submission
              WHERE project_id = p.id AND deleted_at IS NULL
              ORDER BY created_at DESC, id DESC LIMIT 1
          ) latest ON true
@@ -287,7 +290,7 @@ async fn update_project(
 ) -> Result<HttpResponse, ApiError> {
     ensure_owned(&pool, user_id, *id).await?;
     let _shipping = ship::Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, BUSY))?;
     let fields = body.into_inner();
     let name = required_name(&fields.name)?;
     let description = limited("Description", &fields.description, DESCRIPTION_LIMIT)?;
@@ -396,7 +399,7 @@ async fn delete_project(
 ) -> Result<HttpResponse, ApiError> {
     ensure_owned(&pool, user_id, *id).await?;
     let _shipping = ship::Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, BUSY))?;
     let shipped: bool = sqlx::query_scalar(
         "SELECT EXISTS (
              SELECT 1 FROM submission
@@ -444,7 +447,7 @@ async fn upload_screenshot(
     let slot = uploads::reserve(user_id)?;
     let url = uploads::upload(&slot, &body).await?;
     let _shipping = ship::Shipping::start(*id)
-        .ok_or_else(|| reject_with(StatusCode::CONFLICT, "This project is being shipped"))?;
+        .ok_or_else(|| reject_with(StatusCode::CONFLICT, BUSY))?;
     if reviewing(&pool, *id).await? {
         return Err(in_review());
     }

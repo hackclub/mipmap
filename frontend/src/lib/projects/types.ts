@@ -17,6 +17,7 @@ export interface Project extends ProjectFields {
   locked: boolean;
   shipped_at: string | null;
   mips_awarded: number;
+  rejection_reason: string | null;
 }
 
 export interface CheckEvent {

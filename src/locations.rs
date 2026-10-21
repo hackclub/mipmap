@@ -1,5 +1,5 @@
 use crate::{
-    admin::{Admin, record_read},
+    admin::{Admin, record_view},
     error::ApiError,
 };
 use actix_web::{HttpResponse, get, web};
@@ -139,6 +139,6 @@ async fn get_people(
     .await?;
     let country: String = query.country.trim().chars().take(8).collect();
     let summary = format!("Viewed the people in {} ({} shown)", country.to_uppercase(), people.len());
-    record_read(pool.get_ref(), admin_id, "view_locations", summary).await?;
+    record_view(pool.get_ref(), admin_id, "view_locations", summary).await?;
     Ok(HttpResponse::Ok().json(people))
 }

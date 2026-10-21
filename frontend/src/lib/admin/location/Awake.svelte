@@ -30,10 +30,11 @@
     );
     const total = $derived(groups.reduce((sum, group) => sum + group.users, 0));
     const best = $derived(Math.max(1, ...slots.map((slot) => slot.awake)));
-    const label = (at: Date) => at.toLocaleTimeString(undefined, { hour: "numeric" });
+    const label = (hour: number) =>
+        new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, { hour: "numeric" });
     const shown = $derived(slots[active ?? now.getHours()]);
-    const describe = (slot: { at: Date; awake: number }) =>
-        `${label(slot.at)}: ${slot.awake.toLocaleString()} of ${total.toLocaleString()} awake`;
+    const describe = (slot: { hour: number; awake: number }) =>
+        `${label(slot.hour)}: ${slot.awake.toLocaleString()} of ${total.toLocaleString()} awake`;
 
     function keydown(e: KeyboardEvent, hour: number) {
         const target =
@@ -76,7 +77,7 @@
     </div>
     <div class="hours" aria-hidden="true">
         {#each slots.filter((slot) => slot.hour % 3 === 0) as slot (slot.hour)}
-            <span>{label(slot.at)}</span>
+            <span>{label(slot.hour)}</span>
         {/each}
     </div>
     <p class="readout" aria-hidden="true">{describe(shown)}</p>

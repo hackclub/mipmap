@@ -33,7 +33,7 @@
     const status_line = $derived.by(() => {
         if (project.status === "draft") return "";
         if (project.status === "rejected")
-            return slack
+            return slack && !project.rejection_reason
                 ? "Rejected, check your Slack DMs for more details"
                 : "Rejected";
         if (queued) return "Waiting for ID verification";
@@ -152,6 +152,8 @@
                 <span class="note">
                     Reviews start once the round's ship-by date passes
                 </span>
+            {:else if project.rejection_reason}
+                <span class="note reason">{project.rejection_reason}</span>
             {:else if project.status === "rejected"}
                 <span class="note">
                     {#if slack}
@@ -288,7 +290,12 @@
     .note {
         display: block;
         font-size: 0.85em;
-        opacity: 0.85;
+        color: color-mix(in srgb, currentColor 85%, transparent);
+    }
+
+    .reason {
+        white-space: pre-line;
+        overflow-wrap: anywhere;
     }
 
     .status {

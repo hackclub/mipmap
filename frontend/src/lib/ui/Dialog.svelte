@@ -210,7 +210,8 @@
 
     function portal(node: HTMLElement) {
         const active =
-            document.activeElement instanceof HTMLElement
+            document.activeElement instanceof HTMLElement &&
+            document.activeElement !== document.body
                 ? document.activeElement
                 : null;
         const parent = open.find((entry) => entry.node.contains(active));

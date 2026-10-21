@@ -1,11 +1,11 @@
-use crate::{accounts::profile, env, snapshots, tree};
+use crate::{accounts::profile, env, projects::ship::history, snapshots, tree};
 use chrono::{DateTime, Utc};
 use hc_helper::airtable::{AirtableTable, field_names, fields, get_records_with_fields};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgConnection, PgExecutor, PgPool};
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
     sync::{LazyLock, Mutex, PoisonError},
     time::{Duration, Instant},
 };
@@ -27,6 +27,7 @@ const READ_FIELDS: &[&str] = &[
     "Code URL",
     "Rejected",
     "Submission Tier",
+    "Rejection Reason",
 ];
 
 #[derive(Serialize)]
@@ -55,6 +56,8 @@ struct Review {
     rejected: Option<Value>,
     #[serde(rename = "Submission Tier")]
     tier: Option<Value>,
+    #[serde(rename = "Rejection Reason")]
+    reason: Option<Value>,
 }
 
 impl Review {
@@ -96,6 +99,13 @@ impl Review {
         match &self.code_url {
             None | Some(Value::Null) => Some(""),
             Some(Value::String(url)) => Some(url),
+            _ => None,
+        }
+    }
+
+    fn reason(&self) -> Option<String> {
+        match &self.reason {
+            Some(Value::String(reason)) if !reason.trim().is_empty() => Some(reason.trim().to_string()),
             _ => None,
         }
     }
@@ -157,6 +167,7 @@ const FIELDS: &[(&str, &[&str])] = &[
     ("Rejected", &["checkbox"]),
     ("Submission Tier", &["singleSelect"]),
     ("Shipped At", &["dateTime"]),
+    ("Rejection Reason", TEXT),
 ];
 
 pub fn table() -> Option<AirtableTable> {
@@ -302,12 +313,17 @@ async fn sync(pool: &PgPool, table: &AirtableTable, all: bool) -> anyhow::Result
         );
         return Ok(false);
     }
-    let users = apply(pool, &ids, reviews).await?;
+    let users = apply(pool, table, &ids, reviews).await?;
     pay_referrals(pool, users).await;
     Ok(true)
 }
 
-async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) -> anyhow::Result<Vec<i32>> {
+async fn apply(
+    pool: &PgPool,
+    table: &AirtableTable,
+    ids: &[String],
+    reviews: Vec<(String, Review)>,
+) -> anyhow::Result<Vec<i32>> {
     let present: Vec<String> = reviews.iter().map(|(record_id, _)| record_id.clone()).collect();
     let mut found = Vec::new();
     let mut statuses = Vec::new();
@@ -316,7 +332,8 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     let mut rejected = Vec::new();
     let mut tiers = Vec::new();
     let mut rates = Vec::new();
-    let superseded: HashSet<String> = sqlx::query_scalar(
+    let mut reasons = Vec::new();
+    let mut superseded: HashSet<String> = sqlx::query_scalar(
         "SELECT s.record_id FROM submission s JOIN project p ON p.id = s.project_id
          WHERE s.record_id = ANY($1) AND (s.deleted_at IS NOT NULL OR s.rejected)
          AND (p.deleted_at IS NOT NULL OR EXISTS (
@@ -328,9 +345,34 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     .await?
     .into_iter()
     .collect();
+    let candidates: Vec<(String, i32, i32)> = sqlx::query_as(
+        "SELECT s.record_id, s.id, p.user_id FROM submission s JOIN project p ON p.id = s.project_id
+         WHERE s.record_id = ANY($1) AND NOT s.record_id = ANY($2) AND (s.deleted_at IS NOT NULL OR s.rejected)
+         ORDER BY p.user_id",
+    )
+    .bind(&present)
+    .bind(superseded.iter().cloned().collect::<Vec<_>>())
+    .fetch_all(pool)
+    .await?;
+    let mut shipped: HashMap<i32, Vec<history::Shipped>> = HashMap::new();
+    for (record_id, id, user_id) in candidates {
+        let ships = match shipped.entry(user_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(history::shipped(pool, table, user_id).await?),
+        };
+        let Some(names) = ships.iter().find(|ship| ship.id == id).map(|ship| &ship.names) else {
+            continue;
+        };
+        if ships.iter().any(|ship| ship.id > id && ship.live && !ship.names.is_disjoint(names)) {
+            superseded.insert(record_id);
+        }
+    }
     for (record_id, review) in reviews {
         if superseded.contains(&record_id) {
-            if REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(record_id.clone()) {
+            if review.status() == Some(Some(APPROVED))
+                && review.rejected() == Some(false)
+                && REPORTED.lock().unwrap_or_else(PoisonError::into_inner).insert(record_id.clone())
+            {
                 log::warn!(
                     "Review {record_id} changed after its project reshipped or was deleted, leaving it deleted or rejected"
                 );
@@ -367,6 +409,7 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
         rejected.push(record_rejected);
         tiers.push(record_tier);
         rates.push(rate);
+        reasons.push(review.reason());
     }
 
     let mut tx = pool.begin().await?;
@@ -397,6 +440,15 @@ async fn apply(pool: &PgPool, ids: &[String], reviews: Vec<(String, Review)>) ->
     .await?
     .into_iter()
     .collect();
+    sqlx::query(
+        "UPDATE submission s SET rejection_reason = r.reason
+         FROM UNNEST($1::text[], $2::text[]) AS r (record_id, reason)
+         WHERE s.record_id = r.record_id AND s.rejection_reason IS DISTINCT FROM r.reason",
+    )
+    .bind(&found)
+    .bind(&reasons)
+    .execute(&mut *tx)
+    .await?;
     let missing: Vec<(i32, String, bool)> = sqlx::query_as(
         "SELECT project_id, record_id, NOT rejected AND review_status IS NOT DISTINCT FROM $3
          FROM submission WHERE record_id = ANY($1) AND NOT record_id = ANY($2) AND deleted_at IS NULL",
