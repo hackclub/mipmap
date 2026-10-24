@@ -100,7 +100,7 @@ async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    if !env::var("BASE_URL").is_some_and(|base_url| !base_url.contains('/')) {
+    if env::var("BASE_URL").is_none_or(|base_url| base_url.contains('/')) {
         return Err(startup_error(
             "BASE_URL must be set to the site's host, like mipmap.hackclub.com (no https:// or path)",
         ));
