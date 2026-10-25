@@ -64,7 +64,6 @@
                 : daily(recent(complete_days), (day) => day.logged_in)),
     );
     const active_chart = $derived(daily(complete_days, (day) => day.active));
-    const active_day = $derived(complete_days.at(-1));
     const logged_in = $derived(
         data &&
             {
@@ -289,14 +288,8 @@
                 </div>
             </section>
             <section class="card column">
-                <h2 class="label">
-                    Daily Active Users ({active_day
-                        ? `${day_label(active_day.date)}, UTC`
-                        : "today so far"})
-                </h2>
-                <div class="big">
-                    {(active_day ?? data.days.at(-1))?.active.toLocaleString()}
-                </div>
+                <h2 class="label">Daily Active Users (today so far, UTC)</h2>
+                <div class="big">{data.days.at(-1)?.active.toLocaleString()}</div>
                 <LineChart name="Daily active users" {...active_chart} />
             </section>
         </div>
