@@ -284,11 +284,14 @@
         </li>
         <li>
             Tier Romeo: 2D or 3D games in most low level
-            graphics libraries (OpenGL, DirectX, BGFX, etc.)
+            graphics libraries (OpenGL, DirectX 11, Metal,
+            BGFX, etc.)
         </li>
         <li>
-            Tier Sierra: a 3D game in Vulkan, a software
-            renderer (no graphics libraries), or on bare metal
+            Tier Sierra: a 3D game in a complex low level
+            graphics library (Vulkan, DirectX 12, etc.), a
+            software renderer (no graphics libraries), or on
+            bare metal
         </li>
     </ul>
 {/snippet}

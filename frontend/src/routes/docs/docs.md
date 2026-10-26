@@ -2,7 +2,7 @@
 
 So! You want to make a game without an engine, but you're not quite sure where to start. That's totally fine!
 
-Mipmap has three tiers of prizes. The onboarding on signup walks through these, and a description is also available on the main page FAQ. Tier Quebec is all about 2D games without an engine, and yes, things like the JS canvas and Pygame count here. Tier Sierra is the trickiest: something made in Vulkan, on bare metal, or a 3D renderer made without a library. Tier Romeo is anything in the middle.
+Mipmap has three tiers of prizes. The onboarding on signup walks through these, and a description is also available on the main page FAQ. Tier Quebec is all about 2D games without an engine, and yes, things like the JS canvas and Pygame count here. Tier Sierra is the trickiest: complex low level graphics libraries, bare metal, and software renderers. Tier Romeo is anything in the middle.
 
 Mips payout rates are anywhere between 15 and 25 Mips per hour tracked with Hackatime. This depends on a bunch of things, such as the tier, your bonus from posting Snapshots, other bonuses, and more!
 

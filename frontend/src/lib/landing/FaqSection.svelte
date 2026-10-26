@@ -124,8 +124,8 @@
                     library. This includes
                     <a href="https://www.khronos.org/opengl/wiki/">OpenGL</a>,
                     <a
-                        href="https://learn.microsoft.com/en-us/windows/win32/direct3d12/directx-12-programming-guide"
-                        >DirectX</a
+                        href="https://learn.microsoft.com/en-us/windows/win32/direct3d11/atoc-dx-graphics-direct3d-11"
+                        >DirectX 11</a
                     >,
                     <a href="https://developer.apple.com/metal/">Metal</a>,
                     <a href="https://github.com/bkaradzic/bgfx">BGFX</a>, and
@@ -147,8 +147,11 @@
                 </p>
                 <ul>
                     <li>
-                        Written using <a href="https://docs.vulkan.org/"
-                            >Vulkan</a
+                        Written using a complex low level graphics library
+                        like <a href="https://docs.vulkan.org/">Vulkan</a> or
+                        <a
+                            href="https://learn.microsoft.com/en-us/windows/win32/direct3d12/directx-12-programming-guide"
+                            >DirectX 12</a
                         >
                     </li>
                     <li>

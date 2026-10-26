@@ -80,12 +80,21 @@
             ],
         },
         {
-            name: "Direct3D",
+            name: "Direct3D 12",
             description: "Microsoft's graphics library",
-            tier: "romeo",
+            tier: "sierra",
             links: [
                 { text: "Direct3D 12 programming guide", href: "https://learn.microsoft.com/en-us/windows/win32/direct3d12/directx-12-programming-guide" },
                 { text: "Learning DirectX 12 (3D Game Engine Programming)", href: "https://www.3dgep.com/learning-directx-12-1/" },
+            ],
+        },
+        {
+            name: "Direct3D 11",
+            description: "Microsoft's older, simpler graphics library",
+            tier: "romeo",
+            links: [
+                { text: "Direct3D 11 programming guide", href: "https://learn.microsoft.com/en-us/windows/win32/direct3d11/dx-graphics-overviews" },
+                { text: "RasterTek DirectX 11 tutorials", href: "https://www.rastertek.com/tutdx11win10.html" },
             ],
         },
         {

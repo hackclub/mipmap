@@ -10,12 +10,12 @@ export const tiers: { id: Tier; name: string; description: string }[] = [
     id: "romeo",
     name: "Tier Romeo",
     description:
-      "2D or 3D games in most low level graphics libraries (OpenGL, DirectX, BGFX, etc.)",
+      "2D or 3D games in most low level graphics libraries (OpenGL, DirectX 11, Metal, BGFX, etc.)",
   },
   {
     id: "sierra",
     name: "Tier Sierra",
     description:
-      "A 3D game in Vulkan, a software renderer (no graphics libraries), or on bare metal (no operating system)",
+      "A 3D game in a complex low level graphics library (Vulkan, DirectX 12, etc.), a software renderer (no graphics libraries), or on bare metal (no operating system)",
   },
 ];
