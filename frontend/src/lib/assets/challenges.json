@@ -10,5 +10,11 @@
     "description": "Recreate a Steam game without an engine, earn it!\nYou must spend 1 hour per $1 USD that this game costs in your region, but remember, you still get the regular Mips payout on top of this!",
     "start": "2026-10-21",
     "end": "2026-10-28T20:00"
+  },
+  {
+    "name": "Renderer Rendition",
+    "description": "Finish up your renderer, earn a 10% Mips bonus!",
+    "start": "2026-10-28",
+    "end": "2026-11-04T19:00"
   }
 ]
