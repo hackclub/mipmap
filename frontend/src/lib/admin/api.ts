@@ -10,6 +10,7 @@ import type {
   Locations,
   LogEntry,
   Order,
+  Push,
   Ship,
   Snapshot,
   SnapshotRejection,
@@ -65,6 +66,11 @@ export const fetch_snapshot_rejections =
 export const fetch_users = list<User>("users");
 export const fetch_orders = list<Order>("orders");
 export const fetch_feedback = list<Feedback>("feedback");
+export const force_survey = () =>
+  post<{ users: number }>("survey/force", {});
+export const fetch_push = () => get<Push>("feedback/push");
+export const start_push = () => post<Push>("feedback/push", {});
+export const stop_push = () => post<Push>("feedback/push/stop", {});
 export const fetch_audit = list<Action>("audit");
 
 export const set_bonus = (

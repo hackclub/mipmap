@@ -105,6 +105,17 @@ export type Feedback = {
   created_at: string;
 };
 
+export type Push = {
+  configured: boolean;
+  running: boolean;
+  stopping: boolean;
+  sent: number;
+  total: number;
+  pending: number;
+  retries: number;
+  error: string | null;
+};
+
 export type Action = {
   id: number;
   admin_name: string;

@@ -35,6 +35,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
             .service((get_held_snapshots, review_snapshot, get_snapshot_rejections))
             .configure(crate::slack::admin_routes)
             .configure(crate::surveys::admin_routes)
+            .configure(crate::feedback::admin_routes)
             .configure(crate::locations::admin_routes),
     );
 }

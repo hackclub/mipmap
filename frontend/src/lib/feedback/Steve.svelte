@@ -8,12 +8,9 @@
 
     let { active }: { active: boolean } = $props();
 
-    const size = 96;
+    const size = 220;
+    const disc = 96;
     const wander_ms = 7000;
-    const roam_ms = 20000;
-    const edge = 16;
-    const gap = 12;
-    const controls_height = 3 * 48 + 4 * 2;
 
     let show = $state(false);
     let stage = $state<"floating" | "asking" | "survey" | "thanks" | "gone">(
@@ -21,43 +18,27 @@
     );
     let x = $state(0);
     let y = $state(0);
-    let parked = $state(false);
 
-    function controls_top() {
-        const controls = document.querySelector('[aria-label="Map controls"]');
-        const top = controls?.getBoundingClientRect().top;
-        return top && top > 0 ? top : innerHeight - edge - controls_height;
+    function place(cx: number, cy: number) {
+        x = Math.min(Math.max(0, cx - size / 2), Math.max(0, innerWidth - size));
+        y = Math.min(Math.max(0, cy - size / 2), Math.max(0, innerHeight - size));
     }
 
     function wander() {
-        const blocked = controls_top() - gap - size;
-        const right = innerWidth - edge - 52 - size;
-        for (let tries = 0; tries < 10; tries++) {
-            x = Math.random() * Math.max(0, innerWidth - size);
-            y = Math.random() * Math.max(0, innerHeight - size);
-            if (x < right || y < blocked) return;
-        }
+        place(
+            innerWidth * (0.25 + Math.random() * 0.5),
+            innerHeight * (0.25 + Math.random() * 0.5),
+        );
     }
 
-    function park() {
-        parked = true;
-        x = Math.max(0, innerWidth - edge - size);
-        y = Math.max(0, controls_top() - gap - size);
-    }
-
-    function clamp() {
-        if (parked) return park();
-        x = Math.min(x, Math.max(0, innerWidth - size));
-        y = Math.min(y, Math.max(0, innerHeight - size));
-    }
+    const center = () => place(innerWidth / 2, innerHeight / 2);
 
     onMount(() => {
         const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
         let start = 0;
         let timer = 0;
-        let stop = 0;
         let alive = true;
-        if (still) park();
+        if (still) center();
         else wander();
         visit_survey().then((due) => {
             if (!alive) return;
@@ -65,28 +46,22 @@
             if (!due || still) return;
             start = window.setTimeout(wander, 100);
             timer = window.setInterval(wander, wander_ms);
-            stop = window.setTimeout(() => {
-                clearInterval(timer);
-                park();
-            }, roam_ms);
         });
         return () => {
             alive = false;
             clearTimeout(start);
             clearInterval(timer);
-            clearTimeout(stop);
         };
     });
 </script>
 
-<svelte:window onresize={clamp} />
+<svelte:window onresize={wander} />
 
 {#if show && active}
     {#if stage === "floating"}
         <button
             type="button"
             class="steve"
-            class:parked
             aria-label="Steve the Sprite has a question"
             style:transform="translate({x}px, {y}px)"
             style:--size="{size}px"
@@ -102,9 +77,9 @@
             onclose={() => (stage = "floating")}
         >
             <div class="ask">
-                <div class="disc"><Avatar size={size * 0.8} state="idle" /></div>
+                <div class="disc"><Avatar size={disc * 0.8} state="idle" /></div>
                 <p id="steve-ask">
-                    Hey there! Would you mind filling out a quick survey for 15
+                    Hey there! Would you mind filling out a quick survey for some
                     Mips?
                 </p>
             </div>
@@ -137,8 +112,8 @@
             onclose={() => (stage = "gone")}
         >
             <div class="ask">
-                <div class="disc"><Avatar size={size * 0.8} state="idle" /></div>
-                <p id="steve-thanks">Thanks! Here's your 15 Mips</p>
+                <div class="disc"><Avatar size={disc * 0.8} state="idle" /></div>
+                <p id="steve-thanks">Thanks! Here's 10 Mips</p>
             </div>
             <div class="actions">
                 <MipmapButton
@@ -179,10 +154,6 @@
         flex-shrink: 0;
         width: 96px;
         height: 96px;
-    }
-
-    .steve.parked {
-        animation: none;
     }
 
     .steve:focus-visible {
