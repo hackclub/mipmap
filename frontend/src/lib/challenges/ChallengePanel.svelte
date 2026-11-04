@@ -15,7 +15,7 @@
     });
 
     const running = $derived(
-        challenges.filter((c) => c.starts <= now && now < c.ends),
+        challenges.filter((c) => c.starts <= now && now < c.hides),
     );
 
     function parts(ends: number) {
@@ -40,7 +40,8 @@
             .slice(0, 3)
             .map((n, i) => (n ? `${n} ${units[i]}${n === 1 ? "" : "s"}` : ""))
             .filter(Boolean);
-        return said.length ? said.join(", ") : "less than a minute";
+        if (said.length) return said.join(", ");
+        return ends <= now ? "0 minutes" : "less than a minute";
     }
 </script>
 

@@ -6,6 +6,7 @@ type Challenge = {
   start: string;
   end: string;
   goal_hours?: number;
+  linger_days?: number;
 };
 
 const zone = new Intl.DateTimeFormat("en-US", {
@@ -53,4 +54,7 @@ export const challenges = (all as Challenge[]).map((challenge) => ({
   ...challenge,
   starts: eastern_time(challenge.start, false),
   ends: eastern_time(challenge.end, true),
+  hides:
+    eastern_time(challenge.end, true) +
+    (challenge.linger_days ?? 0) * 86_400_000,
 }));

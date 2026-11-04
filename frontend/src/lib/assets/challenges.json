@@ -20,8 +20,9 @@
   {
     "name": "Steve's in trouble!",
     "description": "Help Steve out by getting 600 approved hours of projects by the time his rent is due! If we hit this, Mipmap will be extended another month and all Tech Tree prices will be slashed by 15%.",
-    "start": "2026-11-04T19:00",
+    "start": "2026-11-04T13:00",
     "end": "2026-11-20T20:00",
-    "goal_hours": 600
+    "goal_hours": 600,
+    "linger_days": 4
   }
 ]
