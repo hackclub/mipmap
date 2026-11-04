@@ -4,7 +4,7 @@ use crate::{
         session::{self, User},
     },
     error::{ApiError, reject, reject_with},
-    projects, slack, snapshots, tree,
+    projects, slack, snapshots, stats, tree,
 };
 use actix_web::{HttpRequest, HttpResponse, get, http::StatusCode, post, web};
 use chrono::{DateTime, Utc};
@@ -88,6 +88,7 @@ pub struct Dashboard {
     projects: Vec<projects::Project>,
     hackatime_projects: Vec<HackatimeProject>,
     snapshots: snapshots::Overview,
+    hours_approved: f64,
 }
 
 pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<Dashboard> {
@@ -129,6 +130,8 @@ pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<D
     .fetch_all(pool)
     .await?;
 
+    let hours_approved = stats::hours_approved(pool).await?;
+
     if let Some(hackatime) = &mut hackatime {
         hackatime.sort_by(|a, b| b.most_recent_heartbeat.cmp(&a.most_recent_heartbeat));
     }
@@ -147,6 +150,7 @@ pub async fn build(pool: &PgPool, user_id: i32, fresh: bool) -> anyhow::Result<D
             })
             .collect(),
         snapshots,
+        hours_approved,
     })
 }
 

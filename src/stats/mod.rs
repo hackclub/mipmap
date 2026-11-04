@@ -94,6 +94,7 @@ struct Totals {
     hours_building: f64,
     projects_created: i64,
     projects_shipped: i64,
+    #[sqlx(skip)]
     hours_approved: f64,
     mips_awarded: i64,
     snapshots_shared: i64,
@@ -231,6 +232,19 @@ async fn funnel(pool: &PgPool, since: Option<DateTime<Utc>>) -> sqlx::Result<Fun
     .await
 }
 
+pub async fn hours_approved(pool: &PgPool) -> sqlx::Result<f64> {
+    sqlx::query_scalar(
+        "SELECT COALESCE(sum(hours), 0)::float8 FROM (
+             SELECT CASE WHEN bool_or(tracked_hours IS NULL) THEN max(hours) ELSE sum(hours) END AS hours
+             FROM submission WHERE deleted_at IS NULL AND NOT rejected AND review_status = $1
+             GROUP BY project_id, tracked_hours IS NULL
+         ) approved",
+    )
+    .bind(review::APPROVED)
+    .fetch_one(pool)
+    .await
+}
+
 async fn build(pool: &PgPool) -> anyhow::Result<Stats> {
     let days = sqlx::query_as(
         "WITH signups AS (
@@ -282,18 +296,13 @@ async fn build(pool: &PgPool) -> anyhow::Result<Stats> {
     )
     .fetch_all(pool)
     .await?;
-    let totals = sqlx::query_as(
+    let mut totals: Totals = sqlx::query_as(
         "SELECT
              (SELECT COALESCE(sum(total_seconds), 0) FROM project WHERE deleted_at IS NULL)::float8
                  / 3600 AS hours_building,
              (SELECT count(*) FROM project WHERE deleted_at IS NULL) AS projects_created,
              (SELECT count(DISTINCT project_id) FROM submission WHERE deleted_at IS NULL)
                  AS projects_shipped,
-             (SELECT COALESCE(sum(hours), 0) FROM (
-                  SELECT CASE WHEN bool_or(tracked_hours IS NULL) THEN max(hours) ELSE sum(hours) END AS hours
-                  FROM submission WHERE deleted_at IS NULL AND NOT rejected AND review_status = $1
-                  GROUP BY project_id, tracked_hours IS NULL
-              ) approved) AS hours_approved,
              (SELECT COALESCE(sum(mips), 0) FROM submission)
                  + (SELECT count(*) FROM \"user\" WHERE referral_paid) * $2 AS mips_awarded,
              (SELECT count(*) FROM snapshot WHERE deleted_at IS NULL) AS snapshots_shared,
@@ -337,6 +346,7 @@ async fn build(pool: &PgPool) -> anyhow::Result<Stats> {
     .bind(&*SHIP_BY)
     .fetch_one(pool)
     .await?;
+    totals.hours_approved = hours_approved(pool).await?;
     let now = Utc::now();
     let day = Some(now - chrono::Duration::hours(24));
     let week = Some(now - chrono::Duration::days(7));

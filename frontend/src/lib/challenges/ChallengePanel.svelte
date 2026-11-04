@@ -3,7 +3,10 @@
     import type { Bounds } from "$lib/dashboard/PanZoom.svelte";
     import { challenges } from "$lib/challenges/challenges";
 
-    let { bounds }: { bounds: Bounds } = $props();
+    let {
+        bounds,
+        hours_approved,
+    }: { bounds: Bounds; hours_approved: number } = $props();
 
     let now = $state(Date.now());
     $effect(() => {
@@ -45,6 +48,27 @@
     {#each running as challenge}
         <article>
             <h3>{challenge.name}</h3>
+            {#if challenge.goal_hours}
+                {@const hours = Math.floor(hours_approved)}
+                <div class="goal">
+                    <div
+                        class="bar"
+                        role="progressbar"
+                        aria-label="Approved hours"
+                        aria-valuemin={0}
+                        aria-valuemax={challenge.goal_hours}
+                        aria-valuenow={Math.min(hours, challenge.goal_hours)}
+                    >
+                        <div
+                            class="fill"
+                            style:width="{Math.min(100, (hours / challenge.goal_hours) * 100)}%"
+                        ></div>
+                    </div>
+                    <p class="label">
+                        {hours.toLocaleString()} / {challenge.goal_hours.toLocaleString()} approved hours
+                    </p>
+                </div>
+            {/if}
             <p class="countdown">
                 <span aria-hidden="true" data-time={countdown(challenge.ends)}
                 ></span>
@@ -76,6 +100,27 @@
     h3 {
         font: inherit;
         font-weight: 700;
+    }
+
+    .goal {
+        margin: 0.25rem 0 0.5rem;
+    }
+
+    .bar {
+        height: 0.75rem;
+        overflow: hidden;
+        background: #4f2f1f;
+        border-radius: 999px;
+    }
+
+    .fill {
+        height: 100%;
+        background: #d5aa6f;
+    }
+
+    .label {
+        margin-top: 0.25rem;
+        font-size: 0.85em;
     }
 
     .description {

@@ -385,7 +385,10 @@
                     bounds={sections.referral}
                     code={data.user.referral_code}
                 />
-                <ChallengePanel bounds={sections.challenge} />
+                <ChallengePanel
+                    bounds={sections.challenge}
+                    hours_approved={data.hours_approved}
+                />
                 <ProfilePanel
                     bounds={sections.profile}
                     currency={tree.currency}

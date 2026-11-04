@@ -5,6 +5,7 @@ type Challenge = {
   description: string;
   start: string;
   end: string;
+  goal_hours?: number;
 };
 
 const zone = new Intl.DateTimeFormat("en-US", {

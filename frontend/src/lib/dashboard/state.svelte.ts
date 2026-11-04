@@ -39,6 +39,7 @@ export interface Dashboard {
     mine: Snapshot[];
     status: SnapshotStatus;
   };
+  hours_approved: number;
 }
 
 export const account = $state({ suspended: false });
