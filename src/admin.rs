@@ -29,7 +29,7 @@ pub fn api(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/admin")
             .wrap(DefaultHeaders::new().add((header::CACHE_CONTROL, "no-store")))
-            .service((get_overview, get_ships, set_bonus, get_snapshots, shadowban, get_users))
+            .service((get_overview, get_ships, get_unapproved_hours, set_bonus, get_snapshots, shadowban, get_users))
             .service((set_mips, adjust_mips, ban, get_orders, fulfill, cancel, get_feedback, get_audit))
             .service((get_stickers, create_wave, fulfill_wave, wave_csv))
             .service((get_held_snapshots, review_snapshot, get_snapshot_rejections))
@@ -272,6 +272,18 @@ async fn get_ships(
     query: web::Query<PageQuery>,
 ) -> Result<HttpResponse, ApiError> {
     Ok(HttpResponse::Ok().json(fetch_ships(pool.get_ref(), None, &query).await?))
+}
+
+#[get("/ships/unapproved")]
+async fn get_unapproved_hours(_: Admin, pool: web::Data<PgPool>) -> Result<HttpResponse, ApiError> {
+    let hours: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(sum(hours), 0)::float8 FROM submission
+         WHERE deleted_at IS NULL AND NOT rejected AND review_status IS DISTINCT FROM $1",
+    )
+    .bind(review::APPROVED)
+    .fetch_one(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "hours": hours })))
 }
 
 #[derive(Deserialize)]

@@ -59,6 +59,8 @@ export const fetch_overview = () =>
   get<{ unfulfilled_orders: number }>("overview");
 
 export const fetch_ships = list<Ship>("ships");
+export const fetch_unapproved_hours = () =>
+  get<{ hours: number }>("ships/unapproved");
 export const fetch_snapshots = list<Snapshot>("snapshots");
 export const fetch_held_snapshots = list<HeldSnapshot>("snapshots/held");
 export const fetch_snapshot_rejections =

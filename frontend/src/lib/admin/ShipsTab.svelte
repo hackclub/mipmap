@@ -2,7 +2,14 @@
     import { untrack } from "svelte";
     import Field from "$lib/ui/Field.svelte";
     import { short_time } from "$lib/format";
-    import { display_name, fetch_ships, safe_url, set_bonus } from "./api";
+    import { Load } from "$lib/load.svelte";
+    import {
+        display_name,
+        fetch_ships,
+        fetch_unapproved_hours,
+        safe_url,
+        set_bonus,
+    } from "./api";
     import { Pages } from "./pages.svelte";
     import type { Ship } from "./types";
     import ActionDialog from "./ActionDialog.svelte";
@@ -13,6 +20,9 @@
     type Status = "pending" | "approved" | "rejected" | "all";
 
     let { onchange }: { onchange: () => void } = $props();
+
+    const unapproved = new Load(fetch_unapproved_hours);
+    unapproved.run();
 
     let status = $state<Status>("pending");
     const pages = new Pages<Ship>((before) => fetch_ships({ before, status }));
@@ -66,6 +76,14 @@
     const hours = (value: number | null) =>
         value === null ? "–" : `${value.toFixed(1)}h`;
 </script>
+
+<p class="unapproved">
+    Unapproved hours: {unapproved.error
+        ? "–"
+        : unapproved.data
+          ? hours(unapproved.data.hours)
+          : "…"}
+</p>
 
 <Filters
     label="Ship status"
@@ -190,6 +208,11 @@
 {/if}
 
 <style>
+    .unapproved {
+        margin: 0 0 1rem;
+        color: #ead7c2;
+    }
+
     .row {
         display: grid;
         grid-template-columns: 1fr 1fr;
