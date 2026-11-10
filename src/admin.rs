@@ -1159,7 +1159,8 @@ async fn wave_csv(Admin(admin_id): Admin, pool: web::Data<PgPool>, id: web::Path
              coalesce(o.address_first_name, u.first_name, ''), coalesce(o.address_last_name, u.last_name, ''),
              coalesce(o.address_line_1, ''), coalesce(o.address_line_2, ''), coalesce(o.address_city, ''),
              coalesce(o.address_state, ''), coalesce(o.address_postal_code, ''),
-             upper(trim(coalesce(o.address_country, ''))), coalesce(u.email, '')
+             upper(trim(coalesce(o.address_country, ''))), coalesce(u.email, ''),
+             coalesce(o.address_phone_number, '')
          ]
          FROM \"order\" o JOIN \"user\" u ON u.id = o.user_id
          WHERE o.sticker_wave_id = $1 AND o.deleted_at IS NULL
@@ -1171,7 +1172,15 @@ async fn wave_csv(Admin(admin_id): Admin, pool: web::Data<PgPool>, id: web::Path
     let plural = if rows.len() == 1 { "" } else { "es" };
     let summary = format!("Exported sticker wave #{id} as CSV ({} address{plural})", rows.len());
     record_read(pool.get_ref(), admin_id, "export_sticker_csv", summary).await?;
-    let body = rows.iter().fold(csv_line(CSV_FIELDS), |body, row| body + &csv_line(row));
+    let body = rows.into_iter().fold(csv_line(CSV_FIELDS), |body, mut row| {
+        let phone = row.pop().unwrap_or_default();
+        let phone = phone.trim();
+        if row[7] == "IN" && !phone.is_empty() {
+            let line_2 = row[3].trim();
+            row[3] = if line_2.is_empty() { phone.to_string() } else { format!("{line_2}, {phone}") };
+        }
+        body + &csv_line(row)
+    });
     let filename = format!("mipmap-stickers-{}-wave-{id}.csv", created_at.format("%Y-%m-%d"));
     Ok(HttpResponse::Ok()
         .content_type("text/csv; charset=utf-8")
