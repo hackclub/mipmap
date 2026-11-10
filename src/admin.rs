@@ -1175,7 +1175,7 @@ async fn wave_csv(Admin(admin_id): Admin, pool: web::Data<PgPool>, id: web::Path
     let body = rows.into_iter().fold(csv_line(CSV_FIELDS), |body, mut row| {
         let phone = row.pop().unwrap_or_default();
         let phone = phone.trim();
-        if row[7] == "IN" && !phone.is_empty() {
+        if row[7] == "IN" && !phone.is_empty() && !row[3].contains(phone) {
             let line_2 = row[3].trim();
             row[3] = if line_2.is_empty() { phone.to_string() } else { format!("{line_2}, {phone}") };
         }
