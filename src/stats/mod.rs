@@ -92,6 +92,7 @@ struct Hour {
 #[derive(Serialize, sqlx::FromRow)]
 struct Totals {
     hours_building: f64,
+    active_hours: f64,
     projects_created: i64,
     projects_shipped: i64,
     #[sqlx(skip)]
@@ -300,6 +301,10 @@ async fn build(pool: &PgPool) -> anyhow::Result<Stats> {
         "SELECT
              (SELECT COALESCE(sum(total_seconds), 0) FROM project WHERE deleted_at IS NULL)::float8
                  / 3600 AS hours_building,
+             (SELECT COALESCE(sum(total_seconds), 0) FROM project p
+              WHERE deleted_at IS NULL AND last_logged_at > now() - interval '5 days'
+                  AND NOT EXISTS (SELECT 1 FROM submission WHERE project_id = p.id AND deleted_at IS NULL))::float8
+                 / 3600 AS active_hours,
              (SELECT count(*) FROM project WHERE deleted_at IS NULL) AS projects_created,
              (SELECT count(DISTINCT project_id) FROM submission WHERE deleted_at IS NULL)
                  AS projects_shipped,

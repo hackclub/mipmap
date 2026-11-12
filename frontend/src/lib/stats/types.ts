@@ -16,6 +16,7 @@ export type Stats = {
   hours: Hour[];
   totals: {
     hours_building: number;
+    active_hours: number;
     projects_created: number;
     projects_shipped: number;
     hours_approved: number;

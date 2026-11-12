@@ -135,6 +135,7 @@
                 ["Awaiting review", data.totals.awaiting_review.toLocaleString()],
                 ["Average wait in queue", duration(data.totals.average_wait_hours)],
                 ["Average time to approve", duration(data.totals.average_approval_hours)],
+                ["Active hours", Math.round(data.totals.active_hours).toLocaleString()],
             ],
         ],
     );
