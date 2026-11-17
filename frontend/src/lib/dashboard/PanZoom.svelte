@@ -58,6 +58,8 @@
     let scale = $state(1);
     let animating = $state(false);
     let dragging = $state(false);
+    // iOS Safari kills the tab if the world is a will-change layer while its scale changes
+    let pinching = $state(false);
     let tween = $state({ x: 0, y: 0, scale: 1 });
     let frame = 0;
     let leave_timer = 0;
@@ -489,7 +491,8 @@
     }
 
     function start_gesture() {
-        const { mid_x, mid_y, distance } = measure();
+        const { count, mid_x, mid_y, distance } = measure();
+        pinching = count > 1;
         gesture_start = { x: mid_x, y: mid_y, distance, mid_x, mid_y };
     }
 
@@ -526,6 +529,7 @@
         pointers.clear();
         gesture_start = null;
         dragging = false;
+        pinching = false;
         setTimeout(() => (dragged = false));
     }
 
@@ -687,7 +691,7 @@
 >
     <div
         class="world"
-        class:dragging
+        class:panning={dragging && !pinching}
         style:transform="translate({shown.x}px, {shown.y}px) scale({shown.scale})"
     >
         {@render children()}
@@ -753,7 +757,7 @@
         -webkit-user-select: none;
     }
 
-    .world.dragging {
+    .world.panning {
         will-change: transform;
     }
 
