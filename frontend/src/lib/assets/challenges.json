@@ -23,6 +23,6 @@
     "start": "2026-11-04T13:00",
     "end": "2026-11-20T20:00",
     "goal_hours": 400,
-    "linger_days": 4
+    "linger_days": 8
   }
 ]
