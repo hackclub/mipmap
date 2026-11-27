@@ -12,6 +12,9 @@ use std::{future::Future, pin::Pin};
 
 const COOKIE: &str = "__Host-session";
 
+/// Accounts with this email ignore suspension.
+const SUSPENSION_EXEMPT_EMAIL: &str = "lewin@hackclub.com";
+
 fn hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
@@ -98,7 +101,7 @@ pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<Session>> {
         .ok_or_else(|| anyhow::anyhow!("database pool missing"))?;
     let row: Option<(i32, bool)> = sqlx::query_as(
         "WITH s AS (
-             SELECT \"user\".id, \"user\".is_banned, \"user\".last_activity_at, session.expires_at
+             SELECT \"user\".id, \"user\".is_banned, \"user\".email, \"user\".last_activity_at, session.expires_at
              FROM session JOIN \"user\" ON \"user\".id = session.user_id
              WHERE token_hash = $1 AND expires_at > now() AND \"user\".deleted_at IS NULL
          ), extended AS (
@@ -109,9 +112,10 @@ pub async fn lookup(req: &HttpRequest) -> anyhow::Result<Option<Session>> {
              WHERE \"user\".id = s.id
              AND (s.last_activity_at IS NULL OR s.last_activity_at < now() - interval '1 hour')
          )
-         SELECT id, is_banned FROM s",
+         SELECT id, is_banned AND lower(coalesce(email, '')) IS DISTINCT FROM $2 FROM s",
     )
     .bind(hash(cookie.value()))
+    .bind(SUSPENSION_EXEMPT_EMAIL)
     .fetch_optional(pool.get_ref())
     .await?;
     Ok(row.map(|(user_id, banned)| Session { user_id, banned }))
