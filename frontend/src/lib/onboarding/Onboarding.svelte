@@ -631,8 +631,8 @@
 
     $effect(() => {
         tutorial.mips =
-            (nodes.get(STICKER)?.price ?? 0) +
-            (nodes.get(STICKER_TOKEN)?.price ?? 0);
+            (nodes.get(STICKER)?.cost ?? 0) +
+            (nodes.get(STICKER_TOKEN)?.cost ?? 0);
     });
 
     let previous: Step | undefined;

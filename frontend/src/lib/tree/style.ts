@@ -32,7 +32,13 @@ export function price_label(
     ? "Purchased!"
     : unlocked
       ? "Unlocked!"
-      : `${node.price} ${currency}`;
+      : `${node.cost} ${currency}`;
+}
+
+export function slashed_price(node: TreeNode, unlocked: boolean) {
+  return !unlocked && (node.cost ?? 0) < (node.price ?? 0)
+    ? node.price
+    : undefined;
 }
 
 export const cog_path =

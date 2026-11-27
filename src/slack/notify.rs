@@ -12,7 +12,6 @@ use std::sync::LazyLock;
 
 const CHALLENGES_JSON: &str = include_str!("../../frontend/src/lib/assets/challenges.json");
 const ROUNDS_JSON: &str = include_str!("../../frontend/src/lib/assets/fulfillment_rounds.json");
-const HIDDEN_ROUNDS: usize = 2;
 const ROUND_NOTICE_DAYS: i64 = 3;
 
 #[derive(Deserialize)]
@@ -31,11 +30,8 @@ struct Round {
 static CHALLENGES: LazyLock<Vec<Challenge>> =
     LazyLock::new(|| serde_json::from_str(CHALLENGES_JSON).expect("challenges json must be valid"));
 
-static ROUNDS: LazyLock<Vec<Round>> = LazyLock::new(|| {
-    let mut rounds: Vec<Round> = serde_json::from_str(ROUNDS_JSON).expect("rounds json must be valid");
-    rounds.truncate(rounds.len().saturating_sub(HIDDEN_ROUNDS));
-    rounds
-});
+static ROUNDS: LazyLock<Vec<Round>> =
+    LazyLock::new(|| serde_json::from_str(ROUNDS_JSON).expect("rounds json must be valid"));
 
 pub fn spawn(pool: PgPool) {
     actix_web::rt::spawn(async move {

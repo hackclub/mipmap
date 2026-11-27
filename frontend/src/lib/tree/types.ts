@@ -6,6 +6,7 @@ export interface TreeNode {
   name: string;
   category: string | null;
   price?: number;
+  cost?: number;
   requires: number[];
 }
 

@@ -1,6 +1,11 @@
 <script lang="ts">
     import CogArt from "$lib/tree/CogArt.svelte";
-    import { node_color, price_label, unlocked_border } from "$lib/tree/style";
+    import {
+        node_color,
+        price_label,
+        slashed_price,
+        unlocked_border,
+    } from "$lib/tree/style";
     import type { Shape, TreeNode } from "$lib/tree/types";
 
     let {
@@ -34,6 +39,7 @@
     );
     const color = $derived(node_color(node));
     const price = $derived(price_label(node, currency, unlocked, purchased));
+    const slashed = $derived(slashed_price(node, unlocked || purchased));
     const unlocked_ring = $derived({ color: unlocked_border, width: border });
     const focus_ring = $derived({ color: "#ead7c2", width: border + 8 });
     const uid = $props.id();
@@ -74,7 +80,10 @@
             {#if node.kind === "item"}
                 <span class="title">{title}</span>
             {/if}
-            <span class="price">{price}</span>
+            <span class="price">
+                {#if slashed !== undefined}<s>{slashed}</s>{/if}
+                {price}
+            </span>
         {/if}
     </div>
 {/snippet}
@@ -216,6 +225,11 @@
     .label:not(.token) .price {
         font-size: 0.85em;
         line-height: 1.35;
+    }
+
+    s {
+        text-decoration-color: #ff453a;
+        text-decoration-thickness: 0.1em;
     }
 
     .gray {

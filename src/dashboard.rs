@@ -294,7 +294,7 @@ fn json(body: &'static str) -> HttpResponse {
 
 #[get("/dashboard/tree.json")]
 async fn tree_json() -> HttpResponse {
-    json(tree::TREE_JSON)
+    json(tree::COSTED_JSON.as_str())
 }
 
 #[get("/dashboard/layout.json")]

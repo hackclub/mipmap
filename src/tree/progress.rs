@@ -72,7 +72,7 @@ fn can_unlock(node: &Node, practice: bool, user: &Locked, unlocked: &[i32]) -> R
     if !reachable {
         return Err(reject("Missing prerequisite, maybe you need to reload?"));
     }
-    if user.mips < node.price {
+    if user.mips < node.cost() {
         return Err(reject(format!("Not enough {}", TREE.currency)));
     }
     Ok(())
@@ -154,7 +154,7 @@ pub async fn unlock_item(
     can_unlock(node, practice, &user, &unlocked(&mut *tx, user_id).await?)?;
     sqlx::query("UPDATE \"user\" SET mips = mips - $2 WHERE id = $1")
         .bind(user_id)
-        .bind(node.price)
+        .bind(node.cost())
         .execute(&mut *tx)
         .await?;
     sqlx::query(
@@ -164,7 +164,7 @@ pub async fn unlock_item(
     )
     .bind(user_id)
     .bind(node.id as i32)
-    .bind(node.price)
+    .bind(node.cost())
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;

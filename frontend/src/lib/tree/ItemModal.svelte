@@ -2,7 +2,7 @@
     import { tick, type Snippet } from "svelte";
     import Dialog, { refocus } from "$lib/ui/Dialog.svelte";
     import { Task } from "$lib/load.svelte";
-    import { node_color, price_label } from "$lib/tree/style";
+    import { node_color, price_label, slashed_price } from "$lib/tree/style";
     import { friendly } from "$lib/tree/api";
     import CogArt from "$lib/tree/CogArt.svelte";
     import HoldButton from "$lib/tree/HoldButton.svelte";
@@ -61,7 +61,8 @@
     const actionable = $derived(
         !unlocked || (node.kind === "item" && !purchased),
     );
-    const price = $derived(node.price ?? 0);
+    const price = $derived(node.cost ?? 0);
+    const slashed = $derived(slashed_price(node, unlocked || purchased));
     const affordable = $derived(unlocked || price <= mips);
 
     const task = new Task();
@@ -171,6 +172,10 @@
         {/if}
         <div class="footer" bind:this={footer}>
             <div class="price">
+                {#if slashed !== undefined}
+                    <s><span class="visually-hidden">was </span>{slashed}</s>
+                    <span class="visually-hidden">now </span>
+                {/if}
                 {price_label(node, currency, unlocked, purchased)}
             </div>
             {#if !unlocked || node.kind === "token"}
@@ -374,6 +379,10 @@
 
     .price {
         font-weight: 700;
+    }
+
+    .price s {
+        text-decoration-color: #ff453a;
     }
 
     .note {

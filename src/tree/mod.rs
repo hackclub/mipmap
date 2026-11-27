@@ -21,14 +21,25 @@ pub fn tutorial_mips() -> i32 {
     TREE.nodes
         .iter()
         .filter(|node| tutorial(node.id))
-        .map(|node| node.price)
+        .map(Node::cost)
         .sum()
 }
 
-pub const TREE_JSON: &str = include_str!("../../Tree/Mipmap Tree.json");
+const TREE_JSON: &str = include_str!("../../Tree/Mipmap Tree.json");
+const DISCOUNT_PERCENT: i32 = 15;
 
 pub static TREE: LazyLock<Tree> =
     LazyLock::new(|| serde_json::from_str(TREE_JSON).expect("tree json must be valid"));
+
+pub static COSTED_JSON: LazyLock<String> = LazyLock::new(|| {
+    let mut tree: serde_json::Value = serde_json::from_str(TREE_JSON).expect("tree json must be valid");
+    for node in tree["nodes"].as_array_mut().into_iter().flatten() {
+        if let Some(priced) = node["id"].as_u64().and_then(|id| TREE.node(id as u32)) {
+            node["cost"] = priced.cost().into();
+        }
+    }
+    tree.to_string()
+});
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service((progress::unlock_item, progress::purchase_item, progress::skip_sticker));
@@ -51,6 +62,16 @@ pub struct Node {
     pub kind: Kind,
     pub category: Option<String>,
     pub requires: Vec<u32>,
+}
+
+impl Node {
+    pub fn cost(&self) -> i32 {
+        if self.kind == Kind::Item && !tutorial(self.id) {
+            (self.price * (100 - DISCOUNT_PERCENT) + 50) / 100
+        } else {
+            self.price
+        }
+    }
 }
 
 #[derive(Deserialize)]
